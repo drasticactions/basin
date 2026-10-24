@@ -3,6 +3,9 @@ using System.Runtime.InteropServices;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// Starts a compositor whose control socket is in a private directory under <c>XDG_RUNTIME_DIR</c>, and stops it with <c>SIGTERM</c> and then <c>SIGKILL</c>.
+/// </summary>
 public sealed class IpcLauncher : IAsyncDisposable
 {
     private const int SigTerm = 15;
@@ -22,20 +25,49 @@ public sealed class IpcLauncher : IAsyncDisposable
         Exited = process.WaitForExitAsync();
     }
 
+    /// <summary>
+    /// Gets the time that <see cref="StopAsync"/> waits after <c>SIGTERM</c> before it kills the process.
+    /// </summary>
     public static TimeSpan StopGrace { get; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Gets the private directory that holds the socket. <see cref="StopAsync"/> deletes it.
+    /// </summary>
     public string Directory { get; }
 
+    /// <summary>
+    /// Gets the socket path that the compositor gets through <c>BASIN_IPC_PATH</c>.
+    /// </summary>
     public string SocketPath { get; }
 
+    /// <summary>
+    /// Gets the process id of the compositor.
+    /// </summary>
     public int Pid => _process.Id;
 
+    /// <summary>
+    /// Gets a task that completes when the process exits.
+    /// </summary>
     public Task Exited { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the process exited.
+    /// </summary>
     public bool HasExited => _process.HasExited;
 
+    /// <summary>
+    /// Gets the exit code of the process. It is 0 while the process runs.
+    /// </summary>
     public int ExitCode => _process.HasExited ? _process.ExitCode : 0;
 
+    /// <summary>
+    /// Starts a compositor with no shell. An existing directory with the same name is deleted first. The child's stdin is closed.
+    /// </summary>
+    /// <param name="command">The program and its arguments.</param>
+    /// <param name="directoryName">The name of the private directory under <c>XDG_RUNTIME_DIR</c>.</param>
+    /// <param name="output">The stream that takes the child's stdout and stderr.</param>
+    /// <param name="error">The reason for a failure, or <see langword="null"/> on success.</param>
+    /// <returns>The launcher, or <see langword="null"/> when the directory or the process cannot be made.</returns>
     public static IpcLauncher? Start(IReadOnlyList<string> command, string directoryName, Stream output, out string? error)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -102,6 +134,12 @@ public sealed class IpcLauncher : IAsyncDisposable
         return new IpcLauncher(directory, socketPath, process, output);
     }
 
+    /// <summary>
+    /// Waits until the socket file exists.
+    /// </summary>
+    /// <param name="timeout">The longest wait.</param>
+    /// <param name="cancellationToken">A token that ends the wait early.</param>
+    /// <returns><see langword="false"/> when the process exits, the time runs out or the token is canceled first.</returns>
     public async Task<bool> WaitForSocketAsync(TimeSpan timeout, CancellationToken cancellationToken)
     {
         var deadline = Environment.TickCount64 + (long)timeout.TotalMilliseconds;
@@ -123,6 +161,10 @@ public sealed class IpcLauncher : IAsyncDisposable
         return File.Exists(SocketPath);
     }
 
+    /// <summary>
+    /// Sends <c>SIGTERM</c>, kills the process after <see cref="StopGrace"/>, waits for its output to drain and deletes the directory. A second call does nothing.
+    /// </summary>
+    /// <returns><see langword="true"/> when the process had to be killed.</returns>
     public async Task<bool> StopAsync()
     {
         if (_disposed)
@@ -157,6 +199,10 @@ public sealed class IpcLauncher : IAsyncDisposable
         return killed;
     }
 
+    /// <summary>
+    /// Stops the compositor, as <see cref="StopAsync"/> does.
+    /// </summary>
+    /// <returns>A task that completes when the process is stopped.</returns>
     public async ValueTask DisposeAsync() => _ = await StopAsync().ConfigureAwait(false);
 
     private static void TryRemove(string directory)

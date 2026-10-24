@@ -2,6 +2,9 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Render.Vulkan;
 
+/// <summary>
+/// Copies a dmabuf from another GPU into a linear BGRA dmabuf that this device exports. The blit runs on the device of the <see cref="VulkanDeviceBlitter"/> that made it.
+/// </summary>
 public sealed unsafe class BlitConversion : ICrossDeviceConversion
 {
     private readonly VulkanDevice _device;
@@ -76,8 +79,12 @@ public sealed unsafe class BlitConversion : ICrossDeviceConversion
         }
     }
 
+    /// <inheritdoc/>
     public IBuffer Buffer { get; }
 
+    /// <summary>
+    /// Blits the source dmabuf into <see cref="Buffer"/> again and blocks until the GPU finishes the copy.
+    /// </summary>
     public void Refresh()
     {
         var vk = _device.Api;
@@ -115,6 +122,9 @@ public sealed unsafe class BlitConversion : ICrossDeviceConversion
         });
     }
 
+    /// <summary>
+    /// Destroys <see cref="Buffer"/>, waits for the device to go idle, and frees the source import and the linear image. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

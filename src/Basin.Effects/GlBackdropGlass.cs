@@ -5,6 +5,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The glass backdrop effect on a GL device. It reads the shape of each key as a slab of glass over a blur.
+/// </summary>
 public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
 {
     private const string VertexSource = """
@@ -55,6 +58,11 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
     private GlassOptions _options = new();
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlBackdropGlass"/> class and compiles its programs on the device. It owns an inner <see cref="GlBackdropBlur"/>.
+    /// </summary>
+    /// <param name="device">The GL device. Its context must be current.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public GlBackdropGlass(GlDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -70,6 +78,7 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
         BasinCounters.Track();
     }
 
+    /// <inheritdoc/>
     public GlassOptions Options
     {
         get => _options;
@@ -87,22 +96,41 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
         }
     }
 
+    /// <inheritdoc/>
     public int ExpandSize => _blur.ExpandSize;
 
     internal int TargetCount => _outputs.Count + _reduced.Count;
 
+    /// <summary>
+    /// Sets the frame shape for the draws with a key. It replaces an earlier shape for the same key.
+    /// </summary>
+    /// <param name="key">The key that the draws use.</param>
+    /// <param name="shape">The shape of the frame.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     public void SetShape(object key, in FrameBackdropShape shape)
     {
         ArgumentNullException.ThrowIfNull(key);
         _shapes[key] = shape;
     }
 
+    /// <summary>
+    /// Drops the shape of one key.
+    /// </summary>
+    /// <param name="key">The key that <see cref="SetShape"/> took.</param>
+    /// <returns><see langword="true"/> when the key had a shape.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     public bool ForgetSurface(object key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return _shapes.Remove(key);
     }
 
+    /// <summary>
+    /// Draws the glass for the bounds of the context into a texture of its own. With a mesh, the glass bends with the deformed node.
+    /// </summary>
+    /// <param name="context">The backdrop texture, the target size, the bounds, the extent, the key and the optional mesh.</param>
+    /// <param name="result">The texture that holds the result and the box to composite from it.</param>
+    /// <returns><see langword="false"/> when the bounds lie outside the target or the inner blur gives no result.</returns>
     public bool Record(in GlBackdropContext context, out GlBackdropResult result)
     {
         result = default;
@@ -374,6 +402,9 @@ public sealed class GlBackdropGlass : IGlBackdropEffect, IBackdropGlass
         cache.Clear();
     }
 
+    /// <summary>
+    /// Deletes every program and target of the glass and disposes the inner blur. The GL context must be current. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

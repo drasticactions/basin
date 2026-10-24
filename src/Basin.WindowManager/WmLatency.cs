@@ -2,6 +2,9 @@ using System.Diagnostics;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// The time that a manager takes to answer each sequence, which is time that the compositor waits. Recording never allocates.
+/// </summary>
 public sealed class WmLatency
 {
     private const int Capacity = 1024;
@@ -12,16 +15,37 @@ public sealed class WmLatency
     private long _total;
     private long _worst;
 
+    /// <summary>
+    /// Gets the number of sequences recorded since the start.
+    /// </summary>
     public long Sequences { get; private set; }
 
+    /// <summary>
+    /// Gets the longest time recorded since the start.
+    /// </summary>
     public TimeSpan Worst => FromTicks(_worst);
 
+    /// <summary>
+    /// Gets the mean of the last 1024 samples, or zero before the first sample.
+    /// </summary>
     public TimeSpan Mean => _count == 0 ? TimeSpan.Zero : FromTicks(_total / _count);
 
+    /// <summary>
+    /// Gets the median of the last 1024 samples. Reading it sorts a copy, so read it off the frame path.
+    /// </summary>
     public TimeSpan Median => Percentile(0.50);
 
+    /// <summary>
+    /// Gets the 99th percentile of the last 1024 samples. Reading it sorts a copy, so read it off the frame path.
+    /// </summary>
     public TimeSpan P99 => Percentile(0.99);
 
+    /// <summary>
+    /// Gets a percentile of the last 1024 samples by nearest rank. It allocates and sorts a copy.
+    /// </summary>
+    /// <param name="fraction">The percentile as a fraction from 0 to 1.</param>
+    /// <returns>The sample at that rank, or zero before the first sample.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fraction"/> is outside 0 to 1.</exception>
     public TimeSpan Percentile(double fraction)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(fraction);
@@ -37,6 +61,7 @@ public sealed class WmLatency
         return FromTicks(sorted[index]);
     }
 
+    /// <inheritdoc/>
     public override string ToString() =>
         $"{Sequences} sequences, p50 {Median.TotalMilliseconds:F3}ms, p99 {P99.TotalMilliseconds:F3}ms, worst {Worst.TotalMilliseconds:F3}ms";
 

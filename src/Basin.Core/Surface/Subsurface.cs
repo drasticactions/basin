@@ -3,8 +3,12 @@ using Wayland;
 
 namespace Basin;
 
+/// <summary>
+/// The <c>wl_subsurface</c> role. Position and stacking changes apply on the parent's commit, and a synchronized child's own commits apply there too.
+/// </summary>
 public sealed class Subsurface
 {
+    /// <summary>The role name that <see cref="Surface.Role"/> holds for a subsurface.</summary>
     public const string RoleName = "wl_subsurface";
 
     private int _pendingX;
@@ -47,18 +51,25 @@ public sealed class Subsurface
         resource.Destroyed += (_, _) => OnRoleDestroyed();
     }
 
+    /// <summary>Gets the subsurface resource.</summary>
     public WlSubsurfaceResource Resource { get; }
 
+    /// <summary>Gets the child surface.</summary>
     public Surface Surface { get; }
 
+    /// <summary>Gets the parent surface.</summary>
     public Surface Parent { get; }
 
+    /// <summary>Gets the horizontal position relative to the parent, in the parent's logical coordinates, as of the parent's last commit.</summary>
     public int X { get; private set; }
 
+    /// <summary>Gets the vertical position relative to the parent, in the parent's logical coordinates, as of the parent's last commit.</summary>
     public int Y { get; private set; }
 
+    /// <summary>Gets a value indicating whether the client set synchronized mode. A new subsurface starts synchronized.</summary>
     public bool Synchronized { get; private set; } = true;
 
+    /// <summary>Gets a value indicating whether the subsurface or any ancestor subsurface is synchronized.</summary>
     public bool IsEffectivelySynchronized =>
         Synchronized || Parent.SubsurfaceRole?.IsEffectivelySynchronized == true;
 

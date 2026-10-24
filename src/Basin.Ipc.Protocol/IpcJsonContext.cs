@@ -3,6 +3,9 @@ using System.Text.Json.Serialization;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// The source-generated JSON metadata for every library contract. It writes snake_case property names and is safe for NativeAOT.
+/// </summary>
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
     RespectRequiredConstructorParameters = true)]

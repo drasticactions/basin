@@ -7,8 +7,14 @@ using Basin.Capabilities;
 
 namespace Basin.UI.Avalonia;
 
+/// <summary>
+/// Reports the focused Avalonia text field of the chrome and what each chrome touch hits.
+/// </summary>
 public sealed class AvaloniaTextFields : IUITextFields
 {
+    /// <summary>
+    /// The attached property that marks a visual as part of the input pane. A touch on it reports <see cref="UITouchTarget.InputPane"/>.
+    /// </summary>
     public static readonly AttachedProperty<bool> KeepsKeyboardProperty =
         AvaloniaProperty.RegisterAttached<AvaloniaTextFields, Visual, bool>("KeepsKeyboard");
 
@@ -16,18 +22,33 @@ public sealed class AvaloniaTextFields : IUITextFields
     private TextInputMethodClient? _client;
     private TextInputOptions _options = TextInputOptions.Default;
 
+    /// <inheritdoc/>
     public UITextField? Focused { get; private set; }
 
+    /// <inheritdoc/>
     public event Action? FocusChanged;
 
+    /// <summary>
+    /// Occurs on the UI thread for each touch down on a chrome surface, with what the touch hit.
+    /// </summary>
     public event Action<UITouchTarget>? Touched;
 
+    /// <summary>
+    /// Gets the <see cref="KeepsKeyboardProperty"/> value of a visual.
+    /// </summary>
+    /// <param name="visual">The visual to read.</param>
+    /// <returns><see langword="true"/> when a touch on the visual keeps the soft keyboard open.</returns>
     public static bool GetKeepsKeyboard(Visual visual)
     {
         ArgumentNullException.ThrowIfNull(visual);
         return visual.GetValue(KeepsKeyboardProperty);
     }
 
+    /// <summary>
+    /// Sets the <see cref="KeepsKeyboardProperty"/> value of a visual.
+    /// </summary>
+    /// <param name="visual">The visual to change.</param>
+    /// <param name="value"><see langword="true"/> to treat touches on the visual and its children as input pane touches.</param>
     public static void SetKeepsKeyboard(Visual visual, bool value)
     {
         ArgumentNullException.ThrowIfNull(visual);

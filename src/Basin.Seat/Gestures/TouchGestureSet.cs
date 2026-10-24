@@ -1,19 +1,37 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Runs several touch gestures as one. The first member that claims owns the touch sequence and the others are cancelled.
+/// </summary>
 public sealed class TouchGestureSet : ITouchGestures
 {
     private readonly ITouchGestures[] _members;
     private ITouchGestures? _owner;
     private int _contacts;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TouchGestureSet"/> class.
+    /// </summary>
+    /// <param name="members">The gestures, asked in this order. The array is kept, not copied.</param>
     public TouchGestureSet(params ITouchGestures[] members)
     {
         ArgumentNullException.ThrowIfNull(members);
         _members = members;
     }
 
+    /// <summary>
+    /// Gets the member that claimed the current touch sequence, or <see langword="null"/>. It is cleared when the last contact lifts.
+    /// </summary>
     public ITouchGestures? Owner => _owner;
 
+    /// <summary>
+    /// Reports a new contact to the owner, or to every member when there is no owner.
+    /// </summary>
+    /// <param name="id">The contact id.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <returns>The owner's verdict, a <see cref="TouchGestureVerdict.Claim"/>, or the strongest member verdict.</returns>
     public TouchGestureVerdict Down(int id, uint timeMs, double x, double y)
     {
         _contacts++;
@@ -35,6 +53,14 @@ public sealed class TouchGestureSet : ITouchGestures
         return verdict;
     }
 
+    /// <summary>
+    /// Reports a contact motion to the owner, or to every member when there is no owner.
+    /// </summary>
+    /// <param name="id">The contact id.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <returns>The owner's verdict, a <see cref="TouchGestureVerdict.Claim"/>, or the strongest member verdict.</returns>
     public TouchGestureVerdict Motion(int id, uint timeMs, double x, double y)
     {
         if (_owner is { } owner)
@@ -55,6 +81,12 @@ public sealed class TouchGestureSet : ITouchGestures
         return verdict;
     }
 
+    /// <summary>
+    /// Reports a lift to the owner, or to every member when there is no owner.
+    /// </summary>
+    /// <param name="id">The contact id.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <returns>The owner's verdict, or the strongest member verdict.</returns>
     public TouchGestureVerdict Up(int id, uint timeMs)
     {
         _contacts = Math.Max(0, _contacts - 1);
@@ -80,6 +112,7 @@ public sealed class TouchGestureSet : ITouchGestures
         return verdict;
     }
 
+    /// <inheritdoc/>
     public void Cancel()
     {
         for (var i = 0; i < _members.Length; i++)
@@ -91,6 +124,11 @@ public sealed class TouchGestureSet : ITouchGestures
         _contacts = 0;
     }
 
+    /// <summary>
+    /// Takes the withheld samples of the owner, or of the first member that has any.
+    /// </summary>
+    /// <param name="into">The buffer that receives the samples.</param>
+    /// <returns>The number of samples written.</returns>
     public int TakeWithheld(Span<EdgeSwipeSample> into)
     {
         if (_owner is { } owner)

@@ -4,6 +4,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Implements <see cref="ISceneDiagnostics"/> over a <see cref="Scene"/> and, when given, the outputs that a driver presents.
+/// </summary>
 public sealed class SceneDiagnostics : ISceneDiagnostics
 {
     private readonly Scene _scene;
@@ -18,6 +21,14 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
     private readonly Dictionary<string, PlaneReport> _lastPlanes = new(StringComparer.Ordinal);
     private Recording? _recording;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneDiagnostics"/> class.
+    /// </summary>
+    /// <param name="scene">The scene to read.</param>
+    /// <param name="renderer">The renderer that reads presented buffers back.</param>
+    /// <param name="loop">The loop that times recordings.</param>
+    /// <param name="outputs">The presented outputs, or <see langword="null"/>. Without them, plane reports are empty and recordings cannot start.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="scene"/>, <paramref name="renderer"/> or <paramref name="loop"/> is <see langword="null"/>.</exception>
     public SceneDiagnostics(Scene scene, IRenderer renderer, ICompositorEventLoop loop, IPresentedOutputs? outputs)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -29,24 +40,36 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         _outputs = outputs;
     }
 
+    /// <summary>
+    /// Gets or sets the services to look up <see cref="Clock"/> and <see cref="Toplevels"/> in when they are not set directly.
+    /// </summary>
     public BasinServices? Services { get; set; }
 
+    /// <summary>
+    /// Gets or sets the frame clock. When it is not set, the getter finds one in <see cref="Services"/>.
+    /// </summary>
     public IFrameClock? Clock
     {
         get => _clock ?? Services?.Find<IFrameClock>();
         set => _clock = value;
     }
 
+    /// <inheritdoc/>
     public int ClockSinks => Clock is Capabilities.Defaults.FrameClock clock ? clock.SinkCount : -1;
 
+    /// <summary>
+    /// Gets or sets the toplevel model that names frames and follows windows. When it is not set, the getter finds one in <see cref="Services"/>.
+    /// </summary>
     public IToplevelModel? Toplevels
     {
         get => _toplevels ?? Services?.Find<IToplevelModel>();
         set => _toplevels = value;
     }
 
+    /// <inheritdoc/>
     public IReadOnlyList<SceneNodeInfo> Tree() => SceneDump.Nodes(_scene.Root);
 
+    /// <inheritdoc/>
     public IReadOnlyList<FrameInfo> Frames()
     {
         var registered = _scene.Frames;
@@ -59,6 +82,12 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return frames;
     }
 
+    /// <summary>
+    /// Formats a frame snapshot as one line of key=value fields, with invariant culture.
+    /// </summary>
+    /// <param name="prefix">The text before the frame name.</param>
+    /// <param name="frame">The frame snapshot.</param>
+    /// <returns>The formatted line.</returns>
     public static string Describe(string prefix, in FrameInfo frame)
     {
         var outer = frame.Outer;
@@ -70,6 +99,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
             + $" inside={frame.Inside} now-ms={frame.NowMs} hover-ms={frame.HoverMs} active-ms={frame.ActiveMs}");
     }
 
+    /// <inheritdoc/>
     public IDisposable WatchDamage(bool stacks, Action<DamageInfo> sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -83,6 +113,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return watcher;
     }
 
+    /// <inheritdoc/>
     public IDisposable WatchFrames(Action<FrameInfo> sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -96,6 +127,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return watcher;
     }
 
+    /// <inheritdoc/>
     public Func<Box?>? LocateWindow(Surface surface, int margin)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -108,6 +140,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return () => frame.Tree.IsDestroyed ? null : Margined(SceneOuter(frame), margined);
     }
 
+    /// <inheritdoc/>
     public Func<Box?>? LocateSurface(Surface surface, int margin)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -122,6 +155,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
             : null;
     }
 
+    /// <inheritdoc/>
     public Func<Box?>? LocateNode(string path, int margin, out string? error)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -211,6 +245,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return new Box(left, top, Math.Max(a.Right, b.Right) - left, Math.Max(a.Bottom, b.Bottom) - top);
     }
 
+    /// <inheritdoc/>
     public string? Record(RecordRequest request, Action<RecordingResult> done)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -284,6 +319,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return null;
     }
 
+    /// <inheritdoc/>
     public bool WriteParts(Surface surface, Action<FramePart, Box> part)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -319,8 +355,10 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return true;
     }
 
+    /// <inheritdoc/>
     public void AllowPlanes(bool allowed) => _outputs?.AllowPlanes(allowed);
 
+    /// <inheritdoc/>
     public IReadOnlyList<PlaneReport> Planes()
     {
         if (_outputs is null)
@@ -337,6 +375,7 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return reports;
     }
 
+    /// <inheritdoc/>
     public IDisposable WatchPlanes(Action<PlaneReport> sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -350,6 +389,12 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         return watcher;
     }
 
+    /// <summary>
+    /// Builds a plane report from the latest commit of an output: the nodes on planes, then the declined candidates with their reasons.
+    /// </summary>
+    /// <param name="output">The output to report on.</param>
+    /// <returns>The report. Node boxes are in scene coordinates.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public static PlaneReport Report(SceneOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -423,6 +468,13 @@ public sealed class SceneDiagnostics : ISceneDiagnostics
         }
     }
 
+    /// <summary>
+    /// Maps a box in scene coordinates to the physical pixels of an output, rounded outward. A replicated output uses the area of its source.
+    /// </summary>
+    /// <param name="output">The output to map to.</param>
+    /// <param name="scene">The box in scene logical pixels.</param>
+    /// <returns>The box in the output's physical pixels.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public static Box Physical(SceneOutput output, in Box scene)
     {
         ArgumentNullException.ThrowIfNull(output);

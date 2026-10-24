@@ -8,6 +8,9 @@ using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// A host window that shows one compositor toplevel and forwards host input and window state to it.
+/// </summary>
 public sealed class ToplevelWindow : Window, ICaptureTarget
 {
     private readonly ToplevelWindows _manager;
@@ -616,10 +619,16 @@ public sealed class ToplevelWindow : Window, ICaptureTarget
         }
     }
 
+    /// <inheritdoc/>
     public Func<uint, bool, bool>? KeyFilter { get; set; }
 
+    /// <summary>
+    /// Activates or deactivates the pointer constraints of every screen toplevel, through <see cref="ToplevelWindows.CaptureInput"/>.
+    /// </summary>
+    /// <param name="captured"><see langword="true"/> to lock or confine the pointer, <see langword="false"/> to release it.</param>
     public void CaptureInput(bool captured) => _manager.CaptureInput(captured);
 
+    /// <inheritdoc/>
     public void InjectKey(uint code, bool pressed)
     {
         if (code == 0)
@@ -686,12 +695,20 @@ public sealed class ToplevelWindow : Window, ICaptureTarget
         }
     }
 
+    /// <summary>
+    /// Shows a fixed title instead of the client title. The decorator does not apply to it.
+    /// </summary>
+    /// <param name="title">The title, or <see langword="null"/> to show the decorated client title again.</param>
     public void OverrideTitle(string? title)
     {
         _titleOverride = title;
         Title = title ?? Decorated(_clientTitle);
     }
 
+    /// <summary>
+    /// Sets a function that changes the client title before it is shown. It has no visible effect while an override is set.
+    /// </summary>
+    /// <param name="decorator">The function, or <see langword="null"/> to show the client title as it is.</param>
     public void DecorateTitle(Func<string, string>? decorator)
     {
         _titleDecorator = decorator;

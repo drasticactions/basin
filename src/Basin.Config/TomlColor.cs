@@ -2,8 +2,16 @@ using System.Globalization;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Reads colors from TOML values.
+/// </summary>
 public static class TomlColor
 {
+    /// <summary>
+    /// Reads an RGBA color from an integer or from a <c>#rgb</c>, <c>#rrggbb</c> or <c>#rrggbbaa</c> string. A color without alpha is opaque.
+    /// </summary>
+    /// <param name="value">The TOML value.</param>
+    /// <returns>The color as <c>0xRRGGBBAA</c>, or <see langword="null"/> when the value is not a color.</returns>
     public static uint? Rgba(object? value)
     {
         if (value is long raw)
@@ -37,6 +45,12 @@ public static class TomlColor
         }
     }
 
+    /// <summary>
+    /// Reads an ARGB color from hexadecimal digits with an optional <c>#</c>. Six or fewer digits give an opaque color.
+    /// </summary>
+    /// <param name="text">The color text.</param>
+    /// <param name="fallback">The color to return when the text is empty or not hexadecimal.</param>
+    /// <returns>The color as <c>0xAARRGGBB</c>.</returns>
     public static uint Argb(string? text, uint fallback)
     {
         if (text is not { Length: > 0 })

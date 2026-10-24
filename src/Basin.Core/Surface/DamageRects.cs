@@ -2,8 +2,12 @@ using System.Runtime.CompilerServices;
 
 namespace Basin;
 
+/// <summary>
+/// Up to <see cref="Capacity"/> damage rectangles without allocation. A fifth rectangle collapses all of them into one bounding box.
+/// </summary>
 public struct DamageRects
 {
+    /// <summary>The number of rectangles kept before they collapse into one bounding box.</summary>
     public const int Capacity = 4;
 
     [InlineArray(Capacity)]
@@ -16,18 +20,26 @@ public struct DamageRects
     private int _count;
     private bool _overflowed;
 
+    /// <summary>Gets the number of rectangles.</summary>
     public readonly int Count => _count;
 
+    /// <summary>Gets a value indicating whether the rectangles collapsed into one bounding box.</summary>
     public readonly bool Overflowed => _overflowed;
 
+    /// <summary>Gets one rectangle.</summary>
+    /// <param name="index">The zero-based index.</param>
+    /// <returns>The rectangle, or an empty box when <paramref name="index"/> is out of range.</returns>
     public readonly Box this[int index] => index >= 0 && index < _count ? _slots[index] : default;
 
+    /// <summary>Removes all rectangles and resets <see cref="Overflowed"/>.</summary>
     public void Clear()
     {
         _count = 0;
         _overflowed = false;
     }
 
+    /// <summary>Adds a rectangle. An empty box is ignored.</summary>
+    /// <param name="box">The rectangle to add.</param>
     public void Add(in Box box)
     {
         if (box.IsEmpty)
@@ -58,8 +70,15 @@ public struct DamageRects
         _slots[_count++] = box;
     }
 
+    /// <summary>Adds a rectangle from its position and size. An empty rectangle is ignored.</summary>
+    /// <param name="x">The left edge.</param>
+    /// <param name="y">The top edge.</param>
+    /// <param name="width">The width.</param>
+    /// <param name="height">The height.</param>
     public void Add(int x, int y, int width, int height) => Add(new Box(x, y, width, height));
 
+    /// <summary>Adds each rectangle of another set.</summary>
+    /// <param name="other">The set to add.</param>
     public void Add(in DamageRects other)
     {
         for (var i = 0; i < other._count; i++)

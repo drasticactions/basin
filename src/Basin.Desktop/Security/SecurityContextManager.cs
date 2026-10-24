@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_security_context_manager_v1</c> global. It accepts clients on listen sockets that a sandbox engine supplies, and tags each client with a <see cref="SecurityContext"/>.
+/// </summary>
 public sealed class SecurityContextManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorInvalidListenFd = 1;
@@ -29,6 +35,11 @@ public sealed class SecurityContextManager : IDisposable
     private readonly WlGlobal _global;
     private readonly List<Listener> _listeners = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SecurityContextManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that the accepted clients connect to.</param>
+    /// <param name="loop">The loop that watches the listen sockets.</param>
     public SecurityContextManager(WlServerDisplay display, ICompositorEventLoop loop)
     {
         _display = display;
@@ -36,8 +47,14 @@ public sealed class SecurityContextManager : IDisposable
         _global = display.CreateGlobal(WpSecurityContextManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a listener accepts a client, after the client has its context.
+    /// </summary>
     public event Action<WlClient, SecurityContext>? ClientConnected;
 
+    /// <summary>
+    /// Closes every listener and removes the global. Clients that connected stay connected.
+    /// </summary>
     public void Dispose()
     {
         foreach (var listener in _listeners.ToArray())
@@ -48,6 +65,11 @@ public sealed class SecurityContextManager : IDisposable
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Finds the security context of a client.
+    /// </summary>
+    /// <param name="client">The client to look up.</param>
+    /// <returns>The context, or <see langword="null"/> when the client did not connect through a security context listener.</returns>
     public static SecurityContext? ContextOf(WlClient client) =>
         Contexts.GetValueOrDefault(client.RawHandle);
 

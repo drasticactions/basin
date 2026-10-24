@@ -3,6 +3,10 @@ using SDL3;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Starts interactive moves and resizes of SDL windows on the wayland video driver.
+/// It binds its own seat and pointer on the SDL display, on a private queue, and keeps the serial of the last left-button press.
+/// </summary>
 public sealed unsafe class SdlWaylandMoves : IDisposable
 {
     private const string Client = "libwayland-client.so.0";
@@ -55,10 +59,20 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         _ = wl_display_roundtrip_queue(display, _queue);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the parent seat has a pointer that the object listens to.
+    /// </summary>
     public bool HasPointer => _pointer != 0;
 
+    /// <summary>
+    /// Gets a value indicating whether the left button is held, as of the last <see cref="Dispatch"/>.
+    /// </summary>
     public bool Pressed => _pressed;
 
+    /// <summary>
+    /// Creates the object when SDL runs on its wayland driver on Linux.
+    /// </summary>
+    /// <returns>The new object that the caller owns, or <see langword="null"/> on another driver or without the Wayland client library.</returns>
     public static SdlWaylandMoves? TryCreate()
     {
         if (!OperatingSystem.IsLinux() || SDL.GetCurrentVideoDriver() != "wayland")
@@ -78,6 +92,9 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         return new SdlWaylandMoves(display, registry, seat, pointer);
     }
 
+    /// <summary>
+    /// Dispatches the pending events of the private queue. The caller must call it once per loop turn, so that the queue does not grow.
+    /// </summary>
     public void Dispatch()
     {
         if (!_disposed)
@@ -86,6 +103,12 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         }
     }
 
+    /// <summary>
+    /// Asks the parent compositor to start an interactive move or resize of a window, with the serial of the held left button.
+    /// </summary>
+    /// <param name="window">The SDL window handle.</param>
+    /// <param name="edges">The <c>xdg_toplevel</c> resize edges, or 0 for a move.</param>
+    /// <returns><see langword="false"/> when the left button is not held, the seat is missing, or the window has no <c>xdg_toplevel</c>.</returns>
     public bool TryBegin(nint window, uint edges)
     {
         Dispatch();
@@ -110,6 +133,9 @@ public sealed unsafe class SdlWaylandMoves : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Destroys the seat, the pointer, the registry and the private queue. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

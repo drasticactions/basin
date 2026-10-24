@@ -1,5 +1,8 @@
 namespace Basin.Ipc;
 
+/// <summary>
+/// Describes the call that an <see cref="IIpcInterceptor"/> callback sees. The server reuses each instance, so it is valid only for the length of one callback.
+/// </summary>
 public sealed unsafe class IpcCallContext
 {
     private readonly IpcServer _server;
@@ -10,16 +13,30 @@ public sealed unsafe class IpcCallContext
 
     internal IpcCallContext(IpcServer server) => _server = server;
 
+    /// <summary>
+    /// Gets the state of the connection or line front that made the call.
+    /// </summary>
     public IpcClientState Client { get; private set; } = null!;
 
+    /// <summary>
+    /// Gets a value indicating whether the call came from the stdin line front instead of a socket connection.
+    /// </summary>
     public bool FromLineFront { get; private set; }
 
+    /// <summary>
+    /// Gets the name of the called method.
+    /// </summary>
     public string Method { get; private set; } = string.Empty;
 
     internal long Started { get; set; }
 
     internal IpcHeldCall? Held => _held;
 
+    /// <summary>
+    /// Holds the call so that the interceptor can answer it later. The held call keeps a copy of the parameters. A second call returns the same instance.
+    /// </summary>
+    /// <returns>The held call, which the interceptor must allow or deny once.</returns>
+    /// <exception cref="InvalidOperationException">The context is not inside <see cref="IIpcInterceptor.Before"/>.</exception>
     public IpcHeldCall Hold()
     {
         if (_reply is null)

@@ -10,6 +10,9 @@ using Pixman;
 
 namespace Basin.UI.Avalonia;
 
+/// <summary>
+/// A chrome surface whose content is an Avalonia top level. Input from the compositor becomes Avalonia raw input.
+/// </summary>
 public sealed class AvaloniaUISurface : IUISurface
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -76,14 +79,28 @@ public sealed class AvaloniaUISurface : IUISurface
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the surface belongs to an attached host. Input is then posted to the Avalonia UI thread.
+    /// </summary>
     public bool IsAttached => _attached;
 
+    /// <summary>
+    /// Occurs when the Avalonia window asks for an interactive move.
+    /// </summary>
     public event Action? MoveDragRequested;
 
+    /// <summary>
+    /// Occurs when the Avalonia window asks for an interactive resize, with the edge to drag.
+    /// </summary>
     public event Action<WindowEdge>? ResizeDragRequested;
 
+    /// <inheritdoc/>
     public UISurfaceSize Size => _impl.Size;
 
+    /// <summary>
+    /// Gets or sets the content of the top level. It is <see langword="null"/> for a popup.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The set is on a popup, whose content belongs to Avalonia.</exception>
     public object? Content
     {
         get => _root?.Content;
@@ -98,10 +115,19 @@ public sealed class AvaloniaUISurface : IUISurface
         }
     }
 
+    /// <summary>
+    /// Gets the top level that the surface owns, or <see langword="null"/> for a popup.
+    /// </summary>
     public TopLevel? Root => _root;
 
+    /// <summary>
+    /// Gets the surface that a popup belongs to, or <see langword="null"/> for a surface that is not a popup.
+    /// </summary>
     public AvaloniaUISurface? Parent => (_impl as BasinPopupImpl)?.ParentImpl.Surface;
 
+    /// <summary>
+    /// Gets the surface at the top of the parent chain. It is this surface when it has no parent.
+    /// </summary>
     public AvaloniaUISurface Owner
     {
         get
@@ -116,12 +142,22 @@ public sealed class AvaloniaUISurface : IUISurface
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the focused element of the top level is a <see cref="TextBox"/>.
+    /// </summary>
     public bool WantsTextInput => _root?.FocusManager?.GetFocusedElement() is TextBox;
 
+    /// <inheritdoc/>
     public double PositionX { get; private set; }
 
+    /// <inheritdoc/>
     public double PositionY { get; private set; }
 
+    /// <summary>
+    /// Records the layout position and gives Avalonia the matching screen position in physical pixels.
+    /// </summary>
+    /// <param name="x">The left edge in layout coordinates.</param>
+    /// <param name="y">The top edge in layout coordinates.</param>
     public void SetPosition(double x, double y)
     {
         _thread.Assert();
@@ -132,12 +168,14 @@ public sealed class AvaloniaUISurface : IUISurface
             (int)Math.Round(y * _impl.RenderScaling));
     }
 
+    /// <inheritdoc/>
     public bool Configure(int logicalWidth, int logicalHeight, double scale)
     {
         _thread.Assert();
         return !_disposed && _impl.Resize(logicalWidth, logicalHeight, scale, WindowResizeReason.Layout);
     }
 
+    /// <inheritdoc/>
     public bool TryAcquire(out UIFrame frame)
     {
         AssertThread();
@@ -158,12 +196,18 @@ public sealed class AvaloniaUISurface : IUISurface
         }
     }
 
+    /// <inheritdoc/>
     public void AddObserver(IUISurfaceObserver observer) => _observers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(IUISurfaceObserver observer) => _observers.Remove(observer);
 
+    /// <summary>
+    /// Gets a value indicating whether the surface takes input. Avalonia turns it off for popups that are not hit-test visible.
+    /// </summary>
     public bool AcceptsInput { get; private set; } = true;
 
+    /// <inheritdoc/>
     public bool AcceptsInputAt(double x, double y)
     {
         AssertThread();
@@ -171,8 +215,15 @@ public sealed class AvaloniaUISurface : IUISurface
         return !_disposed && AcceptsInput && x >= 0 && y >= 0 && x < size.Width && y < size.Height;
     }
 
+    /// <summary>
+    /// Gets the cursor that Avalonia set last. The point is not used.
+    /// </summary>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
+    /// <returns>An xcursor name, or <see langword="null"/> to let the compositor choose.</returns>
     public string? CursorAt(double x, double y) => _impl.CursorName;
 
+    /// <inheritdoc/>
     public void NotifyPointerEnter(double x, double y)
     {
         AssertThread();
@@ -190,6 +241,7 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <inheritdoc/>
     public void NotifyPointerMotion(uint timeMs, double x, double y)
     {
         AssertThread();
@@ -206,6 +258,7 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <inheritdoc/>
     public void NotifyPointerButton(uint timeMs, uint button, bool pressed)
     {
         AssertThread();
@@ -227,6 +280,7 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <inheritdoc/>
     public void NotifyPointerAxis(uint timeMs, double dx, double dy)
     {
         AssertThread();
@@ -242,6 +296,7 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <inheritdoc/>
     public void NotifyPointerLeave()
     {
         AssertThread();
@@ -258,6 +313,9 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Tells Avalonia that a button went down outside the surface, so that light-dismiss popups close.
+    /// </summary>
     public void NotifyPressOutside()
     {
         AssertThread();
@@ -273,6 +331,10 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Gives keyboard focus to the surface and activates its window. The keys that are down set the first modifier state.
+    /// </summary>
+    /// <param name="pressed">The evdev codes of the keys that are down at entry.</param>
     public void NotifyKeyboardEnter(ReadOnlySpan<uint> pressed)
     {
         AssertThread();
@@ -300,6 +362,9 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Gets or sets the accessible name of the top level. It is <see langword="null"/> for a popup, and a set on a popup does nothing.
+    /// </summary>
     public string? AccessibleName
     {
         get => _root is null ? null : global::Avalonia.Automation.AutomationProperties.GetName(_root);
@@ -322,6 +387,7 @@ public sealed class AvaloniaUISurface : IUISurface
         }
     });
 
+    /// <inheritdoc/>
     public void NotifyKey(uint timeMs, uint key, bool pressed)
     {
         AssertThread();
@@ -357,10 +423,18 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Receives the modifier state. This implementation ignores it and tracks the modifiers from the keys.
+    /// </summary>
+    /// <param name="depressed">The xkb mask of the depressed modifiers.</param>
+    /// <param name="latched">The xkb mask of the latched modifiers.</param>
+    /// <param name="locked">The xkb mask of the locked modifiers.</param>
+    /// <param name="group">The xkb layout group.</param>
     public void NotifyModifiers(uint depressed, uint latched, uint locked, uint group)
     {
     }
 
+    /// <inheritdoc/>
     public void NotifyKeyboardLeave()
     {
         AssertThread();
@@ -381,15 +455,25 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Tells the surface that a touch point went down on it. The surface tracks up to 10 touch points.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The touch point id. It is unique while the point is down.</param>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
     public void NotifyTouchDown(uint timeMs, int id, double x, double y) =>
         RaiseTouch(timeMs, id, x, y, RawPointerEventType.TouchBegin);
 
+    /// <inheritdoc/>
     public void NotifyTouchMotion(uint timeMs, int id, double x, double y) =>
         RaiseTouch(timeMs, id, x, y, RawPointerEventType.TouchUpdate);
 
+    /// <inheritdoc/>
     public void NotifyTouchUp(uint timeMs, int id) =>
         RaiseTouch(timeMs, id, double.NaN, double.NaN, RawPointerEventType.TouchEnd);
 
+    /// <inheritdoc/>
     public void NotifyTouchCancel()
     {
         AssertThread();
@@ -414,6 +498,10 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Inserts committed text as Avalonia text input. The text is dropped when Avalonia handled the key press that came just before it.
+    /// </summary>
+    /// <param name="text">The committed text.</param>
     public void NotifyTextCommit(ReadOnlySpan<char> text)
     {
         AssertThread();
@@ -438,12 +526,28 @@ public sealed class AvaloniaUISurface : IUISurface
         });
     }
 
+    /// <summary>
+    /// Receives the preedit text. This implementation ignores it.
+    /// </summary>
+    /// <param name="text">The preedit text.</param>
+    /// <param name="cursorBegin">The start of the cursor in the preedit.</param>
+    /// <param name="cursorEnd">The end of the cursor in the preedit.</param>
     public void NotifyPreedit(ReadOnlySpan<char> text, int cursorBegin, int cursorEnd)
     {
     }
 
+    /// <summary>
+    /// Returns no popup. Avalonia opens its own popups and reports them through <see cref="AvaloniaUIHost.PopupAppeared"/>.
+    /// </summary>
+    /// <param name="anchor">The anchor box in surface-local logical coordinates.</param>
+    /// <param name="gravity">The direction in which the popup extends from the anchor.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public IUISurface? CreatePopup(in Box anchor, UIPopupGravity gravity) => null;
 
+    /// <summary>
+    /// Stops rendering, disposes the top level and the buffers, and tells the observers. A second call does nothing.
+    /// On an attached host the observers are not told.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();
@@ -489,6 +593,10 @@ public sealed class AvaloniaUISurface : IUISurface
         _observers.Damaged(this, _impl.WholeDamage);
     }
 
+    /// <summary>
+    /// Reports a frame that an attached surface finished to the observers. Call it on the compositor thread after <see cref="AvaloniaUIHost.SurfaceDamaged"/>.
+    /// </summary>
+    /// <returns><see langword="true"/> when a frame was pending and the observers were told.</returns>
     public bool PublishDamage()
     {
         if (_disposed || !_damagePending)

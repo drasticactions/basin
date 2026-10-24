@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Reports the input of one seat as trace events. It hooks the seat only while a watch is open, and sends pointer motion once per frame.
+/// </summary>
 public sealed class SeatDiagnostics : IInputDiagnostics, IFrameSink
 {
     private readonly Seat _seat;
@@ -13,6 +16,11 @@ public sealed class SeatDiagnostics : IInputDiagnostics, IFrameSink
     private bool _hooked;
     private bool _motionHooked;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SeatDiagnostics"/> class.
+    /// </summary>
+    /// <param name="seat">The seat to watch.</param>
+    /// <param name="services">The services that give the <see cref="IFrameClock"/>. With no clock, each motion goes out at once.</param>
     public SeatDiagnostics(Seat seat, BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -21,6 +29,7 @@ public sealed class SeatDiagnostics : IInputDiagnostics, IFrameSink
         _services = services;
     }
 
+    /// <inheritdoc/>
     public IDisposable WatchInput(bool motion, Action<InputTraceEvent> sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -30,8 +39,18 @@ public sealed class SeatDiagnostics : IInputDiagnostics, IFrameSink
         return watcher;
     }
 
+    /// <summary>
+    /// Sends the pending pointer motion event to the watches.
+    /// </summary>
+    /// <param name="output">The output of the frame, which is not used.</param>
+    /// <param name="predictedVblankNanos">The predicted vblank, which is not used.</param>
     public void BeginFrame(IOutput output, long predictedVblankNanos) => FlushMotion();
 
+    /// <summary>
+    /// Does nothing.
+    /// </summary>
+    /// <param name="output">The output of the frame, which is not used.</param>
+    /// <param name="presentedNanos">The presentation time, which is not used.</param>
     public void EndFrame(IOutput output, long presentedNanos)
     {
     }

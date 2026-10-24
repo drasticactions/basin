@@ -5,6 +5,9 @@ using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Reserves an X display and starts Xwayland on it when the first X client connects. When the process exits, the next X client starts it again.
+/// </summary>
 public sealed unsafe class XWaylandServer : IDisposable
 {
     [DllImport("libc", SetLastError = true)]
@@ -94,6 +97,12 @@ public sealed unsafe class XWaylandServer : IDisposable
     private bool _running;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XWaylandServer"/> class. It takes the first free display in <c>:0</c> to <c>:31</c> and listens on its sockets.
+    /// </summary>
+    /// <param name="display">The display that the Xwayland client connects to.</param>
+    /// <param name="loop">The loop that watches the X sockets and the process.</param>
+    /// <exception cref="InvalidOperationException">No display in <c>:0</c> to <c>:31</c> is free.</exception>
     public XWaylandServer(WlServerDisplay display, ICompositorEventLoop loop)
     {
         _display = display;
@@ -103,20 +112,44 @@ public sealed unsafe class XWaylandServer : IDisposable
         WatchLazy();
     }
 
+    /// <summary>
+    /// Gets the reserved display number.
+    /// </summary>
     public int DisplayNumber { get; }
 
+    /// <summary>
+    /// Gets the Wayland client of the running Xwayland process, or <see langword="null"/> when it is not running.
+    /// </summary>
     public Wayland.Server.WlClient? Client => _client;
 
+    /// <summary>
+    /// Gets the X display name, for example <c>:1</c>, for the <c>DISPLAY</c> variable of X clients.
+    /// </summary>
     public string DisplayName { get; }
 
+    /// <summary>
+    /// Gets the number of times the process exited by itself. A normal exit after the last X client leaves also counts.
+    /// </summary>
     public int CrashCount { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether an Xwayland process is running now.
+    /// </summary>
     public bool IsRunning => _running;
 
+    /// <summary>
+    /// Occurs when Xwayland reports its display. The argument is the window manager socket fd, and the subscriber takes ownership of it.
+    /// </summary>
     public event Action<int>? Ready;
 
+    /// <summary>
+    /// Occurs when the Wayland client for a new process is created, before the process starts. A handler can set per-client state before the first request.
+    /// </summary>
     public event Action<Wayland.Server.WlClient>? ClientCreated;
 
+    /// <summary>
+    /// Occurs when <see cref="X11Scale"/>, <see cref="DpiBuckets"/>, <see cref="CursorTheme"/> or <see cref="CursorSize"/> changes value.
+    /// </summary>
     public event Action? SettingsChanged;
 
     private XWaylandScale _x11Scale;
@@ -125,6 +158,9 @@ public sealed unsafe class XWaylandServer : IDisposable
     private int _cursorSize =
         int.TryParse(Environment.GetEnvironmentVariable("XCURSOR_SIZE"), out var size) && size > 0 ? size : 24;
 
+    /// <summary>
+    /// Gets or sets the scale that X11 clients render at.
+    /// </summary>
     public XWaylandScale X11Scale
     {
         get => _x11Scale;
@@ -138,6 +174,10 @@ public sealed unsafe class XWaylandServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the allowed DPI values. The setter copies the list.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public IReadOnlyList<int> DpiBuckets
     {
         get => _dpiBuckets;
@@ -152,6 +192,10 @@ public sealed unsafe class XWaylandServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the cursor theme name. The initial value comes from <c>XCURSOR_THEME</c>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public string CursorTheme
     {
         get => _cursorTheme;
@@ -166,6 +210,9 @@ public sealed unsafe class XWaylandServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the cursor size in logical pixels. The initial value comes from <c>XCURSOR_SIZE</c>, or is 24. A value of 0 or less is ignored.
+    /// </summary>
     public int CursorSize
     {
         get => _cursorSize;
@@ -179,8 +226,14 @@ public sealed unsafe class XWaylandServer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs after the process exits and the server state is torn down. The display stays reserved.
+    /// </summary>
     public event Action? Exited;
 
+    /// <summary>
+    /// Stops the process, with SIGKILL when SIGTERM does not work in one second. It then closes the sockets and releases the display.
+    /// </summary>
     public void Dispose()
     {
         _disposed = true;

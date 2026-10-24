@@ -4,10 +4,24 @@ using Lcms2.Native;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Bakes 3D conversion tables between image descriptions, from the parametric math or from an ICC
+/// profile.
+/// </summary>
 public static class ColorLutBaker
 {
+    /// <summary>
+    /// The grid edge of a baked table when the caller does not name one.
+    /// </summary>
     public const int DefaultSize = 33;
 
+    /// <summary>
+    /// Tells whether two descriptions share primaries, transfer function and luminances, so no table is
+    /// necessary.
+    /// </summary>
+    /// <param name="source">The description of the content.</param>
+    /// <param name="output">The description of the space to convert into.</param>
+    /// <returns><see langword="false"/> also when the output asks for a baked table, for example for a look.</returns>
     public static bool IsIdentity(ImageDescription source, ImageDescription output) =>
         Chromaticities.From(source) == Chromaticities.From(output) &&
         source.TransferNamed == output.TransferNamed &&
@@ -15,6 +29,15 @@ public static class ColorLutBaker
         source.Luminances == output.Luminances &&
         !output.NeedsBakedTable;
 
+    /// <summary>
+    /// Bakes the parametric conversion with soft gamut mapping into a table. A linear source gets a PQ
+    /// shaper so that the grid covers its extended range.
+    /// </summary>
+    /// <param name="source">The description of the content.</param>
+    /// <param name="output">The description of the space to convert into.</param>
+    /// <param name="size">The grid edge of the table.</param>
+    /// <param name="intent">The render intent of the conversion.</param>
+    /// <returns>A new table, which the caller owns.</returns>
     public static ColorLut3D Bake(
         ImageDescription source,
         ImageDescription output,
@@ -50,12 +73,26 @@ public static class ColorLutBaker
         };
     }
 
+    /// <summary>
+    /// Gets the shaper scale that <see cref="Bake"/> uses for a source.
+    /// </summary>
+    /// <param name="source">The transfer function of the source.</param>
+    /// <returns>The luminance in nits of linear value 1 for a linear source, otherwise 0 for no shaper.</returns>
     public static double ShaperNitsFor(in TransferCharacteristics source) =>
         source.Kind == TransferKind.Linear ? source.MaxLuminance : 0;
 
     private static double Unshape(double code, double shaperNits) =>
         shaperNits <= 0 ? code : TransferCharacteristics.PqEotf(code) / shaperNits;
 
+    /// <summary>
+    /// Bakes the conversion from an ICC profile into an output description with Little CMS. The
+    /// output's look and tone mapping do not apply.
+    /// </summary>
+    /// <param name="iccData">The source ICC profile bytes.</param>
+    /// <param name="output">The description of the space to convert into.</param>
+    /// <param name="size">The grid edge of the table.</param>
+    /// <param name="intent">The render intent of the conversion.</param>
+    /// <returns>A new table, or <see langword="null"/> when liblcms2 is absent or the profile does not transform.</returns>
     public static ColorLut3D? BakeFromIcc(
         byte[] iccData,
         ImageDescription output,

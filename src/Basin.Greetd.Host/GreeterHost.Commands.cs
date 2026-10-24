@@ -4,24 +4,48 @@ using Basin.Ipc;
 
 namespace Basin.Greetd.Host;
 
+/// <content>
+/// The control socket of the greeter host.
+/// </content>
 public sealed partial class GreeterHost
 {
     private readonly IpcLineReport _report = new();
     private IpcServer? _ipc;
     private FrameSettle? _settle;
 
+    /// <summary>
+    /// Gets the line report that prints the output of the control methods.
+    /// </summary>
     public IpcLineReport Report => _report;
 
+    /// <summary>
+    /// Gets the control socket server, or <see langword="null"/> before <see cref="Run"/>.
+    /// </summary>
     public IpcServer? Ipc => _ipc;
 
+    /// <summary>
+    /// Gets or sets the program action for SIGHUP and for the <c>reload</c> method.
+    /// </summary>
     public Action? Reload { get; set; }
 
+    /// <summary>
+    /// Gets or sets the program action for the <c>submit</c> method, the same as the program's own submit button.
+    /// </summary>
     public Action? Submit { get; set; }
 
+    /// <summary>
+    /// Gets or sets the program action for the <c>clock</c> method. It receives the text to show as the time.
+    /// </summary>
     public Action<string>? ClockOverride { get; set; }
 
+    /// <summary>
+    /// Gets or sets the program action for the <c>where</c> method.
+    /// </summary>
     public Action? Where { get; set; }
 
+    /// <summary>
+    /// Gets or sets an action that registers the program's own methods after the host's methods.
+    /// </summary>
     public Action<IpcMethodRegistry>? MoreCommands { get; set; }
 
     private void WireCommands()

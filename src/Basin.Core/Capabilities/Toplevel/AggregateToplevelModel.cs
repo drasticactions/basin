@@ -1,5 +1,9 @@
 namespace Basin.Capabilities;
 
+/// <summary>
+/// Combines up to 255 <see cref="IToplevelSource"/> instances into one <see cref="IToplevelModel"/>.
+/// A global id holds the source index in its top 8 bits and the local id of the source in the low 56 bits.
+/// </summary>
 public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFeed
 {
     private const int SourceShift = 56;
@@ -9,10 +13,19 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
     private readonly ToplevelCommitObservers _commitObservers = new();
     private readonly List<SourceCommitObserver> _commitForwarders = [];
 
+    /// <inheritdoc/>
     public void AddObserver(IToplevelObserver observer) => _observers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(IToplevelObserver observer) => _observers.Remove(observer);
 
+    /// <summary>
+    /// Adds a source and forwards its notifications with global ids.
+    /// The model keeps the sources in the order of addition and cannot remove a source.
+    /// </summary>
+    /// <param name="source">The source to add.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The model already holds 255 sources.</exception>
     public void Add(IToplevelSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -30,9 +43,11 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         }
     }
 
+    /// <inheritdoc/>
     public bool ReportsCommits(ulong toplevelId) =>
         TrySplit(toplevelId, out var source, out var localId) && source.ReportsCommits && source.TryGet(localId, out _);
 
+    /// <inheritdoc/>
     public void AddCommitObserver(IToplevelCommitObserver observer)
     {
         ArgumentNullException.ThrowIfNull(observer);
@@ -46,6 +61,7 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         }
     }
 
+    /// <inheritdoc/>
     public void RemoveCommitObserver(IToplevelCommitObserver observer)
     {
         ArgumentNullException.ThrowIfNull(observer);
@@ -96,6 +112,7 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
             model._observers.Removed(Global(sourceIndex, toplevelId));
     }
 
+    /// <inheritdoc/>
     public void ReportFrom(ReadOnlySpan<SurfaceBox> boxes)
     {
         for (var i = 0; i < _sources.Count; i++)
@@ -107,6 +124,7 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         }
     }
 
+    /// <inheritdoc/>
     public int Enumerate(Span<ToplevelInfo> toplevels)
     {
         var total = 0;
@@ -135,6 +153,7 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         return total;
     }
 
+    /// <inheritdoc/>
     public bool TryGet(ulong toplevelId, out ToplevelInfo info)
     {
         info = default;
@@ -152,6 +171,12 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         return true;
     }
 
+    /// <summary>
+    /// Converts the local id of a toplevel in <paramref name="source"/> to the global id that this model reports.
+    /// </summary>
+    /// <param name="source">A source that <see cref="Add"/> added.</param>
+    /// <param name="localId">The id that the source uses for the toplevel.</param>
+    /// <returns>The global id, or 0 when the model does not hold the source or <paramref name="localId"/> is 0.</returns>
     public ulong GlobalId(IToplevelSource source, ulong localId)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -159,6 +184,7 @@ public sealed class AggregateToplevelModel : IToplevelModel, IToplevelGeometryFe
         return index < 0 || localId == 0 ? 0 : Global((ulong)index + 1, localId);
     }
 
+    /// <inheritdoc/>
     public bool Request(ulong toplevelId, in ToplevelRequest request) =>
         TrySplit(toplevelId, out var source, out var localId) && source.Request(localId, request);
 

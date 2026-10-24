@@ -3,38 +3,92 @@ using Prowl.Vector;
 
 namespace Basin.UI.Paper;
 
+/// <summary>
+/// The font, colors and sizes that the settings widgets draw with.
+/// </summary>
 public sealed record SettingsTheme
 {
+    /// <summary>
+    /// Gets the font of all text.
+    /// </summary>
     public required FontFile Font { get; init; }
 
+    /// <summary>
+    /// Gets the body font size in logical pixels. The default is 14. The other sizes scale from it.
+    /// </summary>
     public float FontSize { get; init; } = 14f;
 
+    /// <summary>
+    /// Gets the color behind the whole settings page.
+    /// </summary>
     public Color32 Background { get; init; }
 
+    /// <summary>
+    /// Gets the fill of text fields, list items and the section list.
+    /// </summary>
     public Color32 Surface { get; init; }
 
+    /// <summary>
+    /// Gets the fill of buttons, closed choices and switches that are off.
+    /// </summary>
     public Color32 Raised { get; init; }
 
+    /// <summary>
+    /// Gets the border color of controls.
+    /// </summary>
     public Color32 Border { get; init; }
 
+    /// <summary>
+    /// Gets the color of ordinary text.
+    /// </summary>
     public Color32 Text { get; init; }
 
+    /// <summary>
+    /// Gets the color of notes, placeholders, disabled text and the scroll bar.
+    /// </summary>
     public Color32 Dim { get; init; }
 
+    /// <summary>
+    /// Gets the color of selected items, focus borders, switches that are on and the dirty dot.
+    /// </summary>
     public Color32 Accent { get; init; }
 
+    /// <summary>
+    /// Gets the color of text on an <see cref="Accent"/> fill.
+    /// </summary>
     public Color32 AccentText { get; init; }
 
+    /// <summary>
+    /// Gets the color of badges and hints.
+    /// </summary>
     public Color32 Warning { get; init; }
 
+    /// <summary>
+    /// Gets the color of error messages.
+    /// </summary>
     public Color32 Error { get; init; }
 
+    /// <summary>
+    /// Gets the height of one settings row in logical pixels, 2.3 times <see cref="FontSize"/>, rounded.
+    /// </summary>
     public float RowHeight => MathF.Round(FontSize * 2.3f);
 
+    /// <summary>
+    /// Gets the width of the control at the right of a row in logical pixels, 18 times <see cref="FontSize"/>, rounded.
+    /// </summary>
     public float ControlWidth => MathF.Round(FontSize * 18f);
 
+    /// <summary>
+    /// Gets the small font size in logical pixels, 0.85 times <see cref="FontSize"/>, rounded.
+    /// </summary>
     public float Small => MathF.Round(FontSize * 0.85f);
 
+    /// <summary>
+    /// Makes the dark theme.
+    /// </summary>
+    /// <param name="font">The font of all text.</param>
+    /// <param name="fontSize">The body font size in logical pixels.</param>
+    /// <returns>A new theme.</returns>
     public static SettingsTheme Dark(FontFile font, float fontSize = 14f) => new()
     {
         Font = font,
@@ -51,6 +105,12 @@ public sealed record SettingsTheme
         Error = new Color32(0xe5, 0x5b, 0x5b, 0xff),
     };
 
+    /// <summary>
+    /// Makes the light theme.
+    /// </summary>
+    /// <param name="font">The font of all text.</param>
+    /// <param name="fontSize">The body font size in logical pixels.</param>
+    /// <returns>A new theme.</returns>
     public static SettingsTheme Light(FontFile font, float fontSize = 14f) => new()
     {
         Font = font,

@@ -2,6 +2,10 @@ using System.Globalization;
 
 namespace Basin.Capabilities;
 
+/// <summary>
+/// Converts device settings, device types and their values to and from the words that configuration files and IPC use.
+/// Parsing ignores case and accepts <c>-</c> for <c>_</c>.
+/// </summary>
 public static class InputSettingNames
 {
     private static readonly InputSetting[] AllSettings = Enum.GetValues<InputSetting>();
@@ -24,10 +28,16 @@ public static class InputSettingNames
 
     private static readonly string[] SendEventsWords = ["enabled", "disabled", "disabled_on_external_mouse"];
 
+    /// <summary>Gets every <see cref="InputSetting"/> value in declaration order.</summary>
     public static ReadOnlySpan<InputSetting> Settings => AllSettings;
 
+    /// <summary>Gets every <see cref="InputDeviceType"/> value in declaration order.</summary>
     public static ReadOnlySpan<InputDeviceType> Types => AllTypes;
 
+    /// <summary>Gets the configuration key of a setting, for example <c>natural_scroll</c>.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <returns>The key in lower case with underscores.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="setting"/> is not a defined value.</exception>
     public static string Key(InputSetting setting) => setting switch
     {
         InputSetting.SendEvents => "send_events",
@@ -62,6 +72,10 @@ public static class InputSettingNames
         _ => throw new ArgumentOutOfRangeException(nameof(setting), setting, null),
     };
 
+    /// <summary>Finds the setting whose configuration key is the given text.</summary>
+    /// <param name="text">The key to parse.</param>
+    /// <param name="setting">The setting, or the default value when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the text names a setting.</returns>
     public static bool TryParseKey(ReadOnlySpan<char> text, out InputSetting setting)
     {
         foreach (var candidate in AllSettings)
@@ -77,6 +91,10 @@ public static class InputSettingNames
         return false;
     }
 
+    /// <summary>Gets the configuration word for a device type, for example <c>tablet_tool</c>.</summary>
+    /// <param name="type">The device type.</param>
+    /// <returns>The word in lower case with underscores.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="type"/> is not a defined value.</exception>
     public static string TypeName(InputDeviceType type) => type switch
     {
         InputDeviceType.Keyboard => "keyboard",
@@ -89,6 +107,10 @@ public static class InputSettingNames
         _ => throw new ArgumentOutOfRangeException(nameof(type), type, null),
     };
 
+    /// <summary>Finds the device type whose configuration word is the given text.</summary>
+    /// <param name="text">The word to parse.</param>
+    /// <param name="type">The type, or the default value when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the text names a device type.</returns>
     public static bool TryParseType(ReadOnlySpan<char> text, out InputDeviceType type)
     {
         foreach (var candidate in AllTypes)
@@ -104,6 +126,9 @@ public static class InputSettingNames
         return false;
     }
 
+    /// <summary>Gets the word for a setting layer. An undefined value gives <c>default</c>.</summary>
+    /// <param name="layer">The layer.</param>
+    /// <returns>One of <c>default</c>, <c>config</c> or <c>runtime</c>.</returns>
     public static string LayerName(InputSettingLayer layer) => layer switch
     {
         InputSettingLayer.Config => "config",
@@ -111,6 +136,9 @@ public static class InputSettingNames
         _ => "default",
     };
 
+    /// <summary>Gets the shape of the value that a setting takes.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <returns>The kind. A setting that has no other kind gives <see cref="InputSettingKind.Text"/>.</returns>
     public static InputSettingKind KindOf(InputSetting setting) => setting switch
     {
         InputSetting.Tap or InputSetting.Drag or InputSetting.NaturalScroll or InputSetting.LeftHanded
@@ -126,15 +154,27 @@ public static class InputSettingNames
         _ => InputSettingKind.Text,
     };
 
+    /// <summary>Tells whether a setting configures the keymap or key repeat.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <returns><see langword="true"/> for the keymap names, the repeat rate and the repeat delay.</returns>
     public static bool IsKeyboard(InputSetting setting) => setting is InputSetting.KeymapRules or InputSetting.KeymapModel
         or InputSetting.KeymapLayout or InputSetting.KeymapVariant or InputSetting.KeymapOptions
         or InputSetting.RepeatRate or InputSetting.RepeatDelay;
 
+    /// <summary>Tells whether the compositor applies a setting itself, not libinput or the keymap.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <returns><see langword="true"/> for <see cref="InputSetting.ScrollFactor"/> and <see cref="InputSetting.MapToOutput"/>.</returns>
     public static bool IsCompositorSide(InputSetting setting) =>
         setting is InputSetting.ScrollFactor or InputSetting.MapToOutput;
 
+    /// <summary>Tells whether libinput applies a setting.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <returns><see langword="true"/> when the setting is neither a keyboard setting nor a compositor-side setting.</returns>
     public static bool IsLibinput(InputSetting setting) => !IsKeyboard(setting) && !IsCompositorSide(setting);
 
+    /// <summary>Gets the canonical words that a choice or flag setting accepts, for example for completion.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <returns>The words. A setting that takes a number or text gives an empty span.</returns>
     public static ReadOnlySpan<string> Words(InputSetting setting) => setting switch
     {
         InputSetting.TapButtonMap or InputSetting.ClickfingerButtonMap => ButtonMapWords,
@@ -148,6 +188,11 @@ public static class InputSettingNames
         _ => [],
     };
 
+    /// <summary>Tells whether a word parses for a setting and the device supports the value that it names.</summary>
+    /// <param name="setting">The setting.</param>
+    /// <param name="word">The word to test.</param>
+    /// <param name="support">What the device supports for the setting.</param>
+    /// <returns><see langword="true"/> when the device can take the value.</returns>
     public static bool IsSupportedWord(InputSetting setting, string word, in InputSettingSupport support)
     {
         if (!support.Supported || !TryParse(setting, word, out var value))
@@ -164,6 +209,13 @@ public static class InputSettingNames
         };
     }
 
+    /// <summary>
+    /// Parses the text form of a value for a setting. It rejects a value out of range, for example an acceleration speed outside -1 to 1.
+    /// </summary>
+    /// <param name="setting">The setting that gives the kind of value.</param>
+    /// <param name="text">The text to parse. Leading and trailing white space is ignored.</param>
+    /// <param name="value">The parsed value, or the default value when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the text is a valid value for the setting.</returns>
     public static bool TryParse(InputSetting setting, ReadOnlySpan<char> text, out InputSettingValue value)
     {
         value = default;
@@ -252,6 +304,10 @@ public static class InputSettingNames
         }
     }
 
+    /// <summary>Formats a value as the text that <see cref="TryParse"/> accepts for the setting.</summary>
+    /// <param name="setting">The setting that gives the kind of value.</param>
+    /// <param name="value">The value to format.</param>
+    /// <returns>The text in the invariant culture. A choice with no word gives its number.</returns>
     public static string Format(InputSetting setting, in InputSettingValue value)
     {
         switch (KindOf(setting))
@@ -282,6 +338,10 @@ public static class InputSettingNames
         }
     }
 
+    /// <summary>Compares text with a canonical word. The text can use upper case and <c>-</c> for <c>_</c>.</summary>
+    /// <param name="text">The text to compare.</param>
+    /// <param name="canonical">The canonical word in lower case with underscores.</param>
+    /// <returns><see langword="true"/> when the text names the word.</returns>
     public static bool WordEquals(ReadOnlySpan<char> text, string canonical)
     {
         if (text.Length != canonical.Length)

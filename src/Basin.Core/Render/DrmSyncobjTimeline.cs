@@ -4,6 +4,9 @@ using Drm.Native;
 
 namespace Basin;
 
+/// <summary>
+/// Wraps a DRM timeline syncobj, a sequence of fence points that processes share as an fd. It is reference-counted, and the handle is destroyed when the count reaches zero. The DRM fd stays owned by the caller.
+/// </summary>
 [SupportedOSPlatform("linux")]
 public sealed unsafe class DrmSyncobjTimeline
 {
@@ -31,6 +34,11 @@ public sealed unsafe class DrmSyncobjTimeline
         _handle = handle;
     }
 
+    /// <summary>
+    /// Creates a new timeline on a DRM device. It throws <see cref="InvalidOperationException"/> when the kernel refuses.
+    /// </summary>
+    /// <param name="drmFd">A card or render node fd.</param>
+    /// <returns>The timeline with a reference count of one.</returns>
     public static DrmSyncobjTimeline Create(int drmFd)
     {
         uint handle;
@@ -40,6 +48,11 @@ public sealed unsafe class DrmSyncobjTimeline
             : new DrmSyncobjTimeline(drmFd, handle);
     }
 
+    /// <summary>
+    /// Creates a new timeline on a DRM device, without exceptions.
+    /// </summary>
+    /// <param name="drmFd">A card or render node fd.</param>
+    /// <returns>The timeline, or <see langword="null"/> when the fd is negative, libdrm is missing or the kernel refuses.</returns>
     public static DrmSyncobjTimeline? TryCreate(int drmFd)
     {
         if (drmFd < 0)
@@ -58,6 +71,12 @@ public sealed unsafe class DrmSyncobjTimeline
         }
     }
 
+    /// <summary>
+    /// Imports a timeline that another process exported. It throws <see cref="InvalidOperationException"/> when the kernel refuses.
+    /// </summary>
+    /// <param name="drmFd">The DRM fd to import on.</param>
+    /// <param name="syncobjFd">The syncobj fd. The caller keeps ownership of it.</param>
+    /// <returns>The timeline with a reference count of one.</returns>
     public static DrmSyncobjTimeline ImportFd(int drmFd, int syncobjFd)
     {
         uint handle;
@@ -67,6 +86,10 @@ public sealed unsafe class DrmSyncobjTimeline
             : new DrmSyncobjTimeline(drmFd, handle);
     }
 
+    /// <summary>
+    /// Exports the timeline as a syncobj fd. It throws <see cref="InvalidOperationException"/> when the kernel refuses.
+    /// </summary>
+    /// <returns>A new fd that the caller owns.</returns>
     public int ExportFd()
     {
         int fd;
@@ -74,18 +97,30 @@ public sealed unsafe class DrmSyncobjTimeline
         return rc != 0 ? throw new InvalidOperationException($"drmSyncobjHandleToFD failed ({rc}).") : fd;
     }
 
+    /// <summary>
+    /// Exports the timeline as a syncobj fd, without exceptions.
+    /// </summary>
+    /// <returns>A new fd that the caller owns, or -1 on failure.</returns>
     public int TryExportFd()
     {
         int fd;
         return Libdrm.drmSyncobjHandleToFD(_drmFd, _handle, &fd) == 0 ? fd : -1;
     }
 
+    /// <summary>
+    /// Signals a point from the CPU. A failure is ignored.
+    /// </summary>
+    /// <param name="point">The timeline point to signal.</param>
     public void Signal(ulong point)
     {
         var handle = _handle;
         _ = Libdrm.drmSyncobjTimelineSignal(_drmFd, &handle, &point, 1);
     }
 
+    /// <summary>
+    /// Reads the highest point that is signaled.
+    /// </summary>
+    /// <returns>The point, or zero when the query fails.</returns>
     public ulong QueryLastSignaled()
     {
         var handle = _handle;
@@ -93,6 +128,12 @@ public sealed unsafe class DrmSyncobjTimeline
         return Libdrm.drmSyncobjQuery(_drmFd, &handle, &point, 1) == 0 ? point : 0;
     }
 
+    /// <summary>
+    /// Blocks until a point is submitted and signaled, or until the timeout ends.
+    /// </summary>
+    /// <param name="point">The timeline point to wait for.</param>
+    /// <param name="timeoutNs">The longest wait in nanoseconds. Zero or less only checks the state.</param>
+    /// <returns><see langword="true"/> when the point is signaled.</returns>
     public bool Wait(ulong point, long timeoutNs)
     {
         var handle = _handle;
@@ -103,8 +144,20 @@ public sealed unsafe class DrmSyncobjTimeline
         return rc == 0;
     }
 
+    /// <summary>
+    /// Tells whether a point is signaled, without a wait.
+    /// </summary>
+    /// <param name="point">The timeline point to check.</param>
+    /// <returns><see langword="true"/> when the point is signaled.</returns>
     public bool IsSignaled(ulong point) => Wait(point, 0);
 
+    /// <summary>
+    /// Waits for a point on the event loop, through an eventfd. The callback runs on the loop thread when the point signals.
+    /// </summary>
+    /// <param name="loop">The loop that watches the eventfd.</param>
+    /// <param name="point">The timeline point to wait for.</param>
+    /// <param name="ready">The callback to run when the point signals.</param>
+    /// <returns>A waiter that the caller must dispose, or <see langword="null"/> when the kernel has no syncobj eventfd support.</returns>
     public DrmSyncobjWaiter? TryWait(ICompositorEventLoop loop, ulong point, Action ready)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -132,6 +185,12 @@ public sealed unsafe class DrmSyncobjTimeline
         return new DrmSyncobjWaiter(loop, eventFd, ready);
     }
 
+    /// <summary>
+    /// Arms an existing waiter for another point, so the waiter and its eventfd can be used again.
+    /// </summary>
+    /// <param name="waiter">A waiter from <see cref="TryWait"/> on this timeline.</param>
+    /// <param name="point">The next timeline point to wait for.</param>
+    /// <returns><see langword="false"/> when the kernel refused.</returns>
     public bool Rearm(DrmSyncobjWaiter waiter, ulong point)
     {
         ArgumentNullException.ThrowIfNull(waiter);
@@ -145,6 +204,11 @@ public sealed unsafe class DrmSyncobjTimeline
         }
     }
 
+    /// <summary>
+    /// Exports the fence at a point as a sync_file.
+    /// </summary>
+    /// <param name="point">The timeline point to export.</param>
+    /// <returns>A new sync_file fd that the caller owns, or -1 on failure.</returns>
     public int ExportSyncFileAt(ulong point)
     {
         uint binary;
@@ -169,6 +233,12 @@ public sealed unsafe class DrmSyncobjTimeline
         }
     }
 
+    /// <summary>
+    /// Attaches the fence of a sync_file to a point.
+    /// </summary>
+    /// <param name="point">The timeline point that gets the fence.</param>
+    /// <param name="syncFileFd">The sync_file fd. The caller keeps ownership of it.</param>
+    /// <returns><see langword="false"/> when the fd is negative or the kernel refused.</returns>
     public bool ImportSyncFileAt(ulong point, int syncFileFd)
     {
         if (syncFileFd < 0)
@@ -193,8 +263,14 @@ public sealed unsafe class DrmSyncobjTimeline
         }
     }
 
+    /// <summary>
+    /// Adds one reference.
+    /// </summary>
     public void Retain() => _refs++;
 
+    /// <summary>
+    /// Removes one reference. The last release destroys the syncobj handle.
+    /// </summary>
     public void Release()
     {
         if (--_refs == 0 && _handle != 0)
@@ -210,6 +286,9 @@ public sealed unsafe class DrmSyncobjTimeline
         return (long)((double)ticks / System.Diagnostics.Stopwatch.Frequency * 1_000_000_000);
     }
 
+    /// <summary>
+    /// Watches the eventfd of one asynchronous wait on a timeline.
+    /// </summary>
     public sealed class DrmSyncobjWaiter : IDisposable
     {
         private readonly int _eventFd;
@@ -243,6 +322,9 @@ public sealed unsafe class DrmSyncobjTimeline
             }
         }
 
+        /// <summary>
+        /// Stops the watch and closes the eventfd. The callback does not run after it.
+        /// </summary>
         public void Dispose() => Cancel();
     }
 }

@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zxdg_output_manager_v1</c> global. It reports the logical box of each output, with optional overrides for single clients.
+/// </summary>
 public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalOutputOverrides
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 3;
 
     private readonly WlGlobal _global;
@@ -13,6 +19,11 @@ public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalO
     private readonly List<Entry> _outputs = [];
     private readonly Dictionary<(WlClient Client, OutputGlobal Output), Box> _overrides = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XdgOutputManager"/> class and creates the global. It sends the logical boxes again when the layout changes.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="layout">The layout that supplies the logical boxes.</param>
     public XdgOutputManager(WlServerDisplay display, OutputLayout layout)
     {
         _layout = layout;
@@ -20,6 +31,7 @@ public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalO
         layout.Changed += OnLayoutChanged;
     }
 
+    /// <inheritdoc/>
     public void SetClientOverride(WlClient client, OutputGlobal output, Box logical)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -39,6 +51,7 @@ public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalO
         Resend(client, output);
     }
 
+    /// <inheritdoc/>
     public void ClearClientOverride(WlClient client, OutputGlobal output)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -69,6 +82,9 @@ public sealed class XdgOutputManager : IDisposable, Basin.Capabilities.ILogicalO
             ? logical
             : _layout.BoxOf(output.Output);
 
+    /// <summary>
+    /// Stops following the layout, drops every override and removes the global.
+    /// </summary>
     public void Dispose()
     {
         _layout.Changed -= OnLayoutChanged;

@@ -4,6 +4,10 @@ using Pixman;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Draws a <see cref="Scene"/> onto one <see cref="IOutput"/> and commits only the damaged parts.
+/// It also picks direct scanout and overlay planes, and it disposes itself when the output is destroyed.
+/// </summary>
 public sealed class SceneOutput : IDisposable, IColorLutTable
 {
     private readonly Scene _scene;
@@ -38,6 +42,12 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     private List<SceneBuffer> _offloadedPrev = [];
     private List<Box> _offloadedPrevBoxes = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneOutput"/> class.
+    /// It attaches to the scene and subscribes to the damage and commit events of both objects.
+    /// </summary>
+    /// <param name="scene">The scene to draw.</param>
+    /// <param name="output">The output that receives the frames.</param>
     public SceneOutput(Scene scene, IOutput output)
     {
         _scene = scene;
@@ -54,8 +64,15 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         RebuildLuts();
     }
 
+    /// <summary>
+    /// Gets the output that this object draws to.
+    /// </summary>
     public IOutput Output { get; }
 
+    /// <summary>
+    /// Gets or sets the color space of the output. <see langword="null"/> means the default SDR description.
+    /// A change in content rebuilds the color lookup tables and damages the whole output.
+    /// </summary>
     public ImageDescription? ColorDescription
     {
         get => _colorDescription;
@@ -74,6 +91,10 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the resolver that makes the color lookup tables. When it is <see langword="null"/>, the getter returns <see cref="Scene.ColorTransforms"/> of the scene.
+    /// A new value rebuilds the tables.
+    /// </summary>
     public IColorTransformResolver? Resolver
     {
         get => _resolver ?? _scene.ColorTransforms;
@@ -89,6 +110,9 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets the number of color lookup tables that this output holds now. A buffer with no transform adds no table.
+    /// </summary>
     public int LutCount
     {
         get
@@ -103,6 +127,12 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets the color lookup table that converts the content of a buffer node to the color space of this output.
+    /// </summary>
+    /// <param name="node">The buffer node to draw.</param>
+    /// <returns>The table for the color description of the node, or <see langword="null"/> when no conversion is necessary.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="node"/> is <see langword="null"/>.</exception>
     public IColorLut? LutFor(SceneBuffer node)
     {
         ArgumentNullException.ThrowIfNull(node);
@@ -111,6 +141,10 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
             : _defaultLut;
     }
 
+    /// <summary>
+    /// Makes the color lookup tables again for every color description in the scene.
+    /// When a table existed before or exists after, it damages the whole output and raises <see cref="DamagePending"/>.
+    /// </summary>
     public void RebuildLuts()
     {
         var resolver = Resolver;
@@ -141,10 +175,17 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets the damage history of the output in framebuffer pixels. A caller can add damage to it to force a repaint.
+    /// </summary>
     public DamageRing Ring { get; }
 
     private readonly PixmanRegion32 _postDamage = new();
 
+    /// <summary>
+    /// Gets or sets the position of the top-left corner of the output in layout coordinates.
+    /// A change damages the whole output and raises <see cref="DamagePending"/>.
+    /// </summary>
     public Point Position
     {
         get => _position;
@@ -159,8 +200,15 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets the map from output-local logical coordinates to framebuffer pixels. The last commit or a scale, transform or replication change updates it.
+    /// </summary>
     public OutputProjection Projection => _projection;
 
+    /// <summary>
+    /// Gets or sets a layout box that this output shows scaled to fit its mode, with the aspect ratio kept.
+    /// <see langword="null"/> stops replication. A box also moves <see cref="Position"/> to its corner.
+    /// </summary>
     public Box? ReplicationSource
     {
         get => _replicationSource;
@@ -199,10 +247,16 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         return new OutputProjection(scale, OutputTransform.Normal, mode.Width, mode.Height, originX, originY);
     }
 
+    /// <summary>
+    /// Gets or sets the number of commits in a row that must find the same scanout candidate before direct scanout starts. The default is 2.
+    /// </summary>
     public int ScanoutEntryThreshold { get; set; } = 2;
 
     private const double ScaledSlack = 1e-3;
 
+    /// <summary>
+    /// Gets or sets the number of commits in a row that a buffer must keep the same plane box before it goes to an overlay plane. The default is 3.
+    /// </summary>
     public int OffloadEntryThreshold { get; set; } = 3;
 
     private readonly List<SceneBuffer> _settleNodes = [];
@@ -293,22 +347,49 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the last commit put a client buffer directly on the primary plane, with no composition.
+    /// </summary>
     public bool IsDirectScanout => _scanningOut;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether direct scanout sends the HDR metadata of the client content instead of <see cref="OutputHdrMetadata"/>.
+    /// It has no effect while <see cref="OutputHdrMetadata"/> is <see langword="null"/>.
+    /// </summary>
     public bool HdrMetadataPassthrough { get; set; }
 
+    /// <summary>
+    /// Gets or sets the HDR metadata that a composed frame sends to the output. <see langword="null"/> sends none.
+    /// </summary>
     public HdrStaticMetadata? OutputHdrMetadata { get; set; }
 
+    /// <summary>
+    /// Gets the client HDR metadata that the output shows now through direct scanout. It is <see langword="null"/> after a composed commit.
+    /// </summary>
     public HdrStaticMetadata? ContentHdrMetadata => _contentHdr;
 
+    /// <summary>
+    /// Gets or sets the source of content-type and YUV hints for client surfaces. <see langword="null"/> gives no hints.
+    /// </summary>
     public Basin.Capabilities.ISurfaceHints? SurfaceHints { get; set; }
 
+    /// <summary>
+    /// Gets or sets a content type that every commit sends. <see langword="null"/> uses the hint of the scanned-out surface, or none for a composed frame.
+    /// </summary>
     public OutputContentType? ContentTypeOverride { get; set; }
 
+    /// <summary>
+    /// Gets the content type that the last successful commit sent to the output.
+    /// </summary>
     public OutputContentType ContentType => _contentType;
 
     private OutputContentType _contentType;
 
+    /// <summary>
+    /// Converts the content type that a client set on its surface to the content type of an output.
+    /// </summary>
+    /// <param name="type">The content type of the surface.</param>
+    /// <returns>The matching output content type, or <see cref="OutputContentType.None"/> for an unknown value.</returns>
     public static OutputContentType ContentTypeFor(Basin.Capabilities.SurfaceContentType type) => type switch
     {
         Basin.Capabilities.SurfaceContentType.Photo => OutputContentType.Photo,
@@ -319,34 +400,77 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
 
     private HdrStaticMetadata? _contentHdr;
 
+    /// <summary>
+    /// Gets the number of successful commits that used direct scanout.
+    /// </summary>
     public long ScanoutCommits { get; private set; }
 
+    /// <summary>
+    /// Gets the number of successful commits that drew a composed frame.
+    /// </summary>
     public long ComposedCommits { get; private set; }
 
+    /// <summary>
+    /// Gets the number of commit calls that found no damage and sent nothing to the output.
+    /// </summary>
     public long SkippedCommits { get; private set; }
 
+    /// <summary>
+    /// Gets the number of buffers that the last commit put on overlay planes.
+    /// </summary>
     public int OffloadedLayers => _offloadedPrev.Count;
 
+    /// <summary>
+    /// Gets the number of successful commits that put at least one buffer on an overlay plane.
+    /// </summary>
     public long OffloadCommits { get; private set; }
 
+    /// <summary>
+    /// Gets the number of commits that changed only overlay planes and sent the previous composed frame again.
+    /// </summary>
     public long PlaneOnlyCommits { get; private set; }
 
     private readonly long[] _declineCounts = new long[Enum.GetValues<PlaneDeclineReason>().Length];
     private readonly List<SceneNode> _declinedNodes = [];
     private readonly List<PlaneDeclineReason> _declinedReasons = [];
 
+    /// <summary>
+    /// Gets the number of times that a candidate did not go to a plane for one reason, since this object was made.
+    /// </summary>
+    /// <param name="reason">The reason to count.</param>
+    /// <returns>The total count of declines for the reason.</returns>
     public long DeclinedFor(PlaneDeclineReason reason) => _declineCounts[(int)reason];
 
+    /// <summary>
+    /// Gets the nodes that the last plane selection declined. <see cref="DeclineReasons"/> holds the reason at the same index.
+    /// It omits nodes that are not buffers and mirrored nodes.
+    /// </summary>
     public IReadOnlyList<SceneNode> DeclinedCandidates => _declinedNodes;
 
+    /// <summary>
+    /// Gets the reason for each node in <see cref="DeclinedCandidates"/>, at the same index.
+    /// </summary>
     public IReadOnlyList<PlaneDeclineReason> DeclineReasons => _declinedReasons;
 
+    /// <summary>
+    /// Gets the buffer nodes that the last commit put on overlay planes.
+    /// </summary>
     public IReadOnlyList<SceneBuffer> OffloadedNodes => _offloadedPrev;
 
+    /// <summary>
+    /// Gets the plane box in framebuffer pixels for each node in <see cref="OffloadedNodes"/>, at the same index.
+    /// </summary>
     public IReadOnlyList<Box> OffloadedBoxes => _offloadedPrevBoxes;
 
+    /// <summary>
+    /// Gets a short text that tells why the last composed commit tried no planes, for example "software cursor".
+    /// It is <see langword="null"/> when the commit tried planes.
+    /// </summary>
     public string? OffloadSkipped { get; private set; }
 
+    /// <summary>
+    /// Gets the post stages that run on each composed frame, in the order that they run.
+    /// </summary>
     public IReadOnlyList<IPostStage> PostStages => _postStages;
 
     private void Decline(SceneNode node, PlaneDeclineReason reason)
@@ -359,12 +483,23 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Occurs when a commit finds a new direct-scanout candidate, or finds none after it had one.
+    /// The argument is the surface of the candidate, or <see langword="null"/>.
+    /// </summary>
     public event Action<Surface?>? ScanoutCandidateChanged;
 
+    /// <summary>
+    /// Occurs when the set of overlay-plane candidates changes from the previous commit.
+    /// The list is reused. A handler must copy it to keep it.
+    /// </summary>
     public event Action<IReadOnlyList<SceneBuffer>>? OffloadCandidatesChanged;
 
     private readonly List<SceneBuffer> _announcedCandidates = [];
 
+    /// <summary>
+    /// Occurs when this output gets damage or a plane change that needs a commit. A handler usually schedules a frame.
+    /// </summary>
     public event Action? DamagePending;
 
     private BufferLock _softwareCursor;
@@ -373,6 +508,13 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     private bool _disposed;
     private int _cursorX, _cursorY, _cursorHotspotX, _cursorHotspotY;
 
+    /// <summary>
+    /// Sets the cursor image that composed frames draw on top. The output locks the buffer until the next call or disposal.
+    /// A software cursor turns off direct scanout and plane offload.
+    /// </summary>
+    /// <param name="image">The cursor image, or <see langword="null"/> to remove the cursor.</param>
+    /// <param name="hotspotX">The horizontal hotspot in image pixels.</param>
+    /// <param name="hotspotY">The vertical hotspot in image pixels.</param>
     public void SetSoftwareCursor(IBuffer? image, int hotspotX, int hotspotY)
     {
         DamageCursor();
@@ -385,6 +527,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         DamageCursor();
     }
 
+    /// <summary>
+    /// Moves the software cursor hotspot and damages the old and new cursor areas.
+    /// </summary>
+    /// <param name="x">The horizontal position in output-local physical pixels.</param>
+    /// <param name="y">The vertical position in output-local physical pixels.</param>
     public void MoveSoftwareCursor(int x, int y)
     {
         if (x == _cursorX && y == _cursorY)
@@ -412,6 +559,9 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Detaches from the scene and the output and releases every held buffer, texture and region. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -449,11 +599,18 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         Ring.Dispose();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the next <see cref="Commit(IRenderer, Swapchain, OutputState, in SceneCommitOptions)"/> has work to do.
+    /// It is <see langword="true"/> for damage, direct scanout, changed plane content or a requested plane commit.
+    /// </summary>
     public bool NeedsRepaint => !Ring.IsEmpty || _scanningOut || _planeContentChanged || _planeCommitRequested;
 
     private bool _planeContentChanged;
     private bool _planeCommitRequested;
 
+    /// <summary>
+    /// Asks the next commit to send the planes again, even when nothing is damaged. It raises <see cref="DamagePending"/> once per request.
+    /// </summary>
     public void RequestPlaneCommit()
     {
         if (!_planeCommitRequested)
@@ -472,6 +629,9 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Occurs at the start of each commit, before the scene is collected. A handler can move nodes for the frame that the tick describes.
+    /// </summary>
     public event Action<FrameTick>? BeforeRepaint;
 
     private readonly List<IPostStage> _postStages = [];
@@ -481,6 +641,10 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     private ITexture? _postTextureB;
     private IRenderer? _postTextureRenderer;
 
+    /// <summary>
+    /// Adds a stage that processes each composed frame after the stages already added. It damages the whole output.
+    /// </summary>
+    /// <param name="stage">The stage to add.</param>
     public void AddPostStage(IPostStage stage)
     {
         _postStages.Add(stage);
@@ -488,6 +652,11 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         DamagePending?.Invoke();
     }
 
+    /// <summary>
+    /// Removes a post stage and damages the whole output.
+    /// </summary>
+    /// <param name="stage">The stage to remove.</param>
+    /// <returns><see langword="true"/> when the stage was present, otherwise <see langword="false"/>.</returns>
     public bool RemovePostStage(IPostStage stage)
     {
         if (!_postStages.Remove(stage))
@@ -508,8 +677,17 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
     private ulong _filterFrameCount;
     private long _filterLastPresentNanos;
 
+    /// <summary>
+    /// Gets the filter that processes each composed frame, or <see langword="null"/> when there is none.
+    /// </summary>
     public IFrameFilter? FrameFilter => _frameFilter;
 
+    /// <summary>
+    /// Sets the filter that processes each composed frame, and damages the whole output.
+    /// The filter runs only when it and the renderer support filters.
+    /// </summary>
+    /// <param name="filter">The filter, or <see langword="null"/> to remove it.</param>
+    /// <param name="allocator">The allocator for the scratch buffer, or <see langword="null"/> to use a memory buffer.</param>
     public void SetFrameFilter(IFrameFilter? filter, IAllocator? allocator = null)
     {
         _frameFilter = filter;
@@ -615,12 +793,33 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         _postB = null;
     }
 
+    /// <summary>
+    /// Draws the damaged part of the scene into the next swapchain buffer and commits it to the output.
+    /// It can use direct scanout or overlay planes instead, when the options allow them.
+    /// </summary>
+    /// <param name="renderer">The renderer that draws the frame.</param>
+    /// <param name="swapchain">The swapchain that supplies the target buffer and its age.</param>
+    /// <param name="state">The state to fill and commit. The method clears it first.</param>
+    /// <param name="options">The options for this frame.</param>
+    /// <returns><see langword="true"/> when the output accepted a new frame. <see langword="false"/> when there was no damage, no buffer, or the output refused the commit.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="swapchain"/> is <see langword="null"/>.</exception>
     public bool Commit(IRenderer renderer, Swapchain swapchain, OutputState state, in SceneCommitOptions options = default)
     {
         ArgumentNullException.ThrowIfNull(swapchain);
         return Commit(renderer, swapchain, null, 0, state, options);
     }
 
+    /// <summary>
+    /// Draws the damaged part of the scene into a buffer that the caller supplies and commits it to the output.
+    /// </summary>
+    /// <param name="renderer">The renderer that draws the frame.</param>
+    /// <param name="target">The buffer to draw into.</param>
+    /// <param name="age">The number of frames since the buffer was last drawn, or 0 when it is unknown.</param>
+    /// <param name="state">The state to fill and commit. The method clears it first.</param>
+    /// <param name="options">The options for this frame.</param>
+    /// <returns><see langword="true"/> when the output accepted a new frame. <see langword="false"/> when there was no damage, or the output refused the commit.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="age"/> is negative.</exception>
     public bool Commit(
         IRenderer renderer, IBuffer target, int age, OutputState state, in SceneCommitOptions options = default)
     {
@@ -681,6 +880,9 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the set that records the client surfaces that each composed frame shows. <see langword="null"/> records nothing.
+    /// </summary>
     public PresentedSet? Presented { get; set; }
 
     private void RecordPresented(OutputMode mode)
@@ -1318,8 +1520,14 @@ public sealed class SceneOutput : IDisposable, IColorLutTable
         return index < 0 ? null : _offloadedNowBoxes[index];
     }
 
+    /// <summary>
+    /// Gets the buffer of the last composed frame that the output accepted. It is <see langword="null"/> before the first composed commit.
+    /// </summary>
     public IBuffer? LastTarget { get; private set; }
 
+    /// <summary>
+    /// Gets the overlay layers that the last commit offered to the output. The list is reused by the next commit.
+    /// </summary>
     public IReadOnlyList<OutputLayer> PresentedLayers => _layers;
 
     private int GatherSampledFences(out bool owned)

@@ -2,6 +2,9 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Render.Vulkan;
 
+/// <summary>
+/// Gives out ranges of host-visible, coherent buffers that uploads copy through. A buffer comes back after the GPU passes its last submission.
+/// </summary>
 public sealed unsafe class VulkanStagingPool : IDisposable
 {
     private const ulong MinBufferSize = 1024 * 1024;
@@ -25,8 +28,16 @@ public sealed unsafe class VulkanStagingPool : IDisposable
 
     internal Action<Silk.NET.Vulkan.Buffer>? BufferDestroyed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanStagingPool"/> class. It allocates no buffer until the first request.
+    /// </summary>
+    /// <param name="device">The device that owns the buffers.</param>
     public VulkanStagingPool(VulkanDevice device) => _device = device;
 
+    /// <summary>
+    /// Makes every buffer whose last submission finished free again. It destroys a free buffer that stayed unused for 600 calls, but always keeps one buffer.
+    /// </summary>
+    /// <param name="completed">The timeline point that the GPU reached.</param>
     public void Recycle(ulong completed)
     {
         _recycles++;
@@ -82,6 +93,12 @@ public sealed unsafe class VulkanStagingPool : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Takes a range from a buffer with space, recycles finished buffers, or creates a larger buffer. The range stays in use until <see cref="MarkSubmitted"/> and <see cref="Recycle"/> free it.
+    /// </summary>
+    /// <param name="size">The size of the range in bytes.</param>
+    /// <param name="alignment">The alignment of the start of the range in bytes.</param>
+    /// <returns>The range, or an invalid span when the size is above 256 MiB or the allocation fails.</returns>
     public StagingSpan Allocate(ulong size, ulong alignment)
     {
         if (TryTake(size, alignment, out var span))
@@ -119,6 +136,10 @@ public sealed unsafe class VulkanStagingPool : IDisposable
         return new StagingSpan(fresh.Buffer, 0, fresh.Mapped);
     }
 
+    /// <summary>
+    /// Records the submission that reads every buffer in use, so that <see cref="Recycle"/> frees them after the GPU passes it.
+    /// </summary>
+    /// <param name="point">The timeline point of the submission.</param>
     public void MarkSubmitted(ulong point)
     {
         foreach (var buffer in _buffers)
@@ -196,6 +217,9 @@ public sealed unsafe class VulkanStagingPool : IDisposable
         vk.FreeMemory(_device.Device, buffer.Memory, null);
     }
 
+    /// <summary>
+    /// Destroys every buffer. The GPU must be done with them.
+    /// </summary>
     public void Dispose()
     {
         foreach (var buffer in _buffers)

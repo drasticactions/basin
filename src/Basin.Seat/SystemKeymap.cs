@@ -2,10 +2,22 @@ using Basin.Capabilities;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Reads the system keyboard layout from the usual configuration files, with the <c>XKB_DEFAULT_*</c> variables on top.
+/// </summary>
 public static class SystemKeymap
 {
+    /// <summary>
+    /// Reads the system keyboard layout from the root file system.
+    /// </summary>
+    /// <returns>The rule names. A field that no source sets is <see langword="null"/>.</returns>
     public static KeymapNames Read() => Read("/");
 
+    /// <summary>
+    /// Reads the keyboard layout under a root directory. The X.Org config wins, then <c>/etc/default/keyboard</c>, then <c>vconsole.conf</c>, then the console keymap table.
+    /// </summary>
+    /// <param name="root">The directory that stands for <c>/</c>, for example in a test.</param>
+    /// <returns>The rule names. An <c>XKB_DEFAULT_*</c> variable replaces the file value, and a layout variable drops the file variant.</returns>
     public static KeymapNames Read(string root)
     {
         ArgumentNullException.ThrowIfNull(root);

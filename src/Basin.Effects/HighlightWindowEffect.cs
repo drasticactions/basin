@@ -3,8 +3,14 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's highlight window effect. It fades the windows that are not highlighted toward a ghost opacity, for example while a taskbar entry is hovered.
+/// </summary>
 public sealed class HighlightWindowEffect
 {
+    /// <summary>
+    /// The default fade duration, in milliseconds.
+    /// </summary>
     public const double DefaultMillis = 150;
 
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -12,13 +18,31 @@ public sealed class HighlightWindowEffect
     private readonly List<TransformStack> _finished = [];
     private readonly double _ghostOpacity;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HighlightWindowEffect"/> class.
+    /// </summary>
+    /// <param name="ghostOpacity">The opacity of a window that is not highlighted, clamped between 0 and 1.</param>
     public HighlightWindowEffect(double ghostOpacity = 0.0) =>
         _ghostOpacity = Math.Clamp(ghostOpacity, 0, 1);
 
+    /// <summary>
+    /// Gets the opacity of a window that is not highlighted.
+    /// </summary>
     public double GhostOpacity => _ghostOpacity;
 
+    /// <summary>
+    /// Gets a value indicating whether a window has a highlight node.
+    /// </summary>
     public bool IsActive => _entries.Count > 0;
 
+    /// <summary>
+    /// Fades a window toward full opacity or toward the ghost opacity, from its current opacity.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="highlighted"><see langword="true"/> for full opacity, <see langword="false"/> for the ghost opacity.</param>
+    /// <param name="now">The tick that the fade starts at.</param>
+    /// <param name="duration">The length of the fade. A disabled duration changes the opacity at once.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void Highlight(TransformStack stack, bool highlighted, in FrameTick now, AnimationDuration duration)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -50,6 +74,11 @@ public sealed class HighlightWindowEffect
         Apply(entry);
     }
 
+    /// <summary>
+    /// Removes the highlight node of a window at once, which restores full opacity.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void Clear(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -60,6 +89,11 @@ public sealed class HighlightWindowEffect
         }
     }
 
+    /// <summary>
+    /// Advances every fade. A window that is back at full opacity loses its node.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while a fade runs. A window that stays at the ghost opacity does not count.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();

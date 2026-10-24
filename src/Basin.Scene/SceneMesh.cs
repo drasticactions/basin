@@ -1,5 +1,8 @@
 namespace Basin.Scene;
 
+/// <summary>
+/// A node that draws triangles from an <see cref="IMeshSource"/>, optionally textured with a sprite buffer.
+/// </summary>
 public sealed class SceneMesh : SceneNode
 {
     private Box _bounds;
@@ -8,11 +11,18 @@ public sealed class SceneMesh : SceneNode
     private ITexture? _texture;
     private IRenderer? _textureRenderer;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneMesh"/> class with no source and empty bounds.
+    /// </summary>
+    /// <param name="parent">The tree to add the node to.</param>
     public SceneMesh(SceneTree parent)
         : base(parent)
     {
     }
 
+    /// <summary>
+    /// Gets or sets the source of the triangles. The node draws nothing while it is <see langword="null"/>.
+    /// </summary>
     public IMeshSource? Source
     {
         get => _source;
@@ -27,6 +37,9 @@ public sealed class SceneMesh : SceneNode
         }
     }
 
+    /// <summary>
+    /// Gets or sets the area that the mesh covers, in local logical pixels. Damage uses it, so every vertex must stay inside it.
+    /// </summary>
     public Box Bounds
     {
         get => _bounds;
@@ -41,10 +54,20 @@ public sealed class SceneMesh : SceneNode
         }
     }
 
+    /// <summary>
+    /// Gets or sets how the triangles blend with what is below them.
+    /// </summary>
     public RenderBlend Blend { get; set; } = RenderBlend.PremultipliedOver;
 
+    /// <summary>
+    /// Gets the buffer that textures the triangles, or <see langword="null"/> when they draw with vertex colors only.
+    /// </summary>
     public IBuffer? SpriteBuffer => _sprite.Buffer;
 
+    /// <summary>
+    /// Replaces the sprite buffer. The node holds a lock on the new buffer and releases the lock on the old one.
+    /// </summary>
+    /// <param name="buffer">The new sprite, or <see langword="null"/> for none.</param>
     public void SetSpriteBuffer(IBuffer? buffer)
     {
         if (ReferenceEquals(buffer, _sprite.Buffer))
@@ -59,6 +82,9 @@ public sealed class SceneMesh : SceneNode
         DamageSubtree();
     }
 
+    /// <summary>
+    /// Damages the node so that the next frame asks the source for its vertices again.
+    /// </summary>
     public void NotifyMeshChanged() => DamageSubtree();
 
     internal ITexture? GetSpriteTexture(IRenderer renderer)
@@ -98,6 +124,9 @@ public sealed class SceneMesh : SceneNode
         }
     }
 
+    /// <summary>
+    /// Releases the sprite texture and the lock on the sprite buffer.
+    /// </summary>
     protected override void OnDestroy()
     {
         DropTexture();

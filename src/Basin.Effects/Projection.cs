@@ -1,7 +1,19 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Builds projective transforms that map a rectangle onto a quadrilateral. A renderer draws the result through its ordinary transform, with no 3D pass.
+/// </summary>
 public static class Projection
 {
+    /// <summary>
+    /// Calculates the homography that maps the corners of a rectangle onto four points.
+    /// </summary>
+    /// <param name="rect">The source rectangle.</param>
+    /// <param name="topLeft">The target of the top-left corner.</param>
+    /// <param name="topRight">The target of the top-right corner.</param>
+    /// <param name="bottomLeft">The target of the bottom-left corner.</param>
+    /// <param name="bottomRight">The target of the bottom-right corner.</param>
+    /// <returns>The transform. When the target points are degenerate, it collapses the rectangle onto <paramref name="topLeft"/>.</returns>
     public static RenderTransform MapRect(
         in Box rect,
         (double X, double Y) topLeft,
@@ -38,6 +50,16 @@ public static class Projection
         return RenderTransform.Multiply(unit, normalize);
     }
 
+    /// <summary>
+    /// Calculates the transform that scales a rectangle about its center, turns it about a vertical axis and places it at a point, with a pinhole camera.
+    /// </summary>
+    /// <param name="bounds">The source rectangle.</param>
+    /// <param name="centerX">The horizontal position of the result center.</param>
+    /// <param name="centerY">The vertical position of the result center.</param>
+    /// <param name="scale">The scale before the turn.</param>
+    /// <param name="yawRadians">The turn about the vertical axis, in radians.</param>
+    /// <param name="cameraDistance">The distance from the camera to the plane, in pixels.</param>
+    /// <returns>The projective transform.</returns>
     public static RenderTransform Card(
         in Box bounds, double centerX, double centerY, double scale, double yawRadians, double cameraDistance)
     {
@@ -68,6 +90,14 @@ public static class Projection
             Corner(bounds.Right, bounds.Bottom));
     }
 
+    /// <summary>
+    /// Projects a rectangle-local point at a depth through KWin's 60-degree frustum. At depth zero the result is the point itself, offset by the rectangle origin.
+    /// </summary>
+    /// <param name="rect">The rectangle that is the viewport.</param>
+    /// <param name="localX">The horizontal position relative to the rectangle.</param>
+    /// <param name="localY">The vertical position relative to the rectangle.</param>
+    /// <param name="z">The depth. Negative values move away from the viewer.</param>
+    /// <returns>The projected point in the coordinates of <paramref name="rect"/>.</returns>
     public static (double X, double Y) FrustumPoint(in Box rect, double localX, double localY, double z)
     {
         var depth = 1.1 - (0.001 * z);
@@ -83,6 +113,14 @@ public static class Projection
         return (rect.X + (width / 2.0) + (width / 2.0 * ndcX), rect.Y + (height / 2.0) + (height / 2.0 * ndcY));
     }
 
+    /// <summary>
+    /// Calculates the transform that turns a rectangle about one of its edges and moves it back, through <see cref="FrustumPoint"/>.
+    /// </summary>
+    /// <param name="rect">The rectangle.</param>
+    /// <param name="edge">The edge that stays in place, before the depth.</param>
+    /// <param name="angleDegrees">The turn, in degrees.</param>
+    /// <param name="distance">The distance that the rectangle moves away from the viewer.</param>
+    /// <returns>The projective transform.</returns>
     public static RenderTransform Frustum(in Box rect, FrustumEdge edge, double angleDegrees, double distance)
     {
         var radians = angleDegrees * Math.PI / 180.0;

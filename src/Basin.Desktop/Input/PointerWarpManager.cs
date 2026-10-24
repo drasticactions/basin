@@ -4,14 +4,26 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_pointer_warp_v1</c> global. A warp applies only to the surface with pointer focus, with a valid enter serial, no pointer grab, and a position inside the surface.
+/// </summary>
 public sealed class PointerWarpManager : IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
     private readonly Seat.Seat _seat;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PointerWarpManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="compositor">The compositor that resolves surfaces.</param>
+    /// <param name="seat">The seat whose pointer the warps move.</param>
     public PointerWarpManager(WlServerDisplay display, CompositorGlobal compositor, Seat.Seat seat)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -22,8 +34,14 @@ public sealed class PointerWarpManager : IDisposable
         _global = display.CreateGlobal(WpPointerWarpV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs after the pointer moves for a warp. The arguments are the surface and the position in surface-local logical coordinates.
+    /// </summary>
     public event Action<Surface, double, double>? Warped;
 
+    /// <summary>
+    /// Removes the global.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

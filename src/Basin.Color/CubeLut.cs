@@ -3,10 +3,23 @@ using System.Text;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Reads Adobe and Resolve <c>.cube</c> files as 3D color lookup tables.
+/// </summary>
 public static class CubeLut
 {
+    /// <summary>
+    /// The largest grid edge that <see cref="Parse"/> accepts.
+    /// </summary>
     public const int MaxSize = 128;
 
+    /// <summary>
+    /// Parses a 3D <c>.cube</c> file. A domain other than 0 to 1 is folded into the table, so the
+    /// result always samples from 0 to 1.
+    /// </summary>
+    /// <param name="file">The UTF-8 file contents.</param>
+    /// <returns>A new table with red varying fastest.</returns>
+    /// <exception cref="FormatException">The file is a 1D LUT, has no size, has the wrong row count, or has a bad number or domain.</exception>
     public static ColorLut3D Parse(ReadOnlySpan<byte> file)
     {
         var text = Encoding.UTF8.GetString(file);

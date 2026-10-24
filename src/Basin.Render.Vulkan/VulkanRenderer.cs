@@ -7,6 +7,9 @@ using static Basin.Render.Vulkan.VulkanLog;
 
 namespace Basin.Render.Vulkan;
 
+/// <summary>
+/// Implements <see cref="IRenderer"/> on Vulkan for one DRM node. It blends in linear light and takes decomposed color transforms. Every call must come from the thread that created it.
+/// </summary>
 public sealed unsafe class VulkanRenderer : IRenderer
 {
     internal readonly struct PipelineGroup(
@@ -161,6 +164,10 @@ public sealed unsafe class VulkanRenderer : IRenderer
 
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanRenderer"/> class. It throws <see cref="InvalidOperationException"/> when the node has no Vulkan device with the required features.
+    /// </summary>
+    /// <param name="drmNodePath">The path of the DRM node to render on, for example a render node.</param>
     public VulkanRenderer(string drmNodePath)
     {
         Dev = new VulkanDevice(drmNodePath, ["VK_KHR_external_semaphore_fd", "VK_KHR_external_semaphore"]);
@@ -323,10 +330,18 @@ public sealed unsafe class VulkanRenderer : IRenderer
         CreatePipeline(vertex, fragment, Layout, renderPass, subpass: 0, blend: true, textureTransform: 1, meshInput: true, additive: true),
         CreatePipeline(vertex, fragment, Layout, renderPass, subpass: 0, blend: true, textureTransform: 2, meshInput: true, additive: true));
 
+    /// <summary>
+    /// Gets the Vulkan device that the renderer owns and disposes.
+    /// </summary>
     public VulkanDevice Device => Dev;
 
     IRenderDevice? IRenderer.Device => Device;
 
+    /// <summary>
+    /// Creates a renderer and a GBM allocator for its renderable formats on one render node.
+    /// </summary>
+    /// <param name="renderNodePath">The path of the DRM render node.</param>
+    /// <returns>The renderer and the allocator, which the caller disposes. On failure the renderer is disposed and the exception propagates.</returns>
     public static RenderStack CreateStack(string renderNodePath)
     {
         var renderer = new VulkanRenderer(renderNodePath);
@@ -341,16 +356,21 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
     }
 
+    /// <inheritdoc/>
     public DrmFormatSet DmabufTextureFormats => Dev.SampleableFormats;
 
+    /// <inheritdoc/>
     public IReadOnlyList<DrmFormat> ShmTextureFormats => _shmFormats ??= [.. Dev.ShmFormats.Formats];
 
     private VulkanYuvConverter? _yuv;
 
+    /// <inheritdoc/>
     public bool CanConvertYuv => true;
 
+    /// <inheritdoc/>
     public bool RendersHalfFloat => true;
 
+    /// <inheritdoc/>
     public bool ConvertToYuv(ITexture source, in FBox sourceBox, IBuffer target, YuvCoefficients coefficients, YuvRange range)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -373,10 +393,15 @@ public sealed unsafe class VulkanRenderer : IRenderer
         return _yuv.Convert(source, sourceBox, target, coefficients, range);
     }
 
+    /// <summary>
+    /// Gets the ARGB8888 and XRGB8888 dmabuf formats and modifiers that a pass can draw into.
+    /// </summary>
     public DrmFormatSet DmabufRenderFormats => Dev.BgraRenderableFormats;
 
+    /// <inheritdoc/>
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
+    /// <inheritdoc/>
     public RenderBlendSpace BlendSpace => RenderBlendSpace.Linear;
 
     internal VulkanColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)
@@ -409,8 +434,10 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
     }
 
+    /// <inheritdoc/>
     public bool SupportsBackdropEffects => true;
 
+    /// <inheritdoc/>
     public bool SupportsFrameFilters => true;
 
     private readonly Dictionary<ulong, DescriptorAllocation> _effectSets = [];
@@ -434,10 +461,17 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
     }
 
+    /// <inheritdoc/>
     public bool WaitsOnGpu => Dev.WaitsOnGpu;
 
+    /// <inheritdoc/>
     public RenderFencePrecision FencePrecision => RenderFencePrecision.Context;
 
+    /// <summary>
+    /// Tells whether the renderer draws a texture filter as specified. The Vulkan renderer draws every filter itself.
+    /// </summary>
+    /// <param name="filter">The filter to check.</param>
+    /// <returns><see langword="true"/> for every filter.</returns>
     public bool SupportsFilter(TextureFilter filter) => true;
 
     private int _completionFence = -1;
@@ -452,6 +486,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         _completionFence = fd;
     }
 
+    /// <inheritdoc/>
     public int ExportLastSubmissionFence()
     {
         var fd = _completionFence;
@@ -459,6 +494,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         return fd;
     }
 
+    /// <inheritdoc/>
     public ITexture? ImportTexture(IBuffer buffer)
     {
         _thread.Assert();
@@ -480,6 +516,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         }
     }
 
+    /// <inheritdoc/>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
@@ -518,6 +555,9 @@ public sealed unsafe class VulkanRenderer : IRenderer
         return entry;
     }
 
+    /// <summary>
+    /// Waits for the device to go idle, destroys every pipeline, target and cached object, and disposes the device.
+    /// </summary>
     public void Dispose()
     {
         _yuv?.Dispose();
@@ -622,6 +662,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
         vk.DestroyPipeline(Dev.Device, group.TextureColorOpaque, null);
     }
 
+    /// <inheritdoc/>
     public IColorLut? ImportLut(ColorLut3D lut)
     {
         _thread.Assert();
@@ -637,6 +678,7 @@ public sealed unsafe class VulkanRenderer : IRenderer
     private readonly Dictionary<ulong, DescriptorAllocation> _uboSets = [];
     private bool _shaderInfrastructure;
 
+    /// <inheritdoc/>
     public IPixelShader? CompilePixelShader(in PixelShaderSource source, ReadOnlySpan<PixelShaderUniform> uniforms)
     {
         _thread.Assert();

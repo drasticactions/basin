@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_tablet_manager_v2</c> global. It announces every tablet, tool and pad to every tablet seat, and sends tool and pad events to the client of the focused surface.
+/// </summary>
 public sealed class TabletManager : ITabletObserver, IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 2;
 
     private readonly WlServerDisplay _display;
@@ -21,6 +27,11 @@ public sealed class TabletManager : ITabletObserver, IDisposable
     private readonly Dictionary<ulong, TabletTool> _sourceTools = [];
     private readonly Dictionary<ulong, TabletPad> _sourcePads = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TabletManager"/> class and creates the global. With a source, it adopts the devices that exist and follows the source for later changes.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="source">The device source to follow. When it is <see langword="null"/>, the consumer adds devices with <see cref="AddTablet"/>, <see cref="AddTool"/> and <see cref="AddPad"/>.</param>
     public TabletManager(WlServerDisplay display, ITabletSource? source = null)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -40,6 +51,9 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops following the source and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_source is { } live)
@@ -56,10 +70,25 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Finds a tool that the source added.
+    /// </summary>
+    /// <param name="id">The tool id from the source.</param>
+    /// <returns>The tool, or <see langword="null"/> when the source has no tool with that id.</returns>
     public TabletTool? ToolFor(ulong id) => _sourceTools.GetValueOrDefault(id);
 
+    /// <summary>
+    /// Finds a tablet that the source added.
+    /// </summary>
+    /// <param name="id">The tablet id from the source.</param>
+    /// <returns>The tablet, or <see langword="null"/> when the source has no tablet with that id.</returns>
     public TabletDevice? TabletFor(ulong id) => _sourceTablets.GetValueOrDefault(id);
 
+    /// <summary>
+    /// Finds a pad that the source added.
+    /// </summary>
+    /// <param name="id">The pad id from the source.</param>
+    /// <returns>The pad, or <see langword="null"/> when the source has no pad with that id.</returns>
     public TabletPad? PadFor(ulong id) => _sourcePads.GetValueOrDefault(id);
 
     private void AdoptExisting(ITabletSource source)
@@ -136,12 +165,22 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when a source tool comes into proximity of a tablet. The axes are the last ones that the tool reported, or zero. The handler gives the tool focus, for example with <see cref="TabletAiming.AimAt"/>.
+    /// </summary>
     public event Action<TabletTool, TabletDevice, TabletToolAxes>? ToolProximityIn;
 
+    /// <summary>
+    /// Occurs when a source tool in proximity reports new axes, before the axes go to the client. The manager sends no motion itself, so the handler moves the focus.
+    /// </summary>
     public event Action<TabletTool, TabletToolAxes>? ToolMoved;
 
+    /// <summary>
+    /// Occurs for each button or dial event of a source pad, before the event goes to the client.
+    /// </summary>
     public event Action<TabletPad, TabletPadEvent>? PadActivity;
 
+    /// <inheritdoc/>
     public void OnToolProximity(ulong toolId, ulong tabletId, bool inProximity)
     {
         if (_sourceTools.GetValueOrDefault(toolId) is not { } tool)
@@ -164,6 +203,7 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void OnToolAxis(ulong toolId, uint timeMs, TabletToolAxes axes)
     {
         if (_sourceTools.GetValueOrDefault(toolId) is not { } tool)
@@ -183,6 +223,7 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         tool.NotifyFrame(timeMs);
     }
 
+    /// <inheritdoc/>
     public void OnToolButton(ulong toolId, uint timeMs, uint button, bool pressed)
     {
         if (_sourceTools.GetValueOrDefault(toolId) is not { } tool)
@@ -210,6 +251,7 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         tool.NotifyFrame(timeMs);
     }
 
+    /// <inheritdoc/>
     public void OnPadEvent(ulong padId, uint timeMs, TabletPadEvent padEvent)
     {
         if (_sourcePads.GetValueOrDefault(padId) is not { } pad)
@@ -233,6 +275,15 @@ public sealed class TabletManager : ITabletObserver, IDisposable
 
     private readonly Dictionary<ulong, TabletToolAxes> _toolAxes = [];
 
+    /// <summary>
+    /// Adds a tablet and announces it to every bound tablet seat.
+    /// </summary>
+    /// <param name="name">The device name.</param>
+    /// <param name="vendorId">The USB vendor id.</param>
+    /// <param name="productId">The USB product id.</param>
+    /// <param name="path">The device path, for example <c>/dev/input/event5</c>.</param>
+    /// <param name="busType">The bus type from <c>linux/input.h</c>, or zero to send none.</param>
+    /// <returns>The new tablet. Call <see cref="TabletDevice.Remove"/> to remove it.</returns>
     public TabletDevice AddTablet(string name, uint vendorId, uint productId, string path, uint busType = 0)
     {
         var tablet = new TabletDevice(this, name, vendorId, productId, path, busType);
@@ -245,6 +296,13 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         return tablet;
     }
 
+    /// <summary>
+    /// Adds a tool and announces it to every bound tablet seat.
+    /// </summary>
+    /// <param name="type">The tool type, for example a pen or an eraser.</param>
+    /// <param name="hardwareSerial">The serial number of the tool, or zero when the hardware has none.</param>
+    /// <param name="capabilities">The axes that the tool reports.</param>
+    /// <returns>The new tool. Call <see cref="TabletTool.Remove"/> to remove it.</returns>
     public TabletTool AddTool(ZwpTabletToolV2.Type type, ulong hardwareSerial, TabletToolCapabilities capabilities)
     {
         var tool = new TabletTool(this, type, hardwareSerial, capabilities);
@@ -257,6 +315,13 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         return tool;
     }
 
+    /// <summary>
+    /// Adds a pad with one group and one mode, and announces it to every bound tablet seat.
+    /// </summary>
+    /// <param name="path">The device path.</param>
+    /// <param name="buttons">The number of pad buttons.</param>
+    /// <param name="dials">The number of dials. Clients see dials only from version 2 of the global.</param>
+    /// <returns>The new pad. Call <see cref="TabletPad.Remove"/> to remove it.</returns>
     public TabletPad AddPad(string path, uint buttons, uint dials = 0)
     {
         var pad = new TabletPad(this, path, buttons, dials);
@@ -395,17 +460,41 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Identifies the axes that a tablet tool reports. Combined flags mean that the tool reports each of the axes.
+    /// </summary>
     [Flags]
     public enum TabletToolCapabilities : uint
     {
+        /// <summary>
+        /// The tool reports tilt.
+        /// </summary>
         Tilt = 1 << 0,
+        /// <summary>
+        /// The tool reports tip pressure.
+        /// </summary>
         Pressure = 1 << 1,
+        /// <summary>
+        /// The tool reports hover distance.
+        /// </summary>
         Distance = 1 << 2,
+        /// <summary>
+        /// The tool reports rotation.
+        /// </summary>
         Rotation = 1 << 3,
+        /// <summary>
+        /// The tool reports a slider position.
+        /// </summary>
         Slider = 1 << 4,
+        /// <summary>
+        /// The tool reports wheel movement.
+        /// </summary>
         Wheel = 1 << 5,
     }
 
+    /// <summary>
+    /// A tablet that the manager announces to clients.
+    /// </summary>
     public sealed class TabletDevice
     {
         private readonly TabletManager _owner;
@@ -426,16 +515,34 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             BusType = busType;
         }
 
+        /// <summary>
+        /// Gets the device name.
+        /// </summary>
         public string Name { get; }
 
+        /// <summary>
+        /// Gets the USB vendor id.
+        /// </summary>
         public uint VendorId { get; }
 
+        /// <summary>
+        /// Gets the USB product id.
+        /// </summary>
         public uint ProductId { get; }
 
+        /// <summary>
+        /// Gets the device path.
+        /// </summary>
         public string Path { get; }
 
+        /// <summary>
+        /// Gets the bus type from <c>linux/input.h</c>. Zero means that no bus type is sent.
+        /// </summary>
         public uint BusType { get; }
 
+        /// <summary>
+        /// Removes the tablet and sends <c>removed</c> to every client.
+        /// </summary>
         public void Remove()
         {
             _owner._tablets.Remove(this);
@@ -449,6 +556,9 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// A tablet tool that the manager announces to clients. Its events go only to the client of the surface that has the tool focus.
+    /// </summary>
     public sealed class TabletTool
     {
         private readonly TabletManager _owner;
@@ -463,12 +573,24 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             Capabilities = capabilities;
         }
 
+        /// <summary>
+        /// Gets the tool type.
+        /// </summary>
         public ZwpTabletToolV2.Type Type { get; }
 
+        /// <summary>
+        /// Gets the serial number of the tool, or zero when the hardware has none.
+        /// </summary>
         public ulong HardwareSerial { get; }
 
+        /// <summary>
+        /// Gets the axes that the tool reports. Axis values for other axes are not sent.
+        /// </summary>
         public TabletToolCapabilities Capabilities { get; }
 
+        /// <summary>
+        /// Removes the tool and sends <c>removed</c> to every client.
+        /// </summary>
         public void Remove()
         {
             _owner._tools.Remove(this);
@@ -514,6 +636,9 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             }
         }
 
+        /// <summary>
+        /// Gets the tablet that the tool is in proximity of. It is <see langword="null"/> when the tool is out of proximity.
+        /// </summary>
         public TabletDevice? Tablet { get; private set; }
 
         internal void EnterProximity(TabletDevice tablet) => Tablet = tablet;
@@ -553,14 +678,30 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             }
         }
 
+        /// <summary>
+        /// Gets the surface that has the tool focus, or <see langword="null"/>.
+        /// </summary>
         public Surface? Focus => _surface;
 
+        /// <summary>
+        /// Brings the tool into proximity of a tablet and gives it focus on a surface.
+        /// </summary>
+        /// <param name="tablet">The tablet that the tool is over.</param>
+        /// <param name="surface">The surface that gets the tool focus.</param>
+        /// <param name="x">The X position in surface-local logical coordinates.</param>
+        /// <param name="y">The Y position in surface-local logical coordinates.</param>
         public void NotifyProximityIn(TabletDevice tablet, Surface surface, double x, double y)
         {
             Tablet = tablet;
             SetFocus(surface, x, y);
         }
 
+        /// <summary>
+        /// Moves the tool focus. On the same surface, it sends motion only. On a new surface, it sends <c>proximity_out</c> to the old one and <c>proximity_in</c> and motion to the new one. A tool with no tablet enters no surface.
+        /// </summary>
+        /// <param name="surface">The surface under the tool, or <see langword="null"/> to clear the focus.</param>
+        /// <param name="x">The X position in surface-local logical coordinates.</param>
+        /// <param name="y">The Y position in surface-local logical coordinates.</param>
         public void SetFocus(Surface? surface, double x, double y)
         {
             if (surface is not null)
@@ -606,8 +747,14 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Gets the time of the last source event for the tool, in milliseconds.
+        /// </summary>
         public uint LastTimeMs { get; internal set; }
 
+        /// <summary>
+        /// Sends <c>proximity_out</c> and clears <see cref="Tablet"/>. The focus clears at the next <see cref="NotifyFrame"/>.
+        /// </summary>
         public void NotifyProximityOut()
         {
             ForCurrent((resource, _) => resource.SendProximityOut());
@@ -615,11 +762,22 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             Tablet = null;
         }
 
+        /// <summary>
+        /// Sends <c>down</c> when the tip touches the tablet.
+        /// </summary>
         public void NotifyDown() =>
             ForCurrent((resource, _) => resource.SendDown(_owner._display.NextSerial()));
 
+        /// <summary>
+        /// Sends <c>up</c> when the tip leaves the tablet.
+        /// </summary>
         public void NotifyUp() => ForCurrent((resource, _) => resource.SendUp());
 
+        /// <summary>
+        /// Sends motion on the focused surface.
+        /// </summary>
+        /// <param name="x">The X position in surface-local logical coordinates.</param>
+        /// <param name="y">The Y position in surface-local logical coordinates.</param>
         public void NotifyMotion(double x, double y)
         {
             var scale = _surface?.ServerScale ?? 1.0;
@@ -628,24 +786,50 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             ForCurrent((resource, _) => resource.SendMotion(WlFixed.FromDouble(x), WlFixed.FromDouble(y)));
         }
 
+        /// <summary>
+        /// Sends the tip pressure.
+        /// </summary>
+        /// <param name="pressure">The pressure from 0 to 1. Values outside the range are clamped.</param>
         public void NotifyPressure(double pressure) =>
             ForCurrent((resource, _) => resource.SendPressure((uint)Math.Clamp(pressure * 65535, 0, 65535)));
 
+        /// <summary>
+        /// Sends the tool tilt.
+        /// </summary>
+        /// <param name="tiltX">The tilt along the X axis in degrees.</param>
+        /// <param name="tiltY">The tilt along the Y axis in degrees.</param>
         public void NotifyTilt(double tiltX, double tiltY) =>
             ForCurrent((resource, _) => resource.SendTilt(WlFixed.FromDouble(tiltX), WlFixed.FromDouble(tiltY)));
 
+        /// <summary>
+        /// Sends the hover distance.
+        /// </summary>
+        /// <param name="distance">The distance from 0 to 1. Values outside the range are clamped.</param>
         public void NotifyDistance(double distance) =>
             ForCurrent((resource, _) => resource.SendDistance((uint)Math.Clamp(distance * 65535, 0, 65535)));
 
+        /// <summary>
+        /// Sends the tool rotation.
+        /// </summary>
+        /// <param name="degrees">The rotation in degrees, clockwise from the rest position.</param>
         public void NotifyRotation(double degrees) =>
             ForCurrent((resource, _) => resource.SendRotation(WlFixed.FromDouble(degrees)));
 
+        /// <summary>
+        /// Sends a tool button event.
+        /// </summary>
+        /// <param name="button">The evdev button code.</param>
+        /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
         public void NotifyButton(uint button, bool pressed) =>
             ForCurrent((resource, _) => resource.SendButton(
                 _owner._display.NextSerial(),
                 button,
                 pressed ? ZwpTabletToolV2.ButtonState.Pressed : ZwpTabletToolV2.ButtonState.Released));
 
+        /// <summary>
+        /// Sends <c>frame</c> to end a group of tool events. After <see cref="NotifyProximityOut"/>, it also clears the focus.
+        /// </summary>
+        /// <param name="timeMs">The event time in milliseconds.</param>
         public void NotifyFrame(uint timeMs)
         {
             ForCurrent((resource, _) => resource.SendFrame(timeMs));
@@ -676,6 +860,9 @@ public sealed class TabletManager : ITabletObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// A tablet pad that the manager announces to clients. Its events go only to the client of the surface that the pad entered.
+    /// </summary>
     public sealed class TabletPad
     {
         private readonly TabletManager _owner;
@@ -689,12 +876,24 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             Dials = dials;
         }
 
+        /// <summary>
+        /// Gets the device path.
+        /// </summary>
         public string Path { get; }
 
+        /// <summary>
+        /// Gets the number of pad buttons.
+        /// </summary>
         public uint Buttons { get; }
 
+        /// <summary>
+        /// Gets the number of dials.
+        /// </summary>
         public uint Dials { get; }
 
+        /// <summary>
+        /// Removes the pad and sends <c>removed</c> to every client.
+        /// </summary>
         public void Remove()
         {
             _owner._pads.Remove(this);
@@ -707,6 +906,11 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             }
         }
 
+        /// <summary>
+        /// Gives the pad focus on a surface and sends <c>enter</c> with the tablet that the pad belongs to.
+        /// </summary>
+        /// <param name="tablet">The tablet that the pad belongs to.</param>
+        /// <param name="surface">The surface that gets the pad focus.</param>
         public void NotifyEnter(TabletDevice tablet, Surface surface)
         {
             _surface = surface;
@@ -719,6 +923,9 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Sends <c>leave</c> and clears the pad focus.
+        /// </summary>
         public void NotifyLeave()
         {
             if (_surface is { } surface)
@@ -729,12 +936,24 @@ public sealed class TabletManager : ITabletObserver, IDisposable
             _surface = null;
         }
 
+        /// <summary>
+        /// Sends a pad button event.
+        /// </summary>
+        /// <param name="timeMs">The event time in milliseconds.</param>
+        /// <param name="button">The zero-based pad button index.</param>
+        /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
         public void NotifyButton(uint timeMs, uint button, bool pressed) =>
             ForCurrent((resource, _) => resource.SendButton(
                 timeMs,
                 button,
                 pressed ? ZwpTabletPadV2.ButtonState.Pressed : ZwpTabletPadV2.ButtonState.Released));
 
+        /// <summary>
+        /// Sends a dial rotation and a dial frame. A zero value or an unknown dial sends nothing.
+        /// </summary>
+        /// <param name="timeMs">The event time in milliseconds.</param>
+        /// <param name="dial">The zero-based dial index.</param>
+        /// <param name="value120">The rotation in 120ths of a detent.</param>
         public void NotifyDial(uint timeMs, uint dial, int value120)
         {
             if (value120 == 0)

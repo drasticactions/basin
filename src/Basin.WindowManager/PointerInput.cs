@@ -3,19 +3,39 @@ using Wayland;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// Raw pointer input on the surfaces a manager draws, through its own binding of each <c>wl_seat</c>. It also sets cursor shapes through <c>wp_cursor_shape_manager_v1</c>.
+/// </summary>
 public sealed class PointerInput
 {
     private readonly Dictionary<uint, SeatState> _seats = [];
     private WpCursorShapeManagerV1? _cursorShapes;
 
+    /// <summary>
+    /// Occurs when the pointer enters a surface. The arguments are the seat's registry name, the surface id, and the surface-local x and y in logical pixels.
+    /// </summary>
     public event Action<uint, uint, double, double>? SurfaceEntered;
 
+    /// <summary>
+    /// Occurs when the pointer leaves a surface. The arguments are the seat's registry name and the surface id.
+    /// </summary>
     public event Action<uint, uint>? SurfaceLeft;
 
+    /// <summary>
+    /// Occurs when the pointer moves on the entered surface. The arguments are the seat's registry name and the surface-local x and y in logical pixels.
+    /// </summary>
     public event Action<uint, double, double>? PointerMoved;
 
+    /// <summary>
+    /// Occurs when a button goes down or up on the entered surface. The arguments are the seat's registry name, the Linux button code, and <see langword="true"/> for a press.
+    /// </summary>
     public event Action<uint, uint, bool>? ButtonChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PointerInput"/> class. The seats arrive on the manager's next dispatch.
+    /// </summary>
+    /// <param name="wm">The manager whose connection this object binds on.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="wm"/> is <see langword="null"/>.</exception>
     public PointerInput(RiverWindowManager wm)
     {
         ArgumentNullException.ThrowIfNull(wm);
@@ -44,6 +64,12 @@ public sealed class PointerInput
         };
     }
 
+    /// <summary>
+    /// Sets the cursor shape on a seat's pointer while it is over one of the manager's surfaces. It sends nothing when the shape is already set since the last enter.
+    /// </summary>
+    /// <param name="seatName">The seat's registry name.</param>
+    /// <param name="shape">The cursor shape.</param>
+    /// <remarks>It does nothing when the compositor has no cursor-shape global, the seat is unknown, or the pointer has not entered a surface yet.</remarks>
     public void SetShape(uint seatName, WpCursorShapeDeviceV1.Shape shape)
     {
         if (_cursorShapes is null
@@ -60,6 +86,10 @@ public sealed class PointerInput
         state.LastShape = shape;
     }
 
+    /// <summary>
+    /// Hides the cursor on a seat's pointer. It does nothing before the pointer entered a surface.
+    /// </summary>
+    /// <param name="seatName">The seat's registry name.</param>
     public void HideCursor(uint seatName)
     {
         if (!_seats.TryGetValue(seatName, out var state)

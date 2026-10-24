@@ -3,14 +3,29 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's startup feedback while an application launches. It draws a plain square beside the cursor, not the application icon, until the launch ends or times out.
+/// </summary>
 public sealed class StartupFeedbackEffect : IMeshSource
 {
+    /// <summary>
+    /// The length of one bounce, in milliseconds.
+    /// </summary>
     public const double BounceDurationMillis = 500;
 
+    /// <summary>
+    /// The number of frames in one blink cycle.
+    /// </summary>
     public const int BlinkingFrames = 5;
 
+    /// <summary>
+    /// The length of one blink frame, in milliseconds.
+    /// </summary>
     public const double BlinkingFrameDurationMillis = 100;
 
+    /// <summary>
+    /// The default value of <see cref="TimeoutSeconds"/>.
+    /// </summary>
     public const double DefaultTimeoutSeconds = 5;
 
     private static readonly int[] FrameToBlinkingColor = [0, 1, 2, 3, 2, 1];
@@ -34,24 +49,50 @@ public sealed class StartupFeedbackEffect : IMeshSource
     private long _lastNanos;
     private bool _running;
 
+    /// <summary>
+    /// Gets or sets the time, in seconds, after which the feedback stops by itself.
+    /// </summary>
     public double TimeoutSeconds { get; set; } = DefaultTimeoutSeconds;
 
+    /// <summary>
+    /// Gets or sets the side of the square and its offset from the cursor, in pixels. The default is 24.
+    /// </summary>
     public double IconSize { get; set; } = 24;
 
+    /// <summary>
+    /// Gets or sets the kind of feedback. The default is <see cref="StartupFeedbackKind.Bouncing"/>.
+    /// </summary>
     public StartupFeedbackKind Kind
     {
         get => _kind;
         set => _kind = value;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the feedback runs and its kind draws something.
+    /// </summary>
     public bool IsActive => _running && _kind is StartupFeedbackKind.Bouncing or StartupFeedbackKind.Blinking;
 
+    /// <summary>
+    /// Gets the current blink frame, from 0 to <see cref="BlinkingFrames"/> minus 1.
+    /// </summary>
     public int Frame { get; private set; }
 
+    /// <summary>
+    /// Gets the current height of the bounce, in pixels.
+    /// </summary>
     public double BounceOffset { get; private set; }
 
+    /// <summary>
+    /// Gets the current squeeze of the bounce, from −12 to 12. A positive value makes the square wider and lower.
+    /// </summary>
     public double Squeeze { get; private set; }
 
+    /// <summary>
+    /// Claims a mesh in the feedback overlay and draws into it from now on.
+    /// </summary>
+    /// <param name="overlay">The feedback overlay of the output.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Attach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -59,6 +100,11 @@ public sealed class StartupFeedbackEffect : IMeshSource
         _mesh = overlay.Claim(this, this);
     }
 
+    /// <summary>
+    /// Releases the mesh in the feedback overlay and stops the feedback.
+    /// </summary>
+    /// <param name="overlay">The overlay that <see cref="Attach"/> received.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Detach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -68,6 +114,10 @@ public sealed class StartupFeedbackEffect : IMeshSource
         _running = false;
     }
 
+    /// <summary>
+    /// Starts the feedback, or restarts it and its timeout.
+    /// </summary>
+    /// <param name="now">The tick of the launch.</param>
     public void Start(in FrameTick now)
     {
         _thread.Assert();
@@ -78,6 +128,9 @@ public sealed class StartupFeedbackEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Stops the feedback, for example when the launched window maps.
+    /// </summary>
     public void Stop()
     {
         _thread.Assert();
@@ -85,6 +138,11 @@ public sealed class StartupFeedbackEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Moves the feedback with the cursor.
+    /// </summary>
+    /// <param name="x">The horizontal cursor position, in the coordinates of the overlay.</param>
+    /// <param name="y">The vertical cursor position, in the coordinates of the overlay.</param>
     public void SetCursor(double x, double y)
     {
         _thread.Assert();
@@ -93,6 +151,11 @@ public sealed class StartupFeedbackEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Advances the bounce or the blink by the time since the last tick, and stops the feedback after <see cref="TimeoutSeconds"/>.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns>The value of <see cref="IsActive"/> after the step.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -134,8 +197,10 @@ public sealed class StartupFeedbackEffect : IMeshSource
         return IsActive;
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds) => IsActive ? FeedbackShapes.QuadVertexCount : 0;
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into)
     {
         if (!IsActive)

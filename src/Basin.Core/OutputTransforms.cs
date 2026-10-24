@@ -1,9 +1,22 @@
 namespace Basin;
 
+/// <summary>
+/// Geometry helpers for <see cref="OutputTransform"/>.
+/// </summary>
 public static class OutputTransforms
 {
+    /// <summary>
+    /// Tests whether a transform exchanges the width and the height.
+    /// </summary>
+    /// <param name="transform">The transform to test.</param>
+    /// <returns><see langword="true"/> for a 90 or 270 degree rotation, flipped or not.</returns>
     public static bool SwapsAxes(this OutputTransform transform) => ((int)transform & 1) != 0;
 
+    /// <summary>
+    /// Calculates the transform that undoes another transform.
+    /// </summary>
+    /// <param name="transform">The transform to undo.</param>
+    /// <returns>The inverse transform. Only the 90 and 270 degree rotations change. The other transforms are their own inverse.</returns>
     public static OutputTransform Invert(this OutputTransform transform) => transform switch
     {
         OutputTransform.Rotate90 => OutputTransform.Rotate270,
@@ -11,6 +24,12 @@ public static class OutputTransforms
         _ => transform,
     };
 
+    /// <summary>
+    /// Combines two transforms into one transform.
+    /// </summary>
+    /// <param name="first">The transform to apply first.</param>
+    /// <param name="second">The transform to apply second.</param>
+    /// <returns>One transform with the same effect as the two in sequence.</returns>
     public static OutputTransform Compose(OutputTransform first, OutputTransform second)
     {
         var flipped = ((int)first ^ (int)second) & 4;
@@ -20,6 +39,14 @@ public static class OutputTransforms
         return (OutputTransform)(flipped | rotated);
     }
 
+    /// <summary>
+    /// Transforms a box inside an area of a given size, with the same mapping as <c>wlr_box_transform</c>.
+    /// </summary>
+    /// <param name="transform">The transform to apply.</param>
+    /// <param name="box">The box in the coordinates before the transform.</param>
+    /// <param name="width">The width of the area before the transform.</param>
+    /// <param name="height">The height of the area before the transform.</param>
+    /// <returns>The box in the coordinates after the transform.</returns>
     public static Box Apply(this OutputTransform transform, in Box box, int width, int height)
     {
         var w = transform.SwapsAxes() ? box.Height : box.Width;
@@ -39,6 +66,13 @@ public static class OutputTransforms
         return new Box(x, y, w, h);
     }
 
+    /// <summary>
+    /// Converts a transform to a matrix that maps points of a <paramref name="width"/> by <paramref name="height"/> area.
+    /// </summary>
+    /// <param name="transform">The transform to convert.</param>
+    /// <param name="width">The width of the area before the transform.</param>
+    /// <param name="height">The height of the area before the transform.</param>
+    /// <returns>The matrix. <see cref="OutputTransform.Normal"/> gives <see cref="RenderTransform.Identity"/>.</returns>
     public static RenderTransform ToMatrix(this OutputTransform transform, int width, int height) => transform switch
     {
         OutputTransform.Rotate90 => new RenderTransform(0, -1, height, 1, 0, 0, 0, 0, 1),

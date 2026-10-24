@@ -4,40 +4,100 @@ using Wayland;
 
 namespace Basin.Portal.Client;
 
+/// <summary>
+/// Holds the Wayland globals that a portal client binds from the registry of the compositor.
+/// Each property is <see langword="null"/> until <see cref="Bind"/> sees the matching global.
+/// </summary>
 public sealed class ClientGlobals : IDisposable
 {
+    /// <summary>
+    /// Gets or sets the bound <c>wl_compositor</c>, at version 6 or lower.
+    /// </summary>
     public WlCompositor? Compositor { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>wl_shm</c>. Screen capture needs it for its shared-memory buffers.
+    /// </summary>
     public WlShm? Shm { get; set; }
 
+    /// <summary>
+    /// Gets or sets the first <c>wl_seat</c> that the registry announced. A later seat is ignored.
+    /// </summary>
     public WlSeat? Seat { get; set; }
 
+    /// <summary>
+    /// Gets the capabilities that the seat announced last. It is none until the first capabilities event arrives.
+    /// </summary>
     public WlSeat.Capability SeatCapabilities { get; private set; }
 
+    /// <summary>
+    /// Occurs each time the seat sends a capabilities event. The argument is the new capability set.
+    /// </summary>
     public event Action<WlSeat.Capability>? SeatCapabilitiesChanged;
 
+    /// <summary>
+    /// Gets or sets the bound <c>zxdg_output_manager_v1</c>, at version 3 or lower. It supplies the logical position and size of each output.
+    /// </summary>
     public ZxdgOutputManagerV1? XdgOutputs { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>ext_foreign_toplevel_list_v1</c>.
+    /// </summary>
     public ExtForeignToplevelListV1? ToplevelList { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>ext_image_copy_capture_manager_v1</c>. Screen capture is off without it.
+    /// </summary>
     public ExtImageCopyCaptureManagerV1? Capture { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>ext_output_image_capture_source_manager_v1</c>. Output and region capture need it.
+    /// </summary>
     public ExtOutputImageCaptureSourceManagerV1? OutputSources { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>ext_foreign_toplevel_image_capture_source_manager_v1</c>. Window capture needs it.
+    /// </summary>
     public ExtForeignToplevelImageCaptureSourceManagerV1? ToplevelSources { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>ext_data_control_manager_v1</c>. The clipboard portal needs it.
+    /// </summary>
     public ExtDataControlManagerV1? DataControl { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>zwp_virtual_keyboard_manager_v1</c>.
+    /// </summary>
     public ZwpVirtualKeyboardManagerV1? VirtualKeyboards { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>zwlr_virtual_pointer_manager_v1</c>, at version 2 or lower.
+    /// </summary>
     public ZwlrVirtualPointerManagerV1? VirtualPointers { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>hyprland_input_capture_manager_v1</c>. The input capture portal needs it.
+    /// </summary>
     public HyprlandInputCaptureManagerV1? InputCapture { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>hyprland_global_shortcuts_manager_v1</c>. The global shortcuts portal needs it.
+    /// </summary>
     public HyprlandGlobalShortcutsManagerV1? GlobalShortcuts { get; set; }
 
+    /// <summary>
+    /// Gets or sets the bound <c>zwp_linux_dmabuf_v1</c>, at version 4 or lower. Capture into dmabuf targets needs it.
+    /// </summary>
     public ZwpLinuxDmabufV1? Dmabuf { get; set; }
 
+    /// <summary>
+    /// Binds one registry global when its interface is one that this class knows. Other interfaces are ignored.
+    /// The call caps the bound version at the highest version that the client implements.
+    /// </summary>
+    /// <param name="registry">The registry that announced the global.</param>
+    /// <param name="name">The numeric name of the global in the registry.</param>
+    /// <param name="iface">The interface name of the global, for example <c>wl_shm</c>.</param>
+    /// <param name="version">The version that the compositor offers.</param>
     public void Bind(WlRegistry registry, uint name, string iface, uint version)
     {
         switch (iface)
@@ -97,6 +157,9 @@ public sealed class ClientGlobals : IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys every bound global that is not destroyed yet, in the reverse order of the properties.
+    /// </summary>
     public void Dispose()
     {
         Destroy(Dmabuf);

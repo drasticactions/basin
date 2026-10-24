@@ -7,6 +7,9 @@ using Wayland.Server.Shm;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// One waypipe connection that carries one remote Wayland client. It reads frames from a stream, replays them into a <see cref="WaypipeEngine"/>, and writes the compositor replies back.
+/// </summary>
 public sealed class WaypipeChannel : IDisposable
 {
     private readonly object _writeLock = new();
@@ -62,18 +65,39 @@ public sealed class WaypipeChannel : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the way that the channel reads its stream.
+    /// </summary>
     public WaypipePump Pump { get; }
 
+    /// <summary>
+    /// Gets the transport that the Wayland display uses to create the client for this channel.
+    /// </summary>
     public WaypipeClientTransport Transport => _transport;
 
+    /// <summary>
+    /// Gets the engine that rebuilds the remote buffers and pipes.
+    /// </summary>
     public WaypipeEngine Engine => _engine;
 
+    /// <summary>
+    /// Gets the content that the channel accepts.
+    /// </summary>
     public WaypipeChannelOptions Options { get; }
 
+    /// <summary>
+    /// Gets the global policy for the client on this channel.
+    /// </summary>
     public WaypipeGlobals Globals { get; }
 
+    /// <summary>
+    /// Occurs once when the channel ends. The argument is <see langword="null"/> for an orderly end or a disposal. It occurs on the reader thread or on the attaching context, as <see cref="Pump"/> sets.
+    /// </summary>
     public event Action<Exception?>? Ended;
 
+    /// <summary>
+    /// Gets a value indicating whether the channel answered the connection header of the peer.
+    /// </summary>
     public bool IsOpen
     {
         get
@@ -85,6 +109,9 @@ public sealed class WaypipeChannel : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs once, after the channel answers the connection header of the peer. A handler that is added after that runs immediately on the adding thread.
+    /// </summary>
     public event Action? Opened
     {
         add
@@ -136,6 +163,17 @@ public sealed class WaypipeChannel : IDisposable
         Action<WaypipeChannel> configure) =>
         Adopt(stream, shutdownPeer, null, compression, limits, options, WaypipePump.Thread, configure);
 
+    /// <summary>
+    /// Starts a channel on a connected stream. The channel owns the stream and disposes it.
+    /// </summary>
+    /// <param name="stream">The connected stream from the peer.</param>
+    /// <param name="compression">The compression that the peer must use.</param>
+    /// <param name="limits">The limits on the peer, or <see langword="null"/> for the defaults.</param>
+    /// <param name="options">The content that the channel accepts, or <see langword="null"/> for the defaults.</param>
+    /// <param name="pump">The read mode, or <see langword="null"/> for <see cref="WaypipePump.Thread"/> where the host has threads and <see cref="WaypipePump.Async"/> otherwise.</param>
+    /// <param name="configure">A callback that runs before the read starts. Subscribe to <see cref="Ended"/> and <see cref="Opened"/> there.</param>
+    /// <returns>The running channel, which the caller owns.</returns>
+    /// <exception cref="PlatformNotSupportedException"><paramref name="pump"/> is <see cref="WaypipePump.Thread"/> on a host without threads.</exception>
     public static WaypipeChannel AttachChannel(
         Stream stream,
         WaypipeCompression compression = WaypipeCompression.Lz4,
@@ -177,8 +215,16 @@ public sealed class WaypipeChannel : IDisposable
 
     private Task? _readerTask;
 
+    /// <summary>
+    /// Opens a pipe toward the remote side that the compositor writes, for example to send selection data.
+    /// </summary>
+    /// <returns>The descriptor slot of the local end, for the client transport.</returns>
     public int CreateWritablePipe() => OpenPipe(WaypipeMessageType.OpenIWPipe, writable: true);
 
+    /// <summary>
+    /// Opens a pipe from the remote side that the compositor reads.
+    /// </summary>
+    /// <returns>The descriptor slot of the local end, for the client transport.</returns>
     public int CreateReadablePipe() => OpenPipe(WaypipeMessageType.OpenIRPipe, writable: false);
 
     private int OpenPipe(WaypipeMessageType kind, bool writable)
@@ -234,6 +280,9 @@ public sealed class WaypipeChannel : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends a close to the peer, closes the stream and releases the engine. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

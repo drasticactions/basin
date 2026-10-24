@@ -3,18 +3,36 @@ using Basin.Host;
 
 namespace Basin.Greetd.Host;
 
+/// <content>
+/// The greetd connection and the login flow of the greeter host.
+/// </content>
 public sealed partial class GreeterHost
 {
     private GreetdClient? _client;
     private GreeterFlow? _flow;
     private LoopbackGreetd? _demo;
 
+    /// <summary>
+    /// Gets the login flow.
+    /// </summary>
+    /// <exception cref="InvalidOperationException"><see cref="StartLogin"/> has not run.</exception>
     public GreeterFlow Flow => _flow ?? throw new InvalidOperationException("the login has not started");
 
+    /// <summary>
+    /// Gets the login flow, or <see langword="null"/> before <see cref="StartLogin"/>.
+    /// </summary>
     public GreeterFlow? FlowOrNull => _flow;
 
+    /// <summary>
+    /// Occurs for each step of the flow, after the host prints its line for the step.
+    /// </summary>
     public event Action<GreeterStep>? Stepped;
 
+    /// <summary>
+    /// Gives the wire word for an auth message type, as the <c>AUTH</c> line prints it.
+    /// </summary>
+    /// <param name="type">The auth message type.</param>
+    /// <returns><c>visible</c>, <c>secret</c>, <c>info</c> or <c>error</c>.</returns>
     public static string AuthWord(GreetdAuthMessageType type) => type switch
     {
         GreetdAuthMessageType.Visible => "visible",
@@ -23,6 +41,11 @@ public sealed partial class GreeterHost
         _ => "error",
     };
 
+    /// <summary>
+    /// Connects to greetd, or starts the demo server, and creates the flow. A second call returns the same flow. The program calls <see cref="GreeterFlow.Start"/> itself.
+    /// </summary>
+    /// <returns>The flow. The host owns it.</returns>
+    /// <exception cref="System.Net.Sockets.SocketException">The greetd socket does not accept the connection.</exception>
     public GreeterFlow StartLogin()
     {
         if (_flow is not null)

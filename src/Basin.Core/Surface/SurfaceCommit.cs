@@ -4,8 +4,17 @@ using Wayland;
 
 namespace Basin;
 
+/// <summary>
+/// Moves double-buffered surface state from one <see cref="SurfaceState"/> to another.
+/// </summary>
 public static class SurfaceCommit
 {
+    /// <summary>
+    /// Moves each field set in <paramref name="pending"/> onto <paramref name="target"/> and leaves <paramref name="pending"/> an empty delta. Buffer locks transfer, frame callbacks append and extension slots always move.
+    /// </summary>
+    /// <param name="pending">The source state. It has no committed fields after the call.</param>
+    /// <param name="target">The state that receives the fields.</param>
+    /// <param name="targetIsCurrent"><see langword="true"/> when <paramref name="target"/> is a current state, so damage is replaced. <see langword="false"/> for a cache, so damage accumulates.</param>
     public static void Move(SurfaceState pending, SurfaceState target, bool targetIsCurrent = false)
     {
         var fields = pending.Committed;

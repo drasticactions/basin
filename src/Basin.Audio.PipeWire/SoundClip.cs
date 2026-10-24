@@ -2,10 +2,22 @@ using System.Buffers.Binary;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// A mono sound at <see cref="Rate"/> that a <see cref="SoundPlayer"/> plays. The player reads the samples and never changes them.
+/// </summary>
 public sealed class SoundClip
 {
+    /// <summary>
+    /// The sample rate in hertz of every clip and of the player stream.
+    /// </summary>
     public const int Rate = 48000;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SoundClip"/> class. The clip keeps the array and does not copy it.
+    /// </summary>
+    /// <param name="name">The name for error messages.</param>
+    /// <param name="samples">The mono samples at <see cref="Rate"/>, nominally from -1 to 1.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> or <paramref name="samples"/> is <see langword="null"/>.</exception>
     public SoundClip(string name, float[] samples)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -14,12 +26,29 @@ public sealed class SoundClip
         Samples = samples;
     }
 
+    /// <summary>
+    /// Gets the name that the clip was created with.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// Gets the mono samples at <see cref="Rate"/>. The array is shared, so a change shows in every later playback.
+    /// </summary>
     public float[] Samples { get; }
 
+    /// <summary>
+    /// Gets the length of the clip at its original speed.
+    /// </summary>
     public TimeSpan Duration => TimeSpan.FromSeconds(Samples.Length / (double)Rate);
 
+    /// <summary>
+    /// Reads a WAV file into a mono clip at <see cref="Rate"/>. It accepts 8-bit unsigned PCM, 16-bit PCM and 32-bit float. It averages the channels and resamples another rate linearly.
+    /// </summary>
+    /// <param name="name">The name of the clip, also used in error messages.</param>
+    /// <param name="stream">The WAV data. The method reads it to the end and does not dispose it.</param>
+    /// <returns>A new clip with the decoded samples.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The data is not a RIFF WAVE file, has no data chunk, or has a sample format that the method does not read.</exception>
     public static SoundClip FromWav(string name, Stream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);

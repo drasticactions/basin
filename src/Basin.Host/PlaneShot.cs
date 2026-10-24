@@ -3,8 +3,22 @@ using Basin.Scene;
 
 namespace Basin.Host;
 
+/// <summary>
+/// Writes each plane and chrome buffer of an output as its own PNG, to find which layer of a frame is wrong.
+/// </summary>
 public static class PlaneShot
 {
+    /// <summary>
+    /// Writes the primary plane, the offloaded layers, the hardware cursor, the named chrome buffers and the scene's backdrop buffers of an output. Each image gets a <c>PLANE</c> line and the call ends with a <c>PLANESHOT</c> line.
+    /// </summary>
+    /// <param name="view">The output to examine.</param>
+    /// <param name="renderer">The renderer that reads the buffers back.</param>
+    /// <param name="prefix">The path prefix of the files, for example <c>/tmp/shot</c> for <c>/tmp/shot.primary.png</c>.</param>
+    /// <param name="scene">The scene to search for backdrop buffers, or <see langword="null"/> to skip them.</param>
+    /// <param name="chrome">The chrome buffers to write by name, or <see langword="null"/>.</param>
+    /// <returns>The number of images written. A destroyed or unreadable buffer is skipped.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="view"/> or <paramref name="renderer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="prefix"/> is <see langword="null"/> or empty.</exception>
     public static int Write(
         OutputView view,
         IRenderer renderer,

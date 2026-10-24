@@ -6,6 +6,9 @@ using static Basin.Eis.EisLog;
 
 namespace Basin.Eis;
 
+/// <summary>
+/// Serves one libeis receiver client and sends captured pointer and keyboard input to it. It refuses sender clients and a second client.
+/// </summary>
 public sealed unsafe class EisSender : IDisposable
 {
     private readonly EisContext _context;
@@ -19,6 +22,13 @@ public sealed unsafe class EisSender : IDisposable
     private EisDevice? _keyboardDevice;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EisSender"/> class. It creates an EIS context and watches its fd on <paramref name="loop"/>.
+    /// </summary>
+    /// <param name="loop">The compositor loop that dispatches the context.</param>
+    /// <param name="layout">The output layout that gives the pointer device's regions.</param>
+    /// <param name="keymap">The keymap that the keyboard device sends, or <see langword="null"/> for none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> or <paramref name="layout"/> is <see langword="null"/>.</exception>
     public EisSender(ICompositorEventLoop loop, OutputLayout layout, IActiveKeymap? keymap)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -31,14 +41,37 @@ public sealed unsafe class EisSender : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a receiver client is connected.
+    /// </summary>
     public bool HasClient => _client is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the client has bound a pointer device.
+    /// </summary>
     public bool HasPointer => _pointer is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the client has bound a keyboard device.
+    /// </summary>
     public bool HasKeyboard => _keyboardDevice is not null;
 
+    /// <summary>
+    /// Creates a socket pair in the EIS context and returns the client end.
+    /// </summary>
+    /// <returns>The client's fd. The caller owns it and gives it to the client.</returns>
     public int AddClientFd() => _context.AddClient();
 
+    /// <summary>
+    /// Adds a region to the pointer device beside the output regions, and recreates the device when it exists.
+    /// </summary>
+    /// <param name="mappingId">The region's mapping id.</param>
+    /// <param name="x">The layout x of the region.</param>
+    /// <param name="y">The layout y of the region.</param>
+    /// <param name="width">The region width.</param>
+    /// <param name="height">The region height.</param>
+    /// <param name="scale">The physical scale of the region.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="mappingId"/> is <see langword="null"/>.</exception>
     public void AddAbsoluteRegion(string mappingId, int x, int y, int width, int height, double scale)
     {
         ArgumentNullException.ThrowIfNull(mappingId);
@@ -46,6 +79,9 @@ public sealed unsafe class EisSender : IDisposable
         ResetPointer();
     }
 
+    /// <summary>
+    /// Removes the regions that <see cref="AddAbsoluteRegion"/> added, and recreates the pointer device when one was removed.
+    /// </summary>
     public void ClearAbsoluteRegions()
     {
         if (_extraRegions.Count == 0)
@@ -57,6 +93,9 @@ public sealed unsafe class EisSender : IDisposable
         ResetPointer();
     }
 
+    /// <summary>
+    /// Dispatches the EIS context and handles its events. An exception is logged, not raised. The loop calls it when the fd is readable.
+    /// </summary>
     public void Pump()
     {
         if (_disposed)
@@ -81,18 +120,30 @@ public sealed unsafe class EisSender : IDisposable
         }
     }
 
+    /// <summary>
+    /// Starts emulation on the pointer and keyboard devices that exist.
+    /// </summary>
+    /// <param name="sequence">The emulation sequence number, which is the activation id.</param>
     public void StartEmulating(uint sequence)
     {
         _pointer?.StartEmulating(sequence);
         _keyboardDevice?.StartEmulating(sequence);
     }
 
+    /// <summary>
+    /// Stops emulation on the pointer and keyboard devices that exist.
+    /// </summary>
     public void StopEmulating()
     {
         _pointer?.StopEmulating();
         _keyboardDevice?.StopEmulating();
     }
 
+    /// <summary>
+    /// Sends a relative motion and a frame. It does nothing without a pointer device.
+    /// </summary>
+    /// <param name="dx">The relative x motion.</param>
+    /// <param name="dy">The relative y motion.</param>
     public void SendMotion(double dx, double dy)
     {
         if (_pointer is not { } pointer)
@@ -104,6 +155,11 @@ public sealed unsafe class EisSender : IDisposable
         pointer.Frame(_context.Now);
     }
 
+    /// <summary>
+    /// Sends a button change and a frame. It does nothing without a pointer device.
+    /// </summary>
+    /// <param name="button">The evdev button code.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
     public void SendButton(uint button, bool pressed)
     {
         if (_pointer is not { } pointer)
@@ -115,6 +171,10 @@ public sealed unsafe class EisSender : IDisposable
         pointer.Frame(_context.Now);
     }
 
+    /// <summary>
+    /// Sends a scroll stop, a discrete scroll or a smooth scroll, then a frame. It does nothing without a pointer device.
+    /// </summary>
+    /// <param name="axis">The scroll axis. A nonzero value120 sends a discrete scroll.</param>
     public void SendScroll(in PointerAxis axis)
     {
         if (_pointer is not { } pointer)
@@ -139,6 +199,11 @@ public sealed unsafe class EisSender : IDisposable
         pointer.Frame(_context.Now);
     }
 
+    /// <summary>
+    /// Sends a key change and a frame. It does nothing without a keyboard device.
+    /// </summary>
+    /// <param name="key">The evdev key code.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
     public void SendKey(uint key, bool pressed)
     {
         if (_keyboardDevice is not { } keyboard)
@@ -150,6 +215,13 @@ public sealed unsafe class EisSender : IDisposable
         keyboard.Frame(_context.Now);
     }
 
+    /// <summary>
+    /// Sends the xkb modifier state and a frame. It does nothing without a keyboard device.
+    /// </summary>
+    /// <param name="depressed">The depressed modifier mask.</param>
+    /// <param name="latched">The latched modifier mask.</param>
+    /// <param name="locked">The locked modifier mask.</param>
+    /// <param name="group">The effective layout group.</param>
     public void SendModifiers(uint depressed, uint latched, uint locked, uint group)
     {
         if (_keyboardDevice is not { } keyboard)
@@ -161,6 +233,9 @@ public sealed unsafe class EisSender : IDisposable
         keyboard.Frame(_context.Now);
     }
 
+    /// <summary>
+    /// Removes and recreates the keyboard device so that it carries the current keymap. It does nothing without a keyboard device.
+    /// </summary>
     public void ResetKeyboard()
     {
         if (_keyboardDevice is null)
@@ -172,6 +247,9 @@ public sealed unsafe class EisSender : IDisposable
         EnsureKeyboard();
     }
 
+    /// <summary>
+    /// Removes and recreates the pointer device so that it carries the current regions. It does nothing without a pointer device.
+    /// </summary>
     public void ResetPointer()
     {
         if (_pointer is null)
@@ -183,6 +261,9 @@ public sealed unsafe class EisSender : IDisposable
         EnsurePointer();
     }
 
+    /// <summary>
+    /// Removes the devices and the seat, disconnects the client and closes the context.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

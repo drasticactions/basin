@@ -2,11 +2,20 @@ using System.Numerics;
 
 namespace Basin.Scene3D;
 
+/// <summary>
+/// Shared unit meshes that the passes scale by a model matrix, and the frame moulding builder.
+/// </summary>
 public static class WorldPrimitives
 {
+    /// <summary>
+    /// Gets a unit square in the xy plane, centered on the origin and facing +z. Its texture coordinates put v = 0 at the top.
+    /// </summary>
     public static WorldMesh Quad { get; } = Build(builder => builder.Face(
         new Vector3(0, 0, 0), new Vector3(0.5f, 0, 0), new Vector3(0, 0.5f, 0), frontUv: true));
 
+    /// <summary>
+    /// Gets the four sides of a unit box that runs from z = 0 back to z = -1, with no front or back.
+    /// </summary>
     public static WorldMesh SlabEdges { get; } = Build(builder =>
     {
         builder.Face(new Vector3(0.5f, 0, -0.5f), new Vector3(0, 0, -0.5f), new Vector3(0, 0.5f, 0));
@@ -15,11 +24,29 @@ public static class WorldPrimitives
         builder.Face(new Vector3(0, -0.5f, -0.5f), new Vector3(0.5f, 0, 0), new Vector3(0, 0, 0.5f));
     });
 
+    /// <summary>
+    /// Gets the back face of the unit slab, a unit square at z = -1 that faces -z.
+    /// </summary>
     public static WorldMesh SlabBack { get; } = Build(builder =>
         builder.Face(new Vector3(0, 0, -1), new Vector3(-0.5f, 0, 0), new Vector3(0, 0.5f, 0)));
 
+    /// <summary>
+    /// Gets an octahedron one meter across, centered on the origin, with flat normals. The passes draw lights with it.
+    /// </summary>
     public static WorldMesh Flame { get; } = BuildOctahedron();
 
+    /// <summary>
+    /// Builds a picture-frame moulding round a canvas in the window's local space. It sweeps one profile round the canvas with mitred corners and a normal for each face.
+    /// </summary>
+    /// <param name="innerWidth">The canvas width in meters.</param>
+    /// <param name="innerHeight">The canvas height in meters.</param>
+    /// <param name="rail">The width of each rail in meters. It must be positive.</param>
+    /// <param name="depth">The distance in meters from the front plane back to the wall. It must be positive.</param>
+    /// <param name="recess">The distance in meters that the canvas sits behind the front plane.</param>
+    /// <param name="uvRect">The swatch in <paramref name="image"/>: X and Y are its top-left texture coordinate and W its height. Each profile point takes one row of it.</param>
+    /// <param name="image">The texture that holds the swatch, or <see langword="null"/> for an untextured moulding.</param>
+    /// <returns>A new mesh. The caller caches it for the canvas size.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="rail"/> or <paramref name="depth"/> is not positive.</exception>
     public static WorldMesh Moulding(
         float innerWidth, float innerHeight, float rail, float depth, float recess, Vector4 uvRect, WorldImage? image)
     {

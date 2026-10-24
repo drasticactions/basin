@@ -1,11 +1,21 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Holds KWin's invert pixel shader in GLSL, SkSL and SPIR-V. It inverts in gamma 2.2 on straight alpha, so the midtones keep their contrast.
+/// </summary>
 public static class InvertShader
 {
+    /// <summary>
+    /// The uniforms of the shader. There are none.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms = [];
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the shader source for every dialect. The SPIR-V loads from an embedded resource on the first read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The SPIR-V resource is missing from the assembly.</exception>
     public static PixelShaderSource Source => new()
     {
         SamplesTexture = true,

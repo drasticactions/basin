@@ -2,12 +2,18 @@ using Basin.Capabilities;
 
 namespace Basin.Scene;
 
+/// <content>
+/// Surface appearance support for the scene.
+/// </content>
 public sealed partial class Scene
 {
     private readonly List<SceneSurface> _surfaces = [];
     private ISurfaceAppearance? _appearance;
     private AppearanceWatch? _appearanceWatch;
 
+    /// <summary>
+    /// Gets or sets the source of per-surface appearance, such as corner radius and opacity. Setting it re-applies the appearance to every surface in the scene.
+    /// </summary>
     public ISurfaceAppearance? Appearance
     {
         get => _appearance;

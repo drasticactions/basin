@@ -3,6 +3,10 @@ using Wayland;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// A double-buffered ARGB8888 <c>wl_shm</c> pool. <see cref="Prepare"/> picks a slot that the compositor released, and <see cref="MarkAttached"/> marks it held until its release event.
+/// </summary>
+/// <param name="shm">The shm global that creates the pool.</param>
 public sealed unsafe class ShmSlots(WlShm shm) : IDisposable
 {
     private const int ProtReadWrite = 3;
@@ -19,10 +23,23 @@ public sealed unsafe class ShmSlots(WlShm shm) : IDisposable
     private int _lastPrepared = 1;
     private int _current = -1;
 
+    /// <summary>
+    /// Gets a value indicating whether a prepared buffer is current.
+    /// </summary>
     public bool IsReady => _current >= 0 && _slots[_current].Buffer is not null;
 
+    /// <summary>
+    /// Gets the buffer that the last <see cref="Prepare"/> selected, or <see langword="null"/> when there is none.
+    /// </summary>
     public WlBuffer? CurrentBuffer => _current >= 0 ? _slots[_current].Buffer : null;
 
+    /// <summary>
+    /// Selects a released slot for a buffer and makes it current. When the pool is too small or both slots are held, it maps a new pool and destroys the old buffers.
+    /// </summary>
+    /// <param name="width">The width in pixels.</param>
+    /// <param name="height">The height in pixels.</param>
+    /// <param name="stride">The bytes per row.</param>
+    /// <returns>The address of the slot's memory, or zero when the size is not positive or the memory cannot be mapped. The content is not cleared on reuse.</returns>
     public nint Prepare(int width, int height, int stride)
     {
         var size = stride * height;
@@ -83,6 +100,10 @@ public sealed unsafe class ShmSlots(WlShm shm) : IDisposable
         return (nint)(_map + ((long)_slotCapacity * target));
     }
 
+    /// <summary>
+    /// Gets the memory of the current buffer.
+    /// </summary>
+    /// <returns>The current buffer's bytes, or an empty span when no buffer is current.</returns>
     public Span<byte> CurrentBytes()
     {
         if (_current < 0)
@@ -94,6 +115,9 @@ public sealed unsafe class ShmSlots(WlShm shm) : IDisposable
         return new Span<byte>(_map + ((long)_slotCapacity * _current), slot.Stride * slot.Height);
     }
 
+    /// <summary>
+    /// Records that the compositor holds the current buffer, so <see cref="Prepare"/> skips it until the release event arrives.
+    /// </summary>
     public void MarkAttached()
     {
         if (_current >= 0)
@@ -102,6 +126,9 @@ public sealed unsafe class ShmSlots(WlShm shm) : IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys the buffers and the pool, and unmaps and closes the memory.
+    /// </summary>
     public void Dispose() => Release();
 
     private bool AllocateFresh(int size)

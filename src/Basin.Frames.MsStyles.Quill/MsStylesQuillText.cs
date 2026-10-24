@@ -8,6 +8,10 @@ using SkiaSharp;
 
 namespace Basin.Frames.MsStyles.Quill;
 
+/// <summary>
+/// Draws and measures frame titles through Prowl.Quill fonts. It reads each theme face from the Skia font that
+/// <see cref="MsStylesFonts"/> resolves, and it uses a fallback face when Quill cannot read that font.
+/// </summary>
 public sealed class MsStylesQuillText : IMsStylesTextMetrics, IDisposable
 {
     private const int MaxFitted = 64;
@@ -20,6 +24,10 @@ public sealed class MsStylesQuillText : IMsStylesTextMetrics, IDisposable
     private readonly HashSet<Canvas> _prepared = [];
     private FontFile? _system;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MsStylesQuillText"/> class.
+    /// </summary>
+    /// <param name="fonts">The font matcher. This instance does not own it.</param>
     public MsStylesQuillText(MsStylesFonts fonts)
     {
         ArgumentNullException.ThrowIfNull(fonts);
@@ -29,14 +37,28 @@ public sealed class MsStylesQuillText : IMsStylesTextMetrics, IDisposable
 
     internal MsStylesSkiaText Raster { get; }
 
+    /// <summary>
+    /// Releases the Skia text engine that draws the glow. It does not dispose <see cref="Fonts"/>.
+    /// </summary>
     public void Dispose() => Raster.Dispose();
 
+    /// <summary>
+    /// Gets the font matcher that resolves the theme's font names to installed faces.
+    /// </summary>
     public MsStylesFonts Fonts { get; }
 
+    /// <summary>
+    /// Gets or sets the face that draws a title when Quill cannot read the matched font. When it is <see langword="null"/>, the canvas's system face draws it.
+    /// </summary>
     public FontFile? Fallback { get; set; }
 
     internal Canvas? Canvas { get; set; }
 
+    /// <summary>
+    /// Gets the Quill font for a theme font. The result is cached for each resolved face, including a failure.
+    /// </summary>
+    /// <param name="font">The theme font.</param>
+    /// <returns>The font, or <see langword="null"/> when Quill cannot read the matched face.</returns>
     public FontFile? FileFor(in MsStylesFont font)
     {
         var typeface = Fonts.Resolve(font);
@@ -69,6 +91,13 @@ public sealed class MsStylesQuillText : IMsStylesTextMetrics, IDisposable
         return file;
     }
 
+    /// <summary>
+    /// Measures the width of a text in one line. Outside a draw no canvas is set, so the result is an estimate of half the pixel size for each character.
+    /// </summary>
+    /// <param name="text">The text to measure.</param>
+    /// <param name="font">The theme font.</param>
+    /// <param name="pixels">The font size in pixels.</param>
+    /// <returns>The width in pixels, or 0 for an empty text.</returns>
     public float Measure(string text, in MsStylesFont font, float pixels)
     {
         if (string.IsNullOrEmpty(text))

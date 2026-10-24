@@ -2,8 +2,18 @@ using Basin.Ipc;
 
 namespace Basin.Greetd.Ipc;
 
+/// <summary>
+/// Registers the <c>greeter/*</c> control socket methods that drive a <see cref="GreeterFlow"/>, each with its stdin word.
+/// </summary>
 public static class GreeterIpc
 {
+    /// <summary>
+    /// Registers <c>users</c>, <c>sessions</c>, <c>select</c>, <c>other</c>, <c>answer</c>, <c>cancel</c>, <c>dismiss</c>, <c>session</c>, <c>layout</c>, <c>command</c> and <c>state</c> under <c>greeter/</c>.
+    /// A refused request prints an <c>ERR</c> line. A <c>session</c> or <c>layout</c> counts as a choice by the user.
+    /// </summary>
+    /// <param name="methods">The registry that receives the methods.</param>
+    /// <param name="report">The line report that prints each method's output.</param>
+    /// <param name="flow">The flow that the methods drive.</param>
     public static void Register(IpcMethodRegistry methods, IpcLineReport report, GreeterFlow flow)
     {
         ArgumentNullException.ThrowIfNull(methods);

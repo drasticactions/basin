@@ -8,12 +8,24 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Serves <c>org.freedesktop.impl.portal.InputCapture</c> over an <see cref="IInputCaptureProvider"/>. It offers keyboard and pointer capture, and an EIS connection for the captured input.
+/// </summary>
 public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandler, IInputCaptureProperties
 {
+    /// <summary>
+    /// The portal capability bit for the keyboard.
+    /// </summary>
     public const uint CapabilityKeyboard = 1;
 
+    /// <summary>
+    /// The portal capability bit for the pointer.
+    /// </summary>
     public const uint CapabilityPointer = 2;
 
+    /// <summary>
+    /// The portal capability bit for the touchscreen. The module does not offer it.
+    /// </summary>
     public const uint CapabilityTouchscreen = 4;
 
     private IPortalPrompts _prompts = null!;
@@ -21,24 +33,39 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
     private OutputLayout _layout = null!;
     private PortalOptions _options = new();
 
+    /// <inheritdoc/>
     public override string WireInterface => "org.freedesktop.impl.portal.InputCapture";
 
+    /// <inheritdoc/>
     public override int Version => 2;
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Capabilities => [typeof(IAppInfoResolver)];
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Drivers => [typeof(IPortalPrompts), typeof(IInputCaptureProvider), typeof(OutputLayout)];
 
     internal override DBusHandler.DBusInterface Interface => DBusHandler.DBusInterface.OrgFreedesktopImplPortalInputCapture;
 
+    /// <summary>
+    /// Gets the capability bits that the module offers: the keyboard and the pointer.
+    /// </summary>
     public uint SupportedCapabilities => CapabilityKeyboard | CapabilityPointer;
 
     uint IInputCaptureProperties.Version => (uint)Version;
 
+    /// <summary>
+    /// Gets or sets the function that gives the layout position of the cursor for the <c>Deactivated</c> signal. With none, the signal has no position.
+    /// </summary>
     public Func<(double X, double Y)?>? CursorPositionSource { get; set; }
 
     internal (double X, double Y)? CursorPosition => CursorPositionSource?.Invoke();
 
+    /// <summary>
+    /// Offers the interface only when a bus is registered and libeis can load.
+    /// </summary>
+    /// <param name="services">The registry after all defaults are seeded.</param>
+    /// <returns><see langword="false"/> when no bus is registered or libeis is missing.</returns>
     public override bool ShouldInstall(BasinServices services)
     {
         if (!base.ShouldInstall(services))
@@ -55,6 +82,7 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return false;
     }
 
+    /// <inheritdoc/>
     protected override void Bind(BasinServices services)
     {
         _prompts = services.Require<IPortalPrompts>();
@@ -67,6 +95,16 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
 
     ValueTask IInputCaptureHandler.HandleGetAllPropertiesAsync(IInputCaptureHandler.GetAllPropertiesContext context) => context.Handle(this);
 
+    /// <summary>
+    /// Creates and starts a version 1 session with no prompt. It grants the supported capabilities from the <c>capabilities</c> option.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The session object path.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="parentWindow">The parent window identifier, which is not used.</param>
+    /// <param name="options">The <c>capabilities</c> option. With none, all supported capabilities are requested.</param>
+    /// <returns>The granted <c>capabilities</c>, or <see cref="PortalResponse.Other"/> when the provider refuses a capture session.</returns>
+    /// <exception cref="InvalidOperationException">The module is not installed.</exception>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {
@@ -85,12 +123,30 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return ValueTask.FromResult((PortalResponse.Success, Results.With("capabilities", VariantValue.UInt32(ToTypes(requested)))));
     }
 
+    /// <summary>
+    /// Creates a version 2 session that does not start until <see cref="StartAsync"/>.
+    /// </summary>
+    /// <param name="sessionHandle">The session object path.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns>Empty results.</returns>
+    /// <exception cref="InvalidOperationException">The module is not installed.</exception>
     public ValueTask<Dictionary<string, VariantValue>> CreateSession2Async(ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
         _ = Create(sessionHandle, appId);
         return ValueTask.FromResult(Results.Empty);
     }
 
+    /// <summary>
+    /// Starts a version 2 session. Restore data that covers the request skips the prompt. Otherwise the user must confirm.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">A session from <see cref="CreateSession2Async"/> that has not started.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>capabilities</c>, <c>persist_mode</c>, <c>restore_data</c> and <c>modal</c> options.</param>
+    /// <returns>The granted capabilities, the clipboard state and the restore data, or a cancel or other response.</returns>
+    /// <exception cref="DBusErrorReplyException">The <c>capabilities</c> option is absent or asks for no supported capability.</exception>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> StartAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {
@@ -182,6 +238,14 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         }
     }
 
+    /// <summary>
+    /// Lists one zone per output in layout coordinates, with the current zone set serial.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The input capture session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns>The <c>zones</c> and <c>zone_set</c> results, or <see cref="PortalResponse.Other"/> when the session does not exist.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> GetZonesAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
@@ -205,6 +269,16 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return ValueTask.FromResult((PortalResponse.Success, results));
     }
 
+    /// <summary>
+    /// Replaces the barriers of a started session. Every barrier fails when the zone set is not current.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">A started input capture session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="barriers">The <c>barrier_id</c> and <c>position</c> of each barrier.</param>
+    /// <param name="zoneSet">The zone set serial that the barriers refer to.</param>
+    /// <returns>The ids of the barriers that failed, or <see cref="PortalResponse.Other"/> when the session has not started.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> SetPointerBarriersAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options,
         Dictionary<string, VariantValue>[] barriers, uint zoneSet)
@@ -238,6 +312,13 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return ValueTask.FromResult((PortalResponse.Success, Results.With("failed_barriers", VariantValue.Array(failed.ToArray()))));
     }
 
+    /// <summary>
+    /// Makes a started session wait for a barrier crossing. An unknown or unstarted session is ignored.
+    /// </summary>
+    /// <param name="sessionHandle">The input capture session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns><see cref="PortalResponse.Success"/> with empty results.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> EnableAsync(ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is InputCaptureSession { Engine: { } engine })
@@ -248,6 +329,13 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return ValueTask.FromResult((PortalResponse.Success, Results.Empty));
     }
 
+    /// <summary>
+    /// Ends any activation and stops a started session from waiting for a crossing. An unknown or unstarted session is ignored.
+    /// </summary>
+    /// <param name="sessionHandle">The input capture session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns><see cref="PortalResponse.Success"/> with empty results.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> DisableAsync(ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is InputCaptureSession { Engine: { } engine })
@@ -258,6 +346,13 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return ValueTask.FromResult((PortalResponse.Success, Results.Empty));
     }
 
+    /// <summary>
+    /// Ends an activation and can move the pointer. A release for an old activation is ignored.
+    /// </summary>
+    /// <param name="sessionHandle">The input capture session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">The <c>activation_id</c> and <c>cursor_position</c> options.</param>
+    /// <returns><see cref="PortalResponse.Success"/> with empty results.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> ReleaseAsync(ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is InputCaptureSession { Engine: { } engine })
@@ -279,6 +374,14 @@ public sealed class PortalInputCaptureModule : PortalModule, IInputCaptureHandle
         return ValueTask.FromResult((PortalResponse.Success, Results.Empty));
     }
 
+    /// <summary>
+    /// Creates an EIS client connection for the captured input of a started session.
+    /// </summary>
+    /// <param name="sessionHandle">A started input capture session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns>The client socket, which the caller owns.</returns>
+    /// <exception cref="DBusErrorReplyException">The session has not started, or the provider gives no connection.</exception>
     public ValueTask<SafeHandle> ConnectToEISAsync(ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is not InputCaptureSession { Engine: { } engine })

@@ -6,6 +6,10 @@ using Wayland;
 
 namespace Basin.Portal.Client;
 
+/// <summary>
+/// Implements <see cref="IInputCaptureProvider"/> over <c>hyprland_input_capture_v1</c> for a portal client.
+/// The compositor owns the barriers and the EIS connection, and the portal only forwards them.
+/// </summary>
 public sealed class HyprlandInputCaptureProvider : IInputCaptureProvider, IDisposable
 {
     private readonly HyprlandInputCaptureManagerV1 _manager;
@@ -13,6 +17,11 @@ public sealed class HyprlandInputCaptureProvider : IInputCaptureProvider, IDispo
     private readonly List<Handle> _handles = [];
     private uint _zoneSet;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HyprlandInputCaptureProvider"/> class. It listens for output changes until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="manager">The bound input capture manager.</param>
+    /// <param name="outputs">The outputs whose changes start a new zone set.</param>
     public HyprlandInputCaptureProvider(HyprlandInputCaptureManagerV1 manager, ClientOutputs outputs)
     {
         _manager = manager;
@@ -20,8 +29,17 @@ public sealed class HyprlandInputCaptureProvider : IInputCaptureProvider, IDispo
         outputs.Changed += OnOutputsChanged;
     }
 
+    /// <summary>
+    /// Gets the serial of the current zone set. It increases each time the outputs change, and barriers for an earlier set are stale.
+    /// </summary>
     public uint ZoneSet => _zoneSet;
 
+    /// <summary>
+    /// Opens an input capture session in the compositor for one portal session.
+    /// </summary>
+    /// <param name="front">The portal session that receives activations and zone changes.</param>
+    /// <param name="handle">The portal session handle, which the compositor receives as the session name.</param>
+    /// <returns>A new handle. It is never <see langword="null"/>, and the caller must dispose it.</returns>
     public IInputCaptureHandle? Open(IInputCaptureFront front, string handle)
     {
         var session = _manager.CreateSession(handle);
@@ -30,6 +48,9 @@ public sealed class HyprlandInputCaptureProvider : IInputCaptureProvider, IDispo
         return opened;
     }
 
+    /// <summary>
+    /// Stops listening for output changes. It does not close the open handles.
+    /// </summary>
     public void Dispose() => _outputs.Changed -= OnOutputsChanged;
 
     private void OnOutputsChanged()

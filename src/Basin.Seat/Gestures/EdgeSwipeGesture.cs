@@ -1,16 +1,29 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Runs an <see cref="EdgeSwipeRecognizer"/> as a member of the touch gesture chain, in layout coordinates.
+/// </summary>
 public sealed class EdgeSwipeGesture : ITouchGestures
 {
     private EdgeSwipeArea _area;
     private bool _active;
 
+    /// <summary>
+    /// Gets the recognizer. Set its thresholds before the first touch.
+    /// </summary>
     public EdgeSwipeRecognizer Recognizer { get; } = new();
 
+    /// <summary>
+    /// Gets or sets the handler that gives the area and receives the swipes. With no handler, every touch passes.
+    /// </summary>
     public IEdgeSwipeHandler? Handler { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the gesture tracks a candidate or a claimed swipe.
+    /// </summary>
     public bool IsActive => _active;
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Down(int id, uint timeMs, double x, double y)
     {
         if (_active || Handler is not { } handler || !handler.TryArea(x, y, out var area))
@@ -29,6 +42,7 @@ public sealed class EdgeSwipeGesture : ITouchGestures
         return TouchGestureVerdict.Pass;
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Motion(int id, uint timeMs, double x, double y)
     {
         if (!_active || id != Recognizer.ContactId)
@@ -58,6 +72,7 @@ public sealed class EdgeSwipeGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Up(int id, uint timeMs)
     {
         if (!_active || id != Recognizer.ContactId)
@@ -81,6 +96,7 @@ public sealed class EdgeSwipeGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public void Cancel()
     {
         if (_active)
@@ -90,6 +106,7 @@ public sealed class EdgeSwipeGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public int TakeWithheld(Span<EdgeSwipeSample> into)
     {
         var count = Recognizer.TakeWithheld(into);

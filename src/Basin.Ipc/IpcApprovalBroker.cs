@@ -2,6 +2,9 @@ using static Basin.Ipc.IpcLog;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// Turns held calls into approval requests that a subscribed connection or a local dialog answers. The server registers the <c>approval</c> group when it has a broker.
+/// </summary>
 public sealed class IpcApprovalBroker : IApprovalBroker
 {
     private readonly Dictionary<long, IpcApproval> _pending = [];
@@ -9,21 +12,45 @@ public sealed class IpcApprovalBroker : IApprovalBroker
     private IpcServer? _server;
     private long _nextId;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcApprovalBroker"/> class.
+    /// </summary>
+    /// <param name="timeout">The time after which an unanswered request is denied. The default is 60 seconds.</param>
     public IpcApprovalBroker(TimeSpan? timeout = null)
     {
         Timeout = timeout ?? TimeSpan.FromSeconds(60);
     }
 
+    /// <summary>
+    /// Gets or sets the time after which an unanswered request is denied. A new value applies to later requests.
+    /// </summary>
     public TimeSpan Timeout { get; set; }
 
+    /// <summary>
+    /// Gets the requests that wait for an answer.
+    /// </summary>
     public IReadOnlyCollection<IpcApproval> Pending => _pending.Values;
 
+    /// <summary>
+    /// Gets the methods that an <see cref="IpcApprovalAnswer.AllowRun"/> answer allowed for the rest of the run.
+    /// </summary>
     public IReadOnlyCollection<string> AllowedForRun => _allowedForRun;
 
+    /// <summary>
+    /// Occurs after a request starts and its event goes to the subscribers. A compositor with its own dialog handles it and calls <see cref="Answer"/>.
+    /// </summary>
     public event Action<IpcApproval>? Requested;
 
+    /// <inheritdoc/>
     public bool IsAllowedForRun(string method) => _allowedForRun.Contains(method);
 
+    /// <summary>
+    /// Starts an approval request for a held call. With no subscriber to <c>approval/requested</c> and no <see cref="Requested"/> handler, the call is denied at once.
+    /// </summary>
+    /// <param name="call">The call that the interceptor held.</param>
+    /// <param name="reason">A sentence that tells the person why the approval is necessary.</param>
+    /// <returns>The request, which is already answered when no one can answer it.</returns>
+    /// <exception cref="InvalidOperationException">The server is not started.</exception>
     public IpcApproval Request(IpcHeldCall call, string reason)
     {
         ArgumentNullException.ThrowIfNull(call);
@@ -56,6 +83,13 @@ public sealed class IpcApprovalBroker : IApprovalBroker
         return approval;
     }
 
+    /// <summary>
+    /// Answers a pending request. The first answer wins. The broker records the answer, then allows or denies the call, then raises <see cref="IpcApproval.Answered"/>.
+    /// </summary>
+    /// <param name="id">The request id.</param>
+    /// <param name="answer"><see cref="IpcApprovalAnswer.AllowOnce"/>, <see cref="IpcApprovalAnswer.AllowRun"/> or <see cref="IpcApprovalAnswer.Deny"/>.</param>
+    /// <returns><see langword="false"/> when no pending request has the id.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="answer"/> is a timeout or a missing answerer.</exception>
     public bool Answer(long id, IpcApprovalAnswer answer)
     {
         if (answer is not (IpcApprovalAnswer.AllowOnce or IpcApprovalAnswer.AllowRun or IpcApprovalAnswer.Deny))

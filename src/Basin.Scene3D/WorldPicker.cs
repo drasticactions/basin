@@ -2,18 +2,35 @@ using System.Numerics;
 
 namespace Basin.Scene3D;
 
+/// <summary>
+/// Casts rays against the windows and room blockers of a <see cref="World"/>, and gives the nearest hit.
+/// </summary>
 public sealed class WorldPicker
 {
+    /// <summary>
+    /// The distance in meters that each layer level sits in front of the level below it.
+    /// </summary>
     public const float LayerLift = 0.0005f;
 
     private readonly World _world;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorldPicker"/> class.
+    /// </summary>
+    /// <param name="world">The world to pick in.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="world"/> is <see langword="null"/>.</exception>
     public WorldPicker(World world)
     {
         ArgumentNullException.ThrowIfNull(world);
         _world = world;
     }
 
+    /// <summary>
+    /// Finds the nearest window, frame, plaque or blocker that a ray hits. A window that is hidden or not pickable is skipped. It does not allocate.
+    /// </summary>
+    /// <param name="ray">The world-space ray, for example from <see cref="WorldView.RayAt"/>.</param>
+    /// <param name="visible">The visible set to limit the test to, or <see langword="null"/> to test every window and room.</param>
+    /// <returns>The nearest hit, or <see cref="WorldHit.Miss"/>.</returns>
     public WorldHit Pick(in WorldRay ray, WorldVisibleSet? visible = null)
     {
         var best = WorldHit.Miss;
@@ -44,6 +61,14 @@ public sealed class WorldPicker
         return best;
     }
 
+    /// <summary>
+    /// Casts a ray against one window: its layers from the top level down, then its frame and plaque, or its slab.
+    /// It ignores <see cref="WorldWindow.Visible"/> and <see cref="WorldWindow.Pickable"/>.
+    /// </summary>
+    /// <param name="window">The window to test.</param>
+    /// <param name="ray">The world-space ray.</param>
+    /// <param name="hit">The nearest hit on the window, or <see cref="WorldHit.Miss"/>.</param>
+    /// <returns><see langword="true"/> when the ray hits the window.</returns>
     public static bool TryWindow(WorldWindow window, in WorldRay ray, out WorldHit hit)
     {
         hit = WorldHit.Miss;
@@ -106,6 +131,15 @@ public sealed class WorldPicker
         return found;
     }
 
+    /// <summary>
+    /// Intersects a ray with the plane of one layer, with no bounds test. A drag that leaves the window then keeps its coordinates.
+    /// </summary>
+    /// <param name="window">The window that holds the layer.</param>
+    /// <param name="layer">The index of the layer in <see cref="WorldWindow.Layers"/>.</param>
+    /// <param name="ray">The world-space ray.</param>
+    /// <param name="surfaceX">The x coordinate relative to the layer, in logical pixels.</param>
+    /// <param name="surfaceY">The y coordinate relative to the layer, in logical pixels.</param>
+    /// <returns><see langword="false"/> when the layer index is out of range, the model is not invertible, or the ray is parallel to the plane.</returns>
     public static bool TryOnPlane(WorldWindow window, int layer, in WorldRay ray, out double surfaceX, out double surfaceY)
     {
         surfaceX = surfaceY = 0;

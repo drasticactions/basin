@@ -3,11 +3,24 @@ using Basin.Config;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// Translates Avalonia keys and modifiers into the names and masks that <see cref="TriggerSyntax"/> uses.
+/// </summary>
 public static class AvaloniaKeys
 {
+    /// <summary>
+    /// Tells whether a key is a modifier or a lock key, which cannot be the main key of a chord.
+    /// </summary>
+    /// <param name="key">The Avalonia key.</param>
+    /// <returns><see langword="true"/> for Shift, Ctrl, Alt, the Windows keys and the lock keys.</returns>
     public static bool IsModifier(Key key) => key is Key.LeftShift or Key.RightShift or Key.LeftCtrl or Key.RightCtrl
         or Key.LeftAlt or Key.RightAlt or Key.LWin or Key.RWin or Key.CapsLock or Key.NumLock or Key.Scroll;
 
+    /// <summary>
+    /// Converts Avalonia modifier flags into a <see cref="Modifiers"/> mask. Meta becomes <see cref="Modifiers.Super"/>.
+    /// </summary>
+    /// <param name="modifiers">The Avalonia modifier flags.</param>
+    /// <returns>The mask with Shift, Ctrl, Alt and Super.</returns>
     public static Modifiers ModifiersOf(KeyModifiers modifiers)
     {
         var result = Modifiers.None;
@@ -34,6 +47,11 @@ public static class AvaloniaKeys
         return result;
     }
 
+    /// <summary>
+    /// Gets the XKB keysym name for a key on a US layout, for example <c>a</c>, <c>F5</c> or <c>Return</c>.
+    /// </summary>
+    /// <param name="key">The Avalonia key.</param>
+    /// <returns>The keysym name. A key with no mapping gives the name of the <see cref="Key"/> value, which can be no keysym.</returns>
     public static string KeysymNameOf(Key key)
     {
         if (key >= Key.A && key <= Key.Z)

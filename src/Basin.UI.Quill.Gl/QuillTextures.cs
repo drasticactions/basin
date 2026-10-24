@@ -3,6 +3,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// The pool of RGBA GL textures that the surfaces of a <see cref="QuillUIHost"/> share. Each call enters the GL context of the host.
+/// </summary>
 public sealed unsafe class QuillTextures : IDisposable
 {
     private readonly GL _gl;
@@ -16,8 +19,18 @@ public sealed unsafe class QuillTextures : IDisposable
         _context = context;
     }
 
+    /// <summary>
+    /// Gets the number of live textures in the pool.
+    /// </summary>
     public int Count => _textures.Count;
 
+    /// <summary>
+    /// Creates an empty RGBA texture with linear filtering and edge clamping.
+    /// </summary>
+    /// <param name="width">The width in texels. A value below 1 becomes 1.</param>
+    /// <param name="height">The height in texels. A value below 1 becomes 1.</param>
+    /// <returns>The texture, which the pool owns until <see cref="Destroy"/>.</returns>
+    /// <exception cref="ObjectDisposedException">The pool is disposed.</exception>
     public QuillGlTexture Create(int width, int height)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -40,6 +53,12 @@ public sealed unsafe class QuillTextures : IDisposable
         return texture;
     }
 
+    /// <summary>
+    /// Copies RGBA pixels into a part of a texture now. The call does nothing when the part is empty, the data is too short, or the pool is disposed.
+    /// </summary>
+    /// <param name="texture">The texture to write.</param>
+    /// <param name="bounds">The part of the texture, in texels.</param>
+    /// <param name="rgba">The tightly packed RGBA bytes of the part.</param>
     public void Update(QuillGlTexture texture, in Box bounds, ReadOnlySpan<byte> rgba)
     {
         ArgumentNullException.ThrowIfNull(texture);
@@ -66,6 +85,10 @@ public sealed unsafe class QuillTextures : IDisposable
         _gl.BindTexture(TextureTarget.Texture2D, 0);
     }
 
+    /// <summary>
+    /// Deletes a texture of the pool. A texture that the pool does not hold is ignored.
+    /// </summary>
+    /// <param name="texture">The texture to delete.</param>
     public void Destroy(QuillGlTexture texture)
     {
         ArgumentNullException.ThrowIfNull(texture);
@@ -79,6 +102,9 @@ public sealed unsafe class QuillTextures : IDisposable
         texture.Retire();
     }
 
+    /// <summary>
+    /// Deletes every texture of the pool.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

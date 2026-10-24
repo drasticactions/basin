@@ -1,7 +1,13 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Holds the full-screen zoom pixel shader in GLSL, SkSL and SPIR-V. It scales the frame with sharpened bilinear weights, or draws a pixel grid.
+/// </summary>
 public static class ZoomShader
 {
+    /// <summary>
+    /// The uniforms of the shader: the zoom factor, the grid switch above 0.5, and the translation in output pixels.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("zoom", PixelShaderUniformType.Float),
@@ -11,6 +17,10 @@ public static class ZoomShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the shader source for every dialect. The SPIR-V loads from an embedded resource on the first read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The SPIR-V resource is missing from the assembly.</exception>
     public static PixelShaderSource Source => new()
     {
         SamplesTexture = true,

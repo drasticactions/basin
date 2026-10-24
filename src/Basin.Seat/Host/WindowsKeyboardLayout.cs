@@ -4,6 +4,10 @@ using System.Text;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Reads the active Windows keyboard layout through <c>ToUnicodeEx</c>.
+/// It polls for a layout change, because a library with no window gets no change message.
+/// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class WindowsKeyboardLayout : IHostKeyboardLayout, IDisposable
 {
@@ -17,18 +21,30 @@ public sealed class WindowsKeyboardLayout : IHostKeyboardLayout, IDisposable
         _poll = new Timer(_ => Poll(), null, PollMillis, PollMillis);
     }
 
+    /// <summary>
+    /// The poll interval for a layout change, in milliseconds.
+    /// </summary>
     public const int PollMillis = 500;
 
+    /// <inheritdoc/>
     public string Name { get; private set; }
 
+    /// <summary>
+    /// Occurs when a poll finds a different layout. It occurs on a timer thread.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Creates a reader for the layout of the foreground window, or of the calling thread when there is no foreground window.
+    /// </summary>
+    /// <returns>The reader, or <see langword="null"/> when no layout is active.</returns>
     public static WindowsKeyboardLayout? TryCreate()
     {
         var layout = CurrentLayout();
         return layout == 0 ? null : new WindowsKeyboardLayout(layout);
     }
 
+    /// <inheritdoc/>
     public bool TryReadKeymapText(out string xkb)
     {
         var levels = new List<HostKeymapWriter.Levels>();
@@ -77,6 +93,9 @@ public sealed class WindowsKeyboardLayout : IHostKeyboardLayout, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Stops the poll timer.
+    /// </summary>
     public void Dispose() => _poll.Dispose();
 
     private void Poll()

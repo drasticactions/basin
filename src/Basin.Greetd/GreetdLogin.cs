@@ -2,6 +2,10 @@ using Basin.Diagnostics;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// The login state machine over one <see cref="GreetdClient"/>. It sends <c>cancel_session</c> after each error, so <see cref="Start"/> works again from <see cref="GreetdLoginState.Failed"/>.
+/// Every call must come from the thread that created it.
+/// </summary>
 public sealed class GreetdLogin : IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -12,6 +16,10 @@ public sealed class GreetdLogin : IDisposable
     private bool _cancelQueued;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GreetdLogin"/> class. It subscribes to the client but does not own it.
+    /// </summary>
+    /// <param name="client">The connection to greetd. Only this login must send on it.</param>
     public GreetdLogin(GreetdClient client)
     {
         ArgumentNullException.ThrowIfNull(client);
@@ -29,24 +37,57 @@ public sealed class GreetdLogin : IDisposable
         Cancel,
     }
 
+    /// <summary>
+    /// Gets the current state. Each change raises <see cref="Changed"/>.
+    /// </summary>
     public GreetdLoginState State { get; private set; }
 
+    /// <summary>
+    /// Gets the user of the current or the last session, or <see langword="null"/> after a cancel completes.
+    /// </summary>
     public string? User { get; private set; }
 
+    /// <summary>
+    /// Gets the kind of the last auth message. It is valid in <see cref="GreetdLoginState.Prompting"/>.
+    /// </summary>
     public GreetdAuthMessageType PromptType { get; private set; }
 
+    /// <summary>
+    /// Gets the text of the open auth message, or <see langword="null"/> when no message is open.
+    /// </summary>
     public string? PromptText { get; private set; }
 
+    /// <summary>
+    /// Gets the kind of the last failure. It is valid in <see cref="GreetdLoginState.Failed"/>.
+    /// </summary>
     public GreetdErrorType FailureKind { get; private set; }
 
+    /// <summary>
+    /// Gets the description of the last failure, or <see langword="null"/> after <see cref="Start"/>.
+    /// </summary>
     public string? FailureDescription { get; private set; }
 
+    /// <summary>
+    /// Gets the connection that this login drives.
+    /// </summary>
     public GreetdClient Client => _client;
 
+    /// <summary>
+    /// Occurs after each state change, also when the new state is the same as the old one. It runs on the loop.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Start"/> can begin a session: the state is idle or failed and the connection is open.
+    /// </summary>
     public bool CanStart => State is GreetdLoginState.Idle or GreetdLoginState.Failed && !_client.IsClosed;
 
+    /// <summary>
+    /// Sends <c>create_session</c> for <paramref name="user"/> and enters <see cref="GreetdLoginState.Waiting"/>.
+    /// </summary>
+    /// <param name="user">The login name.</param>
+    /// <exception cref="ArgumentException"><paramref name="user"/> is null or empty.</exception>
+    /// <exception cref="InvalidOperationException"><see cref="CanStart"/> is false.</exception>
     public void Start(string user)
     {
         ArgumentException.ThrowIfNullOrEmpty(user);
@@ -64,6 +105,11 @@ public sealed class GreetdLogin : IDisposable
         Enter(GreetdLoginState.Waiting);
     }
 
+    /// <summary>
+    /// Answers a visible or secret prompt and enters <see cref="GreetdLoginState.Waiting"/>.
+    /// </summary>
+    /// <param name="utf8Response">The answer as UTF-8 bytes. The caller keeps ownership and clears it.</param>
+    /// <exception cref="InvalidOperationException">No visible or secret prompt is open.</exception>
     public void Answer(ReadOnlySpan<byte> utf8Response)
     {
         _thread.Assert();
@@ -78,6 +124,10 @@ public sealed class GreetdLogin : IDisposable
         Enter(GreetdLoginState.Waiting);
     }
 
+    /// <summary>
+    /// Replies to an info or error message with no answer and enters <see cref="GreetdLoginState.Waiting"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No info or error message is open.</exception>
     public void Acknowledge()
     {
         _thread.Assert();
@@ -91,6 +141,11 @@ public sealed class GreetdLogin : IDisposable
         Enter(GreetdLoginState.Waiting);
     }
 
+    /// <summary>
+    /// Sends <c>start_session</c> and enters <see cref="GreetdLoginState.Starting"/>. After <see cref="GreetdLoginState.Started"/> the greeter must exit within 5 seconds.
+    /// </summary>
+    /// <param name="command">The command and the environment of the session.</param>
+    /// <exception cref="InvalidOperationException">The state is not <see cref="GreetdLoginState.Ready"/>.</exception>
     public void StartSession(GreetdSessionCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -104,6 +159,10 @@ public sealed class GreetdLogin : IDisposable
         Enter(GreetdLoginState.Starting);
     }
 
+    /// <summary>
+    /// Cancels the open session and goes to <see cref="GreetdLoginState.Idle"/>. When a response is outstanding, the cancel waits for it.
+    /// It does nothing when the connection is closed or a session is starting or started.
+    /// </summary>
     public void Cancel()
     {
         _thread.Assert();
@@ -129,6 +188,9 @@ public sealed class GreetdLogin : IDisposable
         SendCancel();
     }
 
+    /// <summary>
+    /// Unsubscribes from the client. It sends nothing and does not dispose the client.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

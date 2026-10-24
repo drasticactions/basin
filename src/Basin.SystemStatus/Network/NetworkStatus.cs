@@ -4,10 +4,22 @@ using static Basin.SystemStatus.SystemStatusLog;
 
 namespace Basin.SystemStatus;
 
+/// <summary>
+/// Reads NetworkManager: the wireless switches, the primary connection, the first wireless device and its networks, and the saved connections. It also joins a network.
+/// </summary>
 public sealed class NetworkStatus : SystemStatusReader
 {
+    /// <summary>
+    /// The bus name of NetworkManager.
+    /// </summary>
     public const string ServiceName = "org.freedesktop.NetworkManager";
+    /// <summary>
+    /// The object path of the NetworkManager manager object.
+    /// </summary>
     public const string ManagerPath = "/org/freedesktop/NetworkManager";
+    /// <summary>
+    /// The object path of the NetworkManager settings object.
+    /// </summary>
     public const string SettingsPath = "/org/freedesktop/NetworkManager/Settings";
 
     private const string ManagerInterface = "org.freedesktop.NetworkManager";
@@ -27,22 +39,53 @@ public sealed class NetworkStatus : SystemStatusReader
     {
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the software switch for wireless is on.
+    /// </summary>
     public bool WirelessEnabled { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the hardware switch for wireless is on. It reads true when NetworkManager does not give the property.
+    /// </summary>
     public bool WirelessHardwareEnabled { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether NetworkManager has a wireless device. The join requests need one.
+    /// </summary>
     public bool HasWirelessDevice => _wirelessDevice is not null;
 
+    /// <summary>
+    /// Gets the type of the primary connection, for example <c>802-11-wireless</c>, or <see langword="null"/> when there is none.
+    /// </summary>
     public string? PrimaryConnectionType { get; private set; }
 
+    /// <summary>
+    /// Gets the kind of the primary connection.
+    /// </summary>
     public NetworkConnectionKind PrimaryKind { get; private set; }
 
+    /// <summary>
+    /// Gets the strength from 0 to 100 of the active access point when the primary connection is wireless, else <see langword="null"/>.
+    /// </summary>
     public int? PrimaryStrength { get; private set; }
 
+    /// <summary>
+    /// Gets the networks of the first wireless device, one per SSID, the active network first, then by strength. Each read replaces the list.
+    /// </summary>
     public IReadOnlyList<NetworkAccessPoint> AccessPoints { get; private set; } = [];
 
+    /// <summary>
+    /// Gets every saved connection profile that the reader can read. Each read replaces the list.
+    /// </summary>
     public IReadOnlyList<NetworkSavedConnection> SavedConnections { get; private set; } = [];
 
+    /// <summary>
+    /// Creates the reader and starts its first read in the background. The reader is created also when NetworkManager is not on the bus, and then it reads as not available.
+    /// </summary>
+    /// <param name="bus">The shared system bus connection.</param>
+    /// <param name="reason">Why no reader was created, or <see langword="null"/>.</param>
+    /// <returns>The reader, or <see langword="null"/> when the bus is disposed or has no address.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bus"/> is <see langword="null"/>.</exception>
     public static NetworkStatus? TryCreate(SystemStatusBus bus, out string? reason)
     {
         if (!CheckBus(bus, out reason))
@@ -55,6 +98,11 @@ public sealed class NetworkStatus : SystemStatusReader
         return status;
     }
 
+    /// <summary>
+    /// Sets the <c>WirelessEnabled</c> property of NetworkManager. A successful call also starts a read.
+    /// </summary>
+    /// <param name="enabled"><see langword="true"/> to turn wireless on.</param>
+    /// <returns>A task that completes on the compositor thread with <see langword="true"/> when NetworkManager accepted the call, or with <see langword="false"/> when it failed or the reader is not connected.</returns>
     public Task<bool> SetWirelessEnabled(bool enabled)
     {
         if (Connection is not { } connection)
@@ -65,6 +113,12 @@ public sealed class NetworkStatus : SystemStatusReader
         return CallAsync(DBusProperties.SetBool(connection, ServiceName, ManagerPath, ManagerInterface, "WirelessEnabled", enabled), "set WirelessEnabled");
     }
 
+    /// <summary>
+    /// Activates the saved connection of a network on the wireless device. A successful call also starts a read.
+    /// </summary>
+    /// <param name="accessPoint">The network to join.</param>
+    /// <returns>A task that completes on the compositor thread with <see langword="true"/> when NetworkManager accepted the request, or with <see langword="false"/> when it failed, the network has no saved connection, or there is no wireless device.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="accessPoint"/> is <see langword="null"/>.</exception>
     public Task<bool> ActivateSaved(NetworkAccessPoint accessPoint)
     {
         ArgumentNullException.ThrowIfNull(accessPoint);
@@ -81,6 +135,12 @@ public sealed class NetworkStatus : SystemStatusReader
         return CallAsync(writer.CreateMessage(), "ActivateConnection");
     }
 
+    /// <summary>
+    /// Adds and activates a connection with empty settings for an open network. NetworkManager fills in the rest from the access point.
+    /// </summary>
+    /// <param name="accessPoint">The open network to join.</param>
+    /// <returns>A task that completes on the compositor thread with <see langword="true"/> when NetworkManager accepted the request, or with <see langword="false"/> when it failed, the network is not open, or there is no wireless device.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="accessPoint"/> is <see langword="null"/>.</exception>
     public Task<bool> ActivateOpen(NetworkAccessPoint accessPoint)
     {
         ArgumentNullException.ThrowIfNull(accessPoint);
@@ -98,6 +158,14 @@ public sealed class NetworkStatus : SystemStatusReader
         return CallAsync(writer.CreateMessage(), "AddAndActivateConnection");
     }
 
+    /// <summary>
+    /// Adds a system-wide connection for a WPA or WPA3 personal network and follows it until it is active or fails. On a failure, it deletes the connection that it added.
+    /// </summary>
+    /// <param name="accessPoint">The network to join.</param>
+    /// <param name="passphrase">The passphrase as UTF-8 bytes. The method clears the span before it returns, in every case.</param>
+    /// <param name="timeout">The longest time to follow the connection, or <see langword="null"/> for 30 seconds.</param>
+    /// <returns>A task with the result. The task completes on the compositor thread unless the bus is disposed. A wrong passphrase gives a failed result, not an exception.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="accessPoint"/> is <see langword="null"/>.</exception>
     public Task<NetworkActivation> ActivateSecured(NetworkAccessPoint accessPoint, Span<byte> passphrase, TimeSpan? timeout = null)
     {
         ArgumentNullException.ThrowIfNull(accessPoint);

@@ -45,6 +45,20 @@
     <PackageReference Update="@(_BasinSatoriPackage)" Version="" />
   </ItemGroup>
 
+  <PropertyGroup>
+    <_BasinDocsGate>$([System.String]::Copy('$(MSBuildProjectDirectory)/').Replace('\','/').StartsWith($([System.String]::Copy('$(RepoRoot)src/').Replace('\','/'))))</_BasinDocsGate>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(_BasinDocsGate)' == 'true'">
+    <NoWarn>$(NoWarn.Replace('CS1591', ''))</NoWarn>
+    <MSBuildWarningsAsMessages>$(MSBuildWarningsAsMessages.Replace('CS1591', ''))</MSBuildWarningsAsMessages>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(_BasinDocsGate)' == 'true'">
+    <PackageReference Include="StyleCop.Analyzers" PrivateAssets="all" />
+    <AdditionalFiles Include="$(RepoRoot)stylecop.json" Link="stylecop.json" />
+  </ItemGroup>
+
   <Target Name="VerifyProtocolXml" BeforeTargets="CoreCompile">
     <Error Condition="'@(AdditionalFiles)' != '' and !Exists('%(AdditionalFiles.Identity)')"
            Text="Protocol XML not found: %(AdditionalFiles.Identity)." />

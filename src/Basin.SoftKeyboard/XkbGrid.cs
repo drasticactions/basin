@@ -4,6 +4,9 @@ using Xkb;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// Builds keyboard layouts from an xkb keymap, for a language that the built-in layouts do not cover.
+/// </summary>
 public static class XkbGrid
 {
     private static readonly uint[] NumberRow = [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 124];
@@ -11,6 +14,15 @@ public static class XkbGrid
     private static readonly uint[] HomeRow = [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 43];
     private static readonly uint[] BottomRow = [44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 89];
 
+    /// <summary>
+    /// Builds the LunaCE-shaped layout with the id <see cref="KeyboardLayouts.Xkb"/>. The rows read the keymap at shift levels 1 and 2, and a key with no printable character leaves no cell.
+    /// </summary>
+    /// <param name="keymap">The seat's keymap.</param>
+    /// <param name="layoutIndex">The xkb layout index to read.</param>
+    /// <param name="symbols">The layout that gives the letters' alternates, the bottom rows and the <c>.com</c> list, normally US QWERTY.</param>
+    /// <param name="language">The language code, or <see langword="null"/> to read it from the xkb layout's description.</param>
+    /// <returns>A new layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keymap"/> or <paramref name="symbols"/> is <see langword="null"/>.</exception>
     public static KeyboardLayout Build(XkbKeymap keymap, uint layoutIndex, KeyboardLayout symbols, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(keymap);
@@ -42,6 +54,15 @@ public static class XkbGrid
     private static readonly uint[] FullHomeRow = [30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40];
     private static readonly uint[] FullBottomRow = [44, 45, 46, 47, 48, 49, 50, 51, 52, 53];
 
+    /// <summary>
+    /// Builds the Windows 8 standard shape for the keymap, with the id <c>xkb-standard</c>. Only letters replace the template's letter keys.
+    /// </summary>
+    /// <param name="keymap">The seat's keymap.</param>
+    /// <param name="layoutIndex">The xkb layout index to read.</param>
+    /// <param name="template">The template layout, or <see langword="null"/> for the built-in en-US standard layout.</param>
+    /// <param name="language">The language code, or <see langword="null"/> to read it from the xkb layout's description.</param>
+    /// <returns>A new layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keymap"/> is <see langword="null"/>.</exception>
     public static KeyboardLayout Standard(XkbKeymap keymap, uint layoutIndex, KeyboardLayout? template = null, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(keymap);
@@ -49,6 +70,15 @@ public static class XkbGrid
         return Shape(keymap, layoutIndex, template, "xkb-standard", language, [TopRow, HomeRow, BottomRow], lettersOnly: true);
     }
 
+    /// <summary>
+    /// Builds the Windows 8 full shape for the keymap, with the id <c>xkb-full</c>. Every printable key replaces the template's text keys.
+    /// </summary>
+    /// <param name="keymap">The seat's keymap.</param>
+    /// <param name="layoutIndex">The xkb layout index to read.</param>
+    /// <param name="template">The template layout, or <see langword="null"/> for the built-in en-US full layout.</param>
+    /// <param name="language">The language code, or <see langword="null"/> to read it from the xkb layout's description.</param>
+    /// <returns>A new layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="keymap"/> is <see langword="null"/>.</exception>
     public static KeyboardLayout Full(XkbKeymap keymap, uint layoutIndex, KeyboardLayout? template = null, string? language = null)
     {
         ArgumentNullException.ThrowIfNull(keymap);

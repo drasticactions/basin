@@ -6,14 +6,26 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>xdg_session_manager_v1</c> global. It names toplevel sessions and restores saved state through <see cref="ISessionStore"/>.
+/// </summary>
 public sealed class SessionManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly ISessionStore? _store;
     private readonly Dictionary<string, Session> _live = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SessionManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="store">The session store, or <see langword="null"/> to give clients sessions that are not saved.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public SessionManager(WlServerDisplay display, ISessionStore? store)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -21,10 +33,19 @@ public sealed class SessionManager : IDisposable
         _global = display.CreateGlobal(XdgSessionManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a client adds or restores a toplevel in a live session. The arguments are the session id, the toplevel name and the toplevel.
+    /// </summary>
     public event Action<string, string, XdgToplevelWindow>? ToplevelAdded;
 
+    /// <summary>
+    /// Occurs when a client removes a toplevel from a session, after the store forgets it. The arguments are the session id and the toplevel name.
+    /// </summary>
     public event Action<string, string>? ToplevelRemoved;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

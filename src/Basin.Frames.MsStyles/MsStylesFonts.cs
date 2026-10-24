@@ -5,6 +5,9 @@ using SkiaSharp;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// Matches the font names in a theme to installed Skia typefaces. It tries the name, the name without a weight suffix, the aliases in <see cref="MsStylesFontAliases"/>, the fallback, and then the default sans.
+/// </summary>
 public sealed class MsStylesFonts : IDisposable
 {
     private static readonly BasinLogger Log = BasinLog.For("msstyles");
@@ -23,16 +26,33 @@ public sealed class MsStylesFonts : IDisposable
     private readonly SKFontManager _manager;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MsStylesFonts"/> class.
+    /// </summary>
+    /// <param name="fallback">The consumer's typeface for a font that has no installed match. This instance does not own it.</param>
+    /// <param name="manager">The font manager to search, or <see langword="null"/> for the default manager.</param>
     public MsStylesFonts(SKTypeface? fallback = null, SKFontManager? manager = null)
     {
         Fallback = fallback;
         _manager = manager ?? SKFontManager.Default;
     }
 
+    /// <summary>
+    /// Gets the consumer's typeface for a font that has no installed match.
+    /// </summary>
     public SKTypeface? Fallback { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether to search the installed fonts. When false, every font resolves to <see cref="Fallback"/> or the default sans.
+    /// </summary>
     public bool UseSystemFonts { get; init; } = true;
 
+    /// <summary>
+    /// Gets the typeface for a theme font. The result is cached by face, weight and slant, and each substitution is logged once for each family.
+    /// </summary>
+    /// <param name="font">The theme font.</param>
+    /// <returns>The typeface. This instance owns it, unless it is <see cref="Fallback"/> or the Skia default.</returns>
+    /// <exception cref="ObjectDisposedException">The instance is disposed.</exception>
     public SKTypeface Resolve(in MsStylesFont font)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -136,6 +156,9 @@ public sealed class MsStylesFonts : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases the typefaces that the matcher found. It does not release <see cref="Fallback"/>.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

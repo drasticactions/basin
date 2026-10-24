@@ -4,6 +4,9 @@ using Native = Libinput.Native;
 
 namespace Basin.Backend.Libinput;
 
+/// <summary>
+/// Implements <see cref="IInputDeviceConfiguration"/> straight over libinput. Each device gets an ID that stays valid until libinput removes it.
+/// </summary>
 public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfiguration
 {
     private readonly Dictionary<ulong, InputDevice> _devices = [];
@@ -23,20 +26,31 @@ public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfigurati
         backend.DeviceRemoved += Forget;
     }
 
+    /// <inheritdoc/>
     public event Action<InputDeviceInfo>? DeviceAdded;
 
+    /// <inheritdoc/>
     public event Action<ulong>? DeviceRemoved;
 
+    /// <inheritdoc/>
     public event Action<ulong, InputSetting>? Changed;
 
+    /// <summary>Finds the device that has the given ID.</summary>
+    /// <param name="id">The device ID from this configuration.</param>
+    /// <returns>The device, or <see langword="null"/> when the ID is unknown or the device was removed.</returns>
     public InputDevice? DeviceFor(ulong id) => _devices.GetValueOrDefault(id);
 
+    /// <summary>Finds the ID of a device.</summary>
+    /// <param name="device">The device.</param>
+    /// <returns>The device ID, or 0 when the configuration does not track the device.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public ulong IdFor(InputDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
         return _ids.GetValueOrDefault(device);
     }
 
+    /// <inheritdoc/>
     public int Enumerate(Span<InputDeviceInfo> devices)
     {
         if (_devices.Count > devices.Length)
@@ -53,6 +67,7 @@ public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfigurati
         return written;
     }
 
+    /// <inheritdoc/>
     public InputSettingSupport Support(ulong deviceId, InputSetting setting)
     {
         if (!_devices.TryGetValue(deviceId, out var device) || device.Native.IsDisposed)
@@ -115,12 +130,15 @@ public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfigurati
         }
     }
 
+    /// <inheritdoc/>
     public bool TryGet(ulong deviceId, InputSetting setting, out InputSettingValue value) =>
         Read(deviceId, setting, current: true, out value);
 
+    /// <inheritdoc/>
     public bool TryGetDefault(ulong deviceId, InputSetting setting, out InputSettingValue value) =>
         Read(deviceId, setting, current: false, out value);
 
+    /// <inheritdoc/>
     public InputSettingResult Set(ulong deviceId, InputSetting setting, in InputSettingValue value)
     {
         if (!_devices.TryGetValue(deviceId, out var device))
@@ -144,6 +162,7 @@ public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfigurati
         return outcome;
     }
 
+    /// <inheritdoc/>
     public InputSettingResult Reset(ulong deviceId, InputSetting setting)
     {
         if (!_devices.ContainsKey(deviceId))
@@ -164,6 +183,7 @@ public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfigurati
         return Set(deviceId, setting, fallback);
     }
 
+    /// <inheritdoc/>
     public InputSettingResult SetAccelCurve(ulong deviceId, InputAccelCurveType type, double step, ReadOnlySpan<double> points)
     {
         if (!_devices.TryGetValue(deviceId, out var device))
@@ -396,6 +416,10 @@ public sealed unsafe class LibinputDeviceConfiguration : IInputDeviceConfigurati
         }
     }
 
+    /// <summary>Builds the capability-level description of a libinput device.</summary>
+    /// <param name="id">The ID to put in the description.</param>
+    /// <param name="device">The device to describe.</param>
+    /// <returns>The description with the capabilities, the device type and the udev identity.</returns>
     public static InputDeviceInfo Describe(ulong id, InputDevice device)
     {
         var capabilities = InputDeviceCapability.None;

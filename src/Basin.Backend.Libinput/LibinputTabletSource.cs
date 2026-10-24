@@ -3,6 +3,9 @@ using Libinput;
 
 namespace Basin.Backend.Libinput;
 
+/// <summary>
+/// Implements <see cref="ITabletSource"/> over the tablet tool and tablet pad events of a <see cref="LibinputBackend"/>.
+/// </summary>
 public sealed class LibinputTabletSource : ITabletSource, IDisposable
 {
     private readonly LibinputBackend _backend;
@@ -14,6 +17,11 @@ public sealed class LibinputTabletSource : ITabletSource, IDisposable
     private readonly Dictionary<ulong, TabletPadInfo> _pads = [];
     private ulong _nextId = 1;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LibinputTabletSource"/> class. It tracks the backend's current devices and subscribes to its events until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="backend">The backend whose tablet events this source reports.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="backend"/> is <see langword="null"/>.</exception>
     public LibinputTabletSource(LibinputBackend backend)
     {
         ArgumentNullException.ThrowIfNull(backend);
@@ -32,24 +40,33 @@ public sealed class LibinputTabletSource : ITabletSource, IDisposable
         backend.TabletPad += OnPad;
     }
 
+    /// <inheritdoc/>
     public event Action<TabletInfo>? TabletAdded;
 
+    /// <inheritdoc/>
     public event Action<ulong>? TabletRemoved;
 
+    /// <inheritdoc/>
     public event Action<TabletToolInfo>? ToolAdded;
 
+    /// <inheritdoc/>
     public event Action<ulong>? ToolRemoved;
 
+    /// <inheritdoc/>
     public event Action<TabletPadInfo>? PadAdded;
 
+    /// <inheritdoc/>
     public event Action<ulong>? PadRemoved;
 
     private readonly TabletObservers _tabletObservers = new();
 
+    /// <inheritdoc/>
     public void AddObserver(ITabletObserver observer) => _tabletObservers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(ITabletObserver observer) => _tabletObservers.Remove(observer);
 
+    /// <summary>Unsubscribes from the backend. The tracked tablets, tools and pads stay as they are, and no removed events occur.</summary>
     public void Dispose()
     {
         _backend.DeviceAdded -= Track;
@@ -61,10 +78,13 @@ public sealed class LibinputTabletSource : ITabletSource, IDisposable
         _backend.TabletPad -= OnPad;
     }
 
+    /// <inheritdoc/>
     public int EnumerateTablets(Span<TabletInfo> tablets) => Copy(_tablets.Values, _tablets.Count, tablets);
 
+    /// <inheritdoc/>
     public int EnumerateTools(Span<TabletToolInfo> tools) => Copy(_tools.Values, _tools.Count, tools);
 
+    /// <inheritdoc/>
     public int EnumeratePads(Span<TabletPadInfo> pads) => Copy(_pads.Values, _pads.Count, pads);
 
     private void Track(InputDevice device)

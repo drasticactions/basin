@@ -1,7 +1,16 @@
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// Assigns CRTCs to connectors by exhaustive search.
+/// </summary>
 public static class CrtcAssignment
 {
+    /// <summary>
+    /// Finds the assignment that lights the most connectors and, among those, keeps the most connectors on their current CRTC.
+    /// </summary>
+    /// <param name="candidates">One entry per connector, with the CRTCs it can use.</param>
+    /// <param name="crtcCount">The number of CRTCs on the device. Only the first 32 can be used.</param>
+    /// <returns>One CRTC index per candidate, in the same order, or -1 for a connector that stays dark.</returns>
     public static int[] Solve(ReadOnlySpan<CrtcCandidate> candidates, int crtcCount)
     {
         var best = new int[candidates.Length];

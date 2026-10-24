@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's squash minimize animation. The window scales onto the icon rectangle, moves onto its center and can fade.
+/// </summary>
 public sealed class SquashEffect
 {
     private const string NodeName = "squash";
@@ -14,12 +17,31 @@ public sealed class SquashEffect
     private bool _restoring;
     private SceneTransform? _node;
 
+    /// <summary>
+    /// Gets a value indicating whether an animation has a live node that <see cref="Step"/> still drives.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets a value indicating whether the current or last animation is a restore, which runs from the icon back to the window.
+    /// </summary>
     public bool IsRestoring => _restoring;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the window fades out as it reaches the icon. The default is <see langword="true"/>.
+    /// </summary>
     public bool Fade { get; set; } = true;
 
+    /// <summary>
+    /// Starts an animation that is anchored at a given tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="window">The window box, in the same space as <paramref name="icon"/>.</param>
+    /// <param name="icon">The icon box.</param>
+    /// <param name="restoring"><see langword="true"/> to run from the icon back to the window.</param>
+    /// <param name="now">The tick that the animation starts at.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled or a box is empty, and then nothing starts.</returns>
     public bool Begin(
         TransformStack stack, in Box window, in Box icon, bool restoring, in FrameTick now, AnimationDuration duration)
     {
@@ -32,6 +54,16 @@ public sealed class SquashEffect
         return true;
     }
 
+    /// <summary>
+    /// Starts an animation that the first <see cref="Step"/> anchors, and applies its first pose. A window with no icon cannot run it.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="window">The window box, in the same space as <paramref name="icon"/>.</param>
+    /// <param name="icon">The icon box.</param>
+    /// <param name="restoring"><see langword="true"/> to run from the icon back to the window.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled or a box is empty, and then nothing starts.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Begin(TransformStack stack, in Box window, in Box icon, bool restoring, AnimationDuration duration)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -51,6 +83,12 @@ public sealed class SquashEffect
         return true;
     }
 
+    /// <summary>
+    /// Applies the pose for a tick. When a restore ends, the node is removed. When a minimize ends, the node keeps the squashed pose until <see cref="End"/>.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the animation runs, and <see langword="false"/> when it ended or no animation runs.</returns>
     public bool Step(TransformStack stack, in FrameTick tick)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -75,6 +113,10 @@ public sealed class SquashEffect
         return false;
     }
 
+    /// <summary>
+    /// Removes the transform node at once, whatever the progress.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
     public void End(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);

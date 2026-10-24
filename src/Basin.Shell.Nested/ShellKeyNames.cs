@@ -1,5 +1,8 @@
 namespace Basin.Shell.Nested;
 
+/// <summary>
+/// The names of the shell actions that a key can run, with the default chord of each one.
+/// </summary>
 public static class ShellKeyNames
 {
     private static readonly (string Name, string? Chord)[] Table =
@@ -84,12 +87,28 @@ public static class ShellKeyNames
         ("toggle-host-fullscreen", "Ctrl+Alt+Return"),
     ];
 
+    /// <summary>
+    /// Gets every action name. When two actions use one chord, the action earlier in this list keeps it.
+    /// </summary>
     public static IReadOnlyList<string> All { get; } = Table.Select(static entry => entry.Name).ToArray();
 
+    /// <summary>
+    /// Gets every action name in one comma-separated string, for messages.
+    /// </summary>
     public static string Listed { get; } = string.Join(", ", All);
 
+    /// <summary>
+    /// Finds out whether a name is an action name. The comparison is ordinal and case-sensitive.
+    /// </summary>
+    /// <param name="name">The name to look up.</param>
+    /// <returns><see langword="true"/> when the name is in <see cref="All"/>.</returns>
     public static bool IsKnown(string name) => Table.Any(entry => entry.Name == name);
 
+    /// <summary>
+    /// Gets the default chord text of an action.
+    /// </summary>
+    /// <param name="name">The action name.</param>
+    /// <returns>The chord text, or <see langword="null"/> when the action has no default or the name is unknown.</returns>
     public static string? DefaultChord(string name)
     {
         foreach (var (candidate, chord) in Table)

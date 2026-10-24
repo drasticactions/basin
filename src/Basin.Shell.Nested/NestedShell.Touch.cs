@@ -4,6 +4,9 @@ using Basin.Seat;
 
 namespace Basin.Shell.Nested;
 
+/// <content>
+/// The touch routing and touch gestures of the shell.
+/// </content>
 public sealed partial class NestedShell
 {
     private const int TouchCapacity = TouchContacts.Capacity;
@@ -42,6 +45,9 @@ public sealed partial class NestedShell
     private readonly TouchContacts _gestureContacts = new();
     private bool _gestureGrabbed;
 
+    /// <summary>
+    /// Gets a value indicating whether a touch point drives a window move or resize now.
+    /// </summary>
     public bool TouchGestureActive => _gestureGrabbed;
 
     private void OnTouchDown(int id, double x, double y, uint time)

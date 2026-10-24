@@ -1,5 +1,8 @@
 namespace Basin.Themes.MsStyles;
 
+/// <summary>
+/// Maps theme names to IDs: property names, enumeration value names, and the part and state names of each class. The tables are a port of wine's uxtheme style map. Names match without case.
+/// </summary>
 public static partial class MsStylesStyleMap
 {
     private static readonly Dictionary<string, MsStylesPropertyName> ByPropertyName;
@@ -17,12 +20,27 @@ public static partial class MsStylesStyleMap
         }
     }
 
+    /// <summary>
+    /// Gets every property name in the table.
+    /// </summary>
     public static IReadOnlyList<MsStylesPropertyName> Properties => PropertyNames;
 
+    /// <summary>
+    /// Gets every enumeration value name in the table.
+    /// </summary>
     public static IReadOnlyList<MsStylesEnumName> Enums => EnumNames;
 
+    /// <summary>
+    /// Gets the part and state names of every class in the table.
+    /// </summary>
     public static IReadOnlyList<MsStylesClassMap> ClassMaps => Classes;
 
+    /// <summary>
+    /// Resolves a property name. A name that the table does not have resolves through the <see cref="ThemeProperty"/> member of the same name and <see cref="PrimitiveOfRange"/>.
+    /// </summary>
+    /// <param name="name">The property name, for example <c>BGTYPE</c>.</param>
+    /// <param name="property">The name, ID and value type of the property, or the default value when the name does not resolve.</param>
+    /// <returns><see langword="true"/> when the name resolves.</returns>
     public static bool TryLookupProperty(string name, out MsStylesPropertyName property)
     {
         if (ByPropertyName.TryGetValue(name, out property))
@@ -40,6 +58,11 @@ public static partial class MsStylesStyleMap
         return false;
     }
 
+    /// <summary>
+    /// Finds the value type that the ID range of a property implies, as the TMT ranges define it.
+    /// </summary>
+    /// <param name="id">The property ID.</param>
+    /// <returns>The value type, or <see cref="ThemePrimitive.None"/> when the ID is in no known range.</returns>
     public static ThemePrimitive PrimitiveOfRange(int id) => id switch
     {
         >= 600 and <= 608 => ThemePrimitive.String,
@@ -64,9 +87,22 @@ public static partial class MsStylesStyleMap
         _ => ThemePrimitive.None,
     };
 
+    /// <summary>
+    /// Finds the table entry of a property ID. It does not use the ID ranges.
+    /// </summary>
+    /// <param name="id">The property ID.</param>
+    /// <param name="property">The table entry, or the default value when the table has no entry for the ID.</param>
+    /// <returns><see langword="true"/> when the table has an entry for the ID.</returns>
     public static bool TryLookupProperty(int id, out MsStylesPropertyName property) =>
         ByPropertyId.TryGetValue(id, out property);
 
+    /// <summary>
+    /// Resolves the name of an enumeration value.
+    /// </summary>
+    /// <param name="property">The enumerated property.</param>
+    /// <param name="name">The value name, for example <c>IMAGEFILE</c>.</param>
+    /// <param name="value">The integer value, or 0 when the name does not resolve.</param>
+    /// <returns><see langword="true"/> when the property has a value with the name.</returns>
     public static bool TryLookupEnum(ThemeProperty property, string name, out int value)
     {
         foreach (var entry in EnumNames)
@@ -82,6 +118,12 @@ public static partial class MsStylesStyleMap
         return false;
     }
 
+    /// <summary>
+    /// Finds the name of an enumeration value.
+    /// </summary>
+    /// <param name="property">The enumerated property.</param>
+    /// <param name="value">The integer value.</param>
+    /// <returns>The value name, or <see langword="null"/> when the table has no name for it.</returns>
     public static string? EnumName(ThemeProperty property, int value)
     {
         foreach (var entry in EnumNames)
@@ -95,6 +137,11 @@ public static partial class MsStylesStyleMap
         return null;
     }
 
+    /// <summary>
+    /// Checks whether the table has value names for a property.
+    /// </summary>
+    /// <param name="property">The property to check.</param>
+    /// <returns><see langword="true"/> when the table has at least one value name for the property.</returns>
     public static bool IsEnumProperty(ThemeProperty property)
     {
         foreach (var entry in EnumNames)
@@ -108,8 +155,22 @@ public static partial class MsStylesStyleMap
         return false;
     }
 
+    /// <summary>
+    /// Checks whether the table has part and state names for a class. The name must not have an <c>app::</c> prefix.
+    /// </summary>
+    /// <param name="className">The class name, for example <c>WINDOW</c>.</param>
+    /// <returns><see langword="true"/> when the table has the class.</returns>
     public static bool HasClass(string className) => ByClassName.ContainsKey(className);
 
+    /// <summary>
+    /// Resolves the part and state names of an INI section. When <paramref name="part"/> is <see langword="null"/>, the state name is searched in every part. The class name must not have an <c>app::</c> prefix.
+    /// </summary>
+    /// <param name="className">The class name, for example <c>WINDOW</c>.</param>
+    /// <param name="part">The part name, or <see langword="null"/> for none.</param>
+    /// <param name="state">The state name, or <see langword="null"/> for none.</param>
+    /// <param name="partId">The part ID, or 0 when <paramref name="part"/> is <see langword="null"/> or does not resolve.</param>
+    /// <param name="stateId">The state ID, or 0 when <paramref name="state"/> is <see langword="null"/> or does not resolve.</param>
+    /// <returns><see langword="true"/> when every name that is not <see langword="null"/> resolves.</returns>
     public static bool TryLookupPartState(string className, string? part, string? state, out int partId, out int stateId)
     {
         partId = 0;
@@ -145,6 +206,12 @@ public static partial class MsStylesStyleMap
         return (part is null || partId != 0) && (state is null || stateId != 0);
     }
 
+    /// <summary>
+    /// Finds the name of a part. An <c>app::</c> prefix on the class name is ignored.
+    /// </summary>
+    /// <param name="className">The class name.</param>
+    /// <param name="part">The part ID.</param>
+    /// <returns>The part name, or <see langword="null"/> when <paramref name="part"/> is 0 or the table has no name for it.</returns>
     public static string? PartName(string className, int part)
     {
         if (part == 0 || !ByClassName.TryGetValue(BaseName(className), out var map))
@@ -163,6 +230,13 @@ public static partial class MsStylesStyleMap
         return null;
     }
 
+    /// <summary>
+    /// Finds the name of a state. An <c>app::</c> prefix on the class name is ignored.
+    /// </summary>
+    /// <param name="className">The class name.</param>
+    /// <param name="part">The part ID, or 0 to search the states of every part.</param>
+    /// <param name="state">The state ID.</param>
+    /// <returns>The state name, or <see langword="null"/> when <paramref name="state"/> is 0 or the table has no name for it.</returns>
     public static string? StateName(string className, int part, int state)
     {
         if (state == 0 || !ByClassName.TryGetValue(BaseName(className), out var map))

@@ -2,6 +2,9 @@ using Pixman;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Renders a copy of a window buffer with pixels outside an X Shape region cleared to transparent. It keeps a ring of three ARGB8888 targets.
+/// </summary>
 public sealed class XWaylandShapeMask : IDisposable
 {
     private const int RingSize = 3;
@@ -15,6 +18,12 @@ public sealed class XWaylandShapeMask : IDisposable
     private int _height;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XWaylandShapeMask"/> class.
+    /// </summary>
+    /// <param name="renderer">The renderer that draws the masked copy.</param>
+    /// <param name="allocator">The allocator for dmabuf targets, or <see langword="null"/> to use memory buffers.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> is <see langword="null"/>.</exception>
     public XWaylandShapeMask(IRenderer renderer, IAllocator? allocator)
     {
         ArgumentNullException.ThrowIfNull(renderer);
@@ -22,6 +31,14 @@ public sealed class XWaylandShapeMask : IDisposable
         _allocator = allocator;
     }
 
+    /// <summary>
+    /// Draws <paramref name="source"/> clipped to <paramref name="shape"/> into the next target of the ring.
+    /// </summary>
+    /// <param name="source">The window buffer.</param>
+    /// <param name="shape">The region to keep, in buffer pixels.</param>
+    /// <returns>The target, which the mask owns and reuses three calls later, or <see langword="null"/> when the source is empty, cannot be imported or the pass fails.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The mask is disposed.</exception>
     public IBuffer? Render(IBuffer source, PixmanRegion32 shape)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -55,6 +72,9 @@ public sealed class XWaylandShapeMask : IDisposable
         return pass.Submit() ? target : null;
     }
 
+    /// <summary>
+    /// Destroys the targets and the cached textures. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

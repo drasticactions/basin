@@ -2,6 +2,9 @@ using Basin.WindowManager.Protocol;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// An area of the compositor's logical space that the manager treats as one output. Output areas do not overlap when a manage sequence starts.
+/// </summary>
 public sealed class WmOutput
 {
     private readonly RiverWindowManager _wm;
@@ -46,22 +49,52 @@ public sealed class WmOutput
         };
     }
 
+    /// <summary>
+    /// Gets the top-left corner in the compositor's logical space, as of the start of the current sequence.
+    /// </summary>
     public Point Position { get; private set; }
 
+    /// <summary>
+    /// Gets the size in logical pixels, as of the start of the current sequence.
+    /// </summary>
     public Size Dimensions { get; private set; }
 
+    /// <summary>
+    /// Gets the output's rectangle in the compositor's logical space.
+    /// </summary>
     public Rect Area => new(Position.X, Position.Y, Dimensions.Width, Dimensions.Height);
 
+    /// <summary>
+    /// Gets the registry name of the matching <c>wl_output</c> global. The mapping never changes, but that global can go away before <see cref="Removed"/> fires.
+    /// </summary>
     public uint WlOutputName { get; private set; }
 
+    /// <summary>
+    /// Gets the number of screen capture sessions that record this output, as of the start of the current sequence.
+    /// </summary>
     public int CaptureSessions { get; private set; }
 
+    /// <summary>
+    /// Gets the area left after layer surfaces take their exclusive zones, in global coordinates. It stays empty until <see cref="WmLayerShell.Track(WmOutput)"/> or <see cref="SetDefaultForLayerSurfaces"/> binds the output's layer state.
+    /// </summary>
     public Rect NonExclusiveArea { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the compositor removed the output. It becomes true when the event arrives, before <see cref="Removed"/> fires.
+    /// </summary>
     public bool IsRemoved { get; private set; }
 
+    /// <summary>
+    /// Occurs once at the start of the next sequence after the compositor removes the output. The library destroys the output when that manage sequence ends.
+    /// </summary>
     public event Action? Removed;
 
+    /// <summary>
+    /// Sets how the output presents frames. The compositor uses <see cref="PresentationMode.Vsync"/> until the manager asks for another mode.
+    /// </summary>
+    /// <param name="mode">The preferred presentation mode.</param>
+    /// <exception cref="InvalidOperationException">No manage or render sequence is in progress.</exception>
+    /// <exception cref="NotSupportedException">The bound protocol version is lower than 4.</exception>
     public void SetPresentationMode(PresentationMode mode)
     {
         _wm.EnsureRender(nameof(SetPresentationMode));
@@ -69,6 +102,11 @@ public sealed class WmOutput
         _proxy.SetPresentationMode((RiverOutputV1.PresentationMode)mode);
     }
 
+    /// <summary>
+    /// Makes this output the default for new layer surfaces that name no output. It replaces any earlier default.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="NotSupportedException">The compositor does not offer the river layer shell.</exception>
     public void SetDefaultForLayerSurfaces()
     {
         _wm.EnsureManage(nameof(SetDefaultForLayerSurfaces));
@@ -81,6 +119,7 @@ public sealed class WmOutput
         _wm.LayerShell.OutputStateFor(this).SetDefault();
     }
 
+    /// <inheritdoc/>
     public override string ToString() =>
         $"output {Dimensions.Width}x{Dimensions.Height} at {Position.X},{Position.Y}";
 

@@ -1,13 +1,32 @@
 namespace Basin.Shell.Nested;
 
+/// <summary>
+/// The placement rules for a new window: over the parent, under the pointer, the first free position, the center, or the next cascade step.
+/// </summary>
 public static class Placement
 {
+    /// <summary>
+    /// The offset in logical pixels from one cascaded window to the next.
+    /// </summary>
     public const int CascadeStep = 25;
 
+    /// <summary>
+    /// The distance in logical pixels within which a window counts as on a cascade position.
+    /// </summary>
     public const int CascadeFuzz = 15;
 
+    /// <summary>
+    /// The horizontal offset in logical pixels of each new cascade column after a cascade reaches the work area edge.
+    /// </summary>
     public const int CascadeInterval = 50;
 
+    /// <summary>
+    /// Finds the frame position of a new window.
+    /// A window with a parent goes over the parent. <see cref="PlacementMode.Pointer"/> and <see cref="PlacementMode.Manual"/> center it on the pointer.
+    /// The other modes try the first free position, then the center or the cascade.
+    /// </summary>
+    /// <param name="request">The window size and the state around it.</param>
+    /// <returns>The top-left corner of the frame in logical layout coordinates.</returns>
     public static Point Place(in PlacementRequest request)
     {
         if (request.ParentFrame is { } parent)
@@ -23,6 +42,13 @@ public static class Placement
         return NextCascade(request);
     }
 
+    /// <summary>
+    /// Finds out whether a new window is too large for the work area and must be maximized.
+    /// </summary>
+    /// <param name="width">The frame width.</param>
+    /// <param name="height">The frame height.</param>
+    /// <param name="workArea">The work area.</param>
+    /// <returns><see langword="true"/> when the frame is at least as wide and as tall as the work area.</returns>
     public static bool ShouldMaximize(int width, int height, Box workArea) =>
         width >= workArea.Width && height >= workArea.Height;
 

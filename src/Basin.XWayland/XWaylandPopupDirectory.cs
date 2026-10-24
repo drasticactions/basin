@@ -2,8 +2,13 @@ using Basin.Capabilities;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Finds the popups of an X11 window. A transient window belongs to its parent. An override-redirect or menu window belongs to the newest normal window of the same client.
+/// </summary>
+/// <param name="wm">The window manager whose windows the directory searches.</param>
 public sealed class XWaylandPopupDirectory(XWaylandWm wm) : IPopupDirectory
 {
+    /// <inheritdoc/>
     public void CollectPopups(Surface owner, List<Surface> into)
     {
         ArgumentNullException.ThrowIfNull(owner);

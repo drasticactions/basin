@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_commit_timing_manager_v1</c> global. It holds commits that carry a target time until a frame or its timer reaches that time.
+/// </summary>
 public sealed class CommitTimingManager : IDisposable, IFrameSink
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -17,6 +23,14 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
     private readonly List<Surface> _sweep = [];
     private bool _timerArmed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CommitTimingManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces it times.</param>
+    /// <param name="loop">The loop that holds the release timer.</param>
+    /// <param name="clock">The frame clock to join as a sink, or <see langword="null"/> to release on the timer only.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/>, <paramref name="compositor"/> or <paramref name="loop"/> is <see langword="null"/>.</exception>
     public CommitTimingManager(
         WlServerDisplay display,
         CompositorGlobal compositor,
@@ -34,15 +48,27 @@ public sealed class CommitTimingManager : IDisposable, IFrameSink
         _clock?.Add(this);
     }
 
+    /// <summary>
+    /// Gets or sets the clients whose target times are wall-clock time. The manager converts their times to the monotonic clock.
+    /// </summary>
     public WireClockClients? WireClock { get; set; }
 
+    /// <inheritdoc/>
     public void BeginFrame(IOutput output, long predictedVblankNanos) =>
         Release(predictedVblankNanos > 0 ? predictedVblankNanos : MonotonicClock.Nanos, predictedVblankNanos > 0 ? PresentTiming.GridOf(output) : -1);
 
+    /// <summary>
+    /// Does nothing. Commits are released at <see cref="BeginFrame"/>.
+    /// </summary>
+    /// <param name="output">The output that presented the frame.</param>
+    /// <param name="presentedNanos">The presentation time on the monotonic clock in nanoseconds.</param>
     public void EndFrame(IOutput output, long presentedNanos)
     {
     }
 
+    /// <summary>
+    /// Leaves the frame clock, removes the timer and removes the global.
+    /// </summary>
     public void Dispose()
     {
         _clock?.Remove(this);

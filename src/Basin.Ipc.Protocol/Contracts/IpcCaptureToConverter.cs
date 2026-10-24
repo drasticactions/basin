@@ -3,10 +3,21 @@ using System.Text.Json.Serialization;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// Reads and writes a <see cref="IpcCaptureTo"/> as <c>"inline"</c>, <c>"fd"</c> or <c>{"path": "..."}</c>.
+/// </summary>
 public sealed class IpcCaptureToConverter : JsonConverter<IpcCaptureTo>
 {
     private const string Shape = "'to' is {\"path\": ...}, \"fd\" or \"inline\"";
 
+    /// <summary>
+    /// Reads one of the three target shapes. Other keys in the path object are skipped.
+    /// </summary>
+    /// <param name="reader">The reader on the value.</param>
+    /// <param name="typeToConvert">The converted type.</param>
+    /// <param name="options">The serializer options.</param>
+    /// <returns>The target.</returns>
+    /// <exception cref="JsonException">The value is another string, or an object with no string <c>path</c>, or another token.</exception>
     public override IpcCaptureTo Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
     {
         if (reader.TokenType == JsonTokenType.String)
@@ -39,6 +50,7 @@ public sealed class IpcCaptureToConverter : JsonConverter<IpcCaptureTo>
         return path is null ? throw new JsonException(Shape) : IpcCaptureTo.ToPath(path);
     }
 
+    /// <inheritdoc/>
     public override void Write(Utf8JsonWriter writer, IpcCaptureTo value, JsonSerializerOptions options)
     {
         ArgumentNullException.ThrowIfNull(writer);

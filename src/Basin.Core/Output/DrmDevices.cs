@@ -1,7 +1,15 @@
 namespace Basin;
 
+/// <summary>
+/// Finds DRM devices through <c>/dev/dri</c> and sysfs, without opening a device.
+/// </summary>
 public static class DrmDevices
 {
+    /// <summary>
+    /// Lists every card node in a device directory, sorted by path. Sysfs paths are always read from <c>/sys/class/drm</c>.
+    /// </summary>
+    /// <param name="devDir">The directory that holds the card nodes.</param>
+    /// <returns>The cards found, or an empty list when the directory does not exist.</returns>
     public static IReadOnlyList<DrmDeviceInfo> Enumerate(string devDir = "/dev/dri")
     {
         var devices = new List<DrmDeviceInfo>();
@@ -28,6 +36,11 @@ public static class DrmDevices
         return devices;
     }
 
+    /// <summary>
+    /// Picks the card to drive displays from. The boot VGA device wins, then the first card with connectors.
+    /// </summary>
+    /// <param name="devices">The cards to choose from, in order of preference.</param>
+    /// <returns>The chosen card, or <see langword="null"/> when no card has connectors.</returns>
     public static DrmDeviceInfo? PickPrimary(IReadOnlyList<DrmDeviceInfo> devices)
     {
         DrmDeviceInfo? fallback = null;
@@ -49,6 +62,12 @@ public static class DrmDevices
         return fallback;
     }
 
+    /// <summary>
+    /// Reads the <c>dev_t</c> number of a DRM node from sysfs, in the Linux <c>makedev</c> encoding that dmabuf feedback uses.
+    /// </summary>
+    /// <param name="devicePath">The path of a card or render node. Only its file name is used.</param>
+    /// <param name="deviceId">The device number, or zero when the call fails.</param>
+    /// <returns><see langword="true"/> when sysfs gave a valid major and minor number.</returns>
     public static bool TryDeviceId(string devicePath, out ulong deviceId)
     {
         ArgumentException.ThrowIfNullOrEmpty(devicePath);

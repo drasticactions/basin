@@ -3,19 +3,35 @@ using Pixman;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// A node that groups child nodes. Children draw in list order, so the last child is on top.
+/// </summary>
 public class SceneTree : SceneNode
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneTree"/> class.
+    /// </summary>
+    /// <param name="parent">The tree to add this tree to, or <see langword="null"/> for a detached root.</param>
     public SceneTree(SceneTree? parent)
         : base(parent)
     {
     }
 
+    /// <summary>
+    /// Gets the child nodes from bottom to top. Use the stacking methods on <see cref="SceneNode"/> to change the list, because they also damage the scene.
+    /// </summary>
     public List<SceneNode> Children { get; } = [];
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the nodes in this subtree must always be composited, and never put on a plane or scanned out directly.
+    /// </summary>
     public bool ExcludeFromScanout { get; set; }
 
     private float _alpha = 1f;
 
+    /// <summary>
+    /// Gets or sets the opacity that multiplies every node in the subtree, from 0 to 1.
+    /// </summary>
     public float Alpha
     {
         get => _alpha;
@@ -32,6 +48,9 @@ public class SceneTree : SceneNode
 
     private TextureFilter? _filter;
 
+    /// <summary>
+    /// Gets or sets the texture filter for the subtree. The nearest ancestor with a filter wins. With none, the filter is <see cref="TextureFilter.Linear"/>.
+    /// </summary>
     public TextureFilter? Filter
     {
         get => _filter;
@@ -104,6 +123,9 @@ public class SceneTree : SceneNode
         }
     }
 
+    /// <summary>
+    /// Destroys every child, from the top down.
+    /// </summary>
     protected override void OnDestroy()
     {
         while (Children.Count > 0)

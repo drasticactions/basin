@@ -3,12 +3,27 @@ using System.Text;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Describes the filter-chain graph of a <see cref="SpatialVoice"/>. A file is not a control, so a new file needs a new voice.
+/// </summary>
+/// <param name="Mode">The kind of placement that the graph applies.</param>
+/// <param name="HrtfFile">The SOFA file for <see cref="VoiceMode.Hrtf"/>. <see cref="SpatialVoice.Create"/> fails when that mode has no existing file.</param>
+/// <param name="ImpulseFile">The stereo impulse WAV for the reverb, for example from <see cref="RoomImpulse.PathFor"/>, or <see langword="null"/> for no reverb.</param>
 public sealed record VoiceGraph(VoiceMode Mode, string? HrtfFile = null, string? ImpulseFile = null)
 {
+    /// <summary>
+    /// Gets the smallest radius in meters that the HRTF file measures. The voice clamps <see cref="VoiceParams.Radius"/> to this range.
+    /// </summary>
     public float HrtfRadiusMin { get; init; } = 1;
 
+    /// <summary>
+    /// Gets the largest radius in meters that the HRTF file measures. <see cref="SofaFile.TryProbe"/> reads the range.
+    /// </summary>
     public float HrtfRadiusMax { get; init; } = 1;
 
+    /// <summary>
+    /// Gets a value indicating whether the graph has a convolver path, which is when <see cref="ImpulseFile"/> is set.
+    /// </summary>
     public bool Reverb => ImpulseFile is not null;
 
     internal string Arguments(string name, string remote, string description)

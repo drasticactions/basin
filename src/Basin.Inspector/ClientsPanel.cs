@@ -5,6 +5,9 @@ using ImGuiApi = Hexa.NET.ImGui.ImGui;
 
 namespace Basin.Inspector;
 
+/// <summary>
+/// The Clients panel. It lists the id, pid, uid and gid of each Wayland client, and the interfaces that the selected client holds objects of.
+/// </summary>
 public sealed class ClientsPanel : IInspectorPanel
 {
     private readonly IClientDirectory _directory;
@@ -12,16 +15,26 @@ public sealed class ClientsPanel : IInspectorPanel
     private ClientObjectInfo[] _objects = new ClientObjectInfo[64];
     private ulong _selected;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ClientsPanel"/> class.
+    /// </summary>
+    /// <param name="directory">The source of the client list and of each client's objects.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="directory"/> is <see langword="null"/>.</exception>
     public ClientsPanel(IClientDirectory directory)
     {
         ArgumentNullException.ThrowIfNull(directory);
         _directory = directory;
     }
 
+    /// <inheritdoc/>
     public ReadOnlySpan<byte> Name => "Clients"u8;
 
+    /// <summary>
+    /// Gets or sets the rate in frames per second at which the panel redraws while it is shown. The default is 2.
+    /// </summary>
     public int RefreshHz { get; set; } = 2;
 
+    /// <inheritdoc/>
     public void Draw(ref InspectorDraw draw)
     {
         draw.RequestRefresh(RefreshHz);

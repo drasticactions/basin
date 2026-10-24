@@ -3,6 +3,10 @@ using Basin.Capabilities;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Captures outputs, toplevels, layout regions and the cursor by drawing the scene into the target buffer.
+/// It hides content that is excluded from capture while it draws.
+/// </summary>
 public sealed class SceneScreenCapture : IScreenCapture, IDisposable
 {
     private readonly Scene _scene;
@@ -14,6 +18,12 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
     private ToplevelInfo[] _exclusionScratch = new ToplevelInfo[16];
     private SceneNode?[] _hidden = new SceneNode?[16];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneScreenCapture"/> class.
+    /// </summary>
+    /// <param name="scene">The scene to draw.</param>
+    /// <param name="layout">The layout that places the outputs, for region and toplevel captures.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public SceneScreenCapture(Scene scene, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(scene);
@@ -23,10 +33,20 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         _watch = new ExclusionWatch(this);
     }
 
+    /// <summary>
+    /// Gets or sets the renderer that draws the captures. While it is <see langword="null"/>, no source is supported.
+    /// </summary>
     public IRenderer? Renderer { get; set; }
 
+    /// <summary>
+    /// Gets or sets the color that fills the parts of a capture where no node draws.
+    /// </summary>
     public RenderColor Background { get; set; }
 
+    /// <summary>
+    /// Gets or sets the toplevel model that resolves toplevel sources and exclusion states.
+    /// A new model gets an observer that reports capture changes. <see langword="null"/> turns off toplevel captures.
+    /// </summary>
     public IToplevelModel? Toplevels
     {
         get => _toplevels;
@@ -44,20 +64,32 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the map from toplevel ids to scene nodes. <see langword="null"/> turns off toplevel captures and the hiding of excluded toplevels.
+    /// </summary>
     public ToplevelSceneIndex? Index { get; set; }
 
     private readonly CaptureDamageObservers _damageObservers = new();
 
+    /// <inheritdoc/>
     public void AddDamageObserver(ICaptureDamageObserver observer) => _damageObservers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveDamageObserver(ICaptureDamageObserver observer) => _damageObservers.Remove(observer);
 
+    /// <summary>
+    /// Tells the damage observers that part of an output changed. The compositor calls it after each frame.
+    /// </summary>
+    /// <param name="output">The output that changed.</param>
+    /// <param name="damage">The changed area in output buffer pixels.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public void NotifyDamaged(IOutput output, Box damage)
     {
         ArgumentNullException.ThrowIfNull(output);
         _damageObservers.Damaged(output, damage);
     }
 
+    /// <inheritdoc/>
     public void SetCursor(IBuffer? image, in CaptureCursorState state)
     {
         var next = image is null || state.Width <= 0 || state.Height <= 0
@@ -73,6 +105,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         _damageObservers.CursorChanged();
     }
 
+    /// <inheritdoc/>
     public bool Supports(in CaptureSource source) => Renderer is null ? false : source.Kind switch
     {
         CaptureSourceKind.Output => true,
@@ -84,6 +117,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         _ => false,
     };
 
+    /// <inheritdoc/>
     public bool TryDescribe(in CaptureSource source, out CaptureFormat format)
     {
         format = default;
@@ -134,18 +168,39 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the allocator for the intermediate buffer of a YUV capture. <see langword="null"/> uses a memory buffer.
+    /// </summary>
     public IAllocator? Allocator { get; set; }
 
+    /// <summary>
+    /// Gets or sets the matrix that a YUV capture uses. The default is BT.709.
+    /// </summary>
     public YuvCoefficients YuvCoefficients { get; set; } = YuvCoefficients.Bt709;
 
+    /// <summary>
+    /// Gets or sets the value range that a YUV capture uses. The default is the limited range.
+    /// </summary>
     public YuvRange YuvRange { get; set; } = YuvRange.Limited;
 
+    /// <inheritdoc/>
     public bool CanCaptureYuv => Renderer is { CanConvertYuv: true };
 
+    /// <inheritdoc/>
     public bool CanCaptureHalfFloat => Renderer is { RendersHalfFloat: true };
 
+    /// <summary>
+    /// Gets the type name of <see cref="Renderer"/>, or <see langword="null"/> when no renderer is set.
+    /// </summary>
     public string? RendererName => Renderer?.GetType().Name;
 
+    /// <summary>
+    /// Gets the color space of a capture. An output or region capture uses the color space of its scene output.
+    /// A toplevel capture is always SDR.
+    /// </summary>
+    /// <param name="source">The source to capture.</param>
+    /// <param name="color">The color description and HDR metadata, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> for output, region and toplevel sources, otherwise <see langword="false"/>.</returns>
     public bool TryColorOf(in CaptureSource source, out CaptureColor color)
     {
         color = default;
@@ -177,6 +232,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
     private IBuffer? _intermediate;
     private ITexture? _intermediateTexture;
 
+    /// <inheritdoc/>
     public bool Capture(in CaptureSource source, in Box region, IBuffer target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -271,6 +327,9 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         return new MemoryBuffer(width, height, DrmFormat.Xrgb8888);
     }
 
+    /// <summary>
+    /// Releases the intermediate buffer and texture of YUV captures. The object stays usable.
+    /// </summary>
     public void Dispose() => DropIntermediate();
 
     private void DropIntermediate()
@@ -281,6 +340,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         _intermediate = null;
     }
 
+    /// <inheritdoc/>
     public bool TryCursorState(IOutput output, out CaptureCursorState cursor)
     {
         ArgumentNullException.ThrowIfNull(output);

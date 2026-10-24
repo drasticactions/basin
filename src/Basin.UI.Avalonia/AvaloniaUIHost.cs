@@ -6,6 +6,10 @@ using Basin.Diagnostics;
 
 namespace Basin.UI.Avalonia;
 
+/// <summary>
+/// An <see cref="IUIHost"/> that draws chrome surfaces with Avalonia. <see cref="BasinPlatform"/> makes it.
+/// Use it on the thread that made it.
+/// </summary>
 public sealed class AvaloniaUIHost : IUIHost
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -36,10 +40,20 @@ public sealed class AvaloniaUIHost : IUIHost
         _context.Host = this;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="BasinPlatform.Attach"/> made the host. An attached host runs inside another Avalonia platform and does not pump it.
+    /// </summary>
     public bool IsAttached => _context.Attached;
 
+    /// <summary>
+    /// Gets the reporter of the focused chrome text field and of chrome touches.
+    /// </summary>
     public AvaloniaTextFields TextFields { get; } = new();
 
+    /// <summary>
+    /// Occurs on the Avalonia render thread when a surface of an attached host finished a frame.
+    /// The handler must call <see cref="AvaloniaUISurface.PublishDamage"/> on the compositor thread.
+    /// </summary>
     public event Action<IUISurface>? SurfaceDamaged;
 
     internal void RaiseSurfaceDamaged(AvaloniaUISurface surface) => SurfaceDamaged?.Invoke(surface);
@@ -48,6 +62,9 @@ public sealed class AvaloniaUIHost : IUIHost
 
     internal CompositorSynchronizationContext? Wake { get; init; }
 
+    /// <summary>
+    /// Gets or sets the theme variant that the application sees. On an attached host it is always <see cref="UIThemeVariant.Light"/> and a set does nothing.
+    /// </summary>
     public UIThemeVariant Theme
     {
         get => Settings?.Variant ?? UIThemeVariant.Light;
@@ -61,16 +78,31 @@ public sealed class AvaloniaUIHost : IUIHost
         }
     }
 
+    /// <inheritdoc/>
     public event Action? WakeupRequested;
 
+    /// <summary>
+    /// Occurs when Avalonia opens a popup surface, for example a menu or a tooltip.
+    /// </summary>
     public event Action<IUISurface>? PopupAppeared;
 
+    /// <summary>
+    /// Occurs when Avalonia closes a popup that <see cref="PopupAppeared"/> reported.
+    /// </summary>
     public event Action<IUISurface>? PopupDismissed;
 
+    /// <summary>
+    /// Gets the buffer kind of the surfaces. It is <see cref="UITargetKind.Dmabuf"/> with a GPU and <see cref="UITargetKind.Memory"/> without one.
+    /// </summary>
     public UITargetKind Produces => _context.Gpu is null ? UITargetKind.Memory : UITargetKind.Dmabuf;
 
+    /// <summary>
+    /// Gets the delay in milliseconds until the next Avalonia timer is due.
+    /// It is <see langword="null"/> when no work is due, when the host is disposed and on an attached host.
+    /// </summary>
     public long? NextDueMillis => _disposed || _dispatcher is null ? null : _dispatcher.NextDueMillis;
 
+    /// <inheritdoc/>
     public IUISurface? CreateSurface(in UISurfaceOptions options)
     {
         _thread.Assert();
@@ -96,8 +128,15 @@ public sealed class AvaloniaUIHost : IUIHost
         return surface;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the AT-SPI server runs and shows the chrome surfaces on the accessibility bus.
+    /// </summary>
     public bool IsAccessible => _atSpi is not null;
 
+    /// <summary>
+    /// Starts the Avalonia AT-SPI server and adds every chrome surface to it. A second call does nothing.
+    /// </summary>
+    /// <returns><see langword="null"/> on success, or the reason that the server cannot start.</returns>
     public async Task<string?> StartAccessibilityAsync()
     {
         _thread.Assert();
@@ -151,6 +190,10 @@ public sealed class AvaloniaUIHost : IUIHost
         return null;
     }
 
+    /// <summary>
+    /// Stops the AT-SPI server. Errors during the stop are logged, not raised.
+    /// </summary>
+    /// <returns>A task that completes when the server is disposed.</returns>
     public async Task StopAccessibilityAsync()
     {
         _thread.Assert();
@@ -236,6 +279,10 @@ public sealed class AvaloniaUIHost : IUIHost
         }
     }
 
+    /// <summary>
+    /// Runs the due Avalonia jobs, fires the render timer, runs the jobs again and frees idle buffers.
+    /// It does nothing on an attached host or after dispose.
+    /// </summary>
     public void Pump()
     {
         _thread.Assert();
@@ -255,6 +302,9 @@ public sealed class AvaloniaUIHost : IUIHost
         }
     }
 
+    /// <summary>
+    /// Disposes every surface, the AT-SPI server and the wake channel. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

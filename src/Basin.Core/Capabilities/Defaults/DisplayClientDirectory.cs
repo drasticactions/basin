@@ -5,6 +5,9 @@ using Wayland.Server;
 
 namespace Basin.Capabilities.Defaults;
 
+/// <summary>
+/// Lists the clients of a Wayland display with their credentials. On libwayland it can also count the objects of each client.
+/// </summary>
 public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposable
 {
     private const string Library = "libwayland-server.so.0";
@@ -19,6 +22,10 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
     private GCHandle _self;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DisplayClientDirectory"/> class and starts to track the clients of a display.
+    /// </summary>
+    /// <param name="display">The display whose clients to list.</param>
     public DisplayClientDirectory(WlServerDisplay display)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -44,10 +51,17 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Objects"/> can count objects. It is <see langword="true"/> only on the libwayland transport.
+    /// </summary>
     public bool CanListObjects { get; }
 
+    /// <summary>
+    /// Gets the number of clients that are connected now.
+    /// </summary>
     public int Count => _clients.Count;
 
+    /// <inheritdoc/>
     public int Enumerate(Span<ClientInfo> clients)
     {
         _thread.Assert();
@@ -65,6 +79,7 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         return _clients.Count;
     }
 
+    /// <inheritdoc/>
     public int Objects(ulong clientId, Span<ClientObjectInfo> objects)
     {
         _thread.Assert();
@@ -94,6 +109,9 @@ public sealed unsafe class DisplayClientDirectory : IClientDirectory, IDisposabl
         return count;
     }
 
+    /// <summary>
+    /// Stops tracking new clients and clears the list. A second call has no effect.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

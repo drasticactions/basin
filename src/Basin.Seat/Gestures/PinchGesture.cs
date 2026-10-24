@@ -1,5 +1,8 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Recognizes a two-finger pinch, as a member of the touch gesture chain. A third finger cancels a claimed pinch.
+/// </summary>
 public sealed class PinchGesture : ITouchGestures
 {
     private const int Fingers = 2;
@@ -18,16 +21,32 @@ public sealed class PinchGesture : ITouchGestures
     private bool _pending;
     private double _pendingScale;
 
+    /// <summary>
+    /// Gets or sets the change of the finger distance that starts the pinch. The change must also exceed the slide of the center.
+    /// </summary>
     public double Slop { get; set; } = 24;
 
+    /// <summary>
+    /// Gets or sets the smallest distance between the fingers at the start for which a pinch can start.
+    /// </summary>
     public double MinSpread { get; set; } = 8;
 
+    /// <summary>
+    /// Gets or sets the handler that accepts fingers and receives the pinch. With no handler, the gesture never claims.
+    /// </summary>
     public IPinchHandler? Handler { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether a pinch is claimed and not yet ended.
+    /// </summary>
     public bool IsClaimed => _phase == Phase.Claimed;
 
+    /// <summary>
+    /// Gets the finger distance now divided by the distance at the start. It is 1 before a pinch starts.
+    /// </summary>
     public double Scale => _scale;
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Down(int id, uint timeMs, double x, double y)
     {
         _count++;
@@ -79,6 +98,7 @@ public sealed class PinchGesture : ITouchGestures
         return TouchGestureVerdict.Pass;
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Motion(int id, uint timeMs, double x, double y)
     {
         var tracked = Move(id, x, y);
@@ -125,6 +145,7 @@ public sealed class PinchGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Up(int id, uint timeMs)
     {
         _count = Math.Max(0, _count - 1);
@@ -160,6 +181,7 @@ public sealed class PinchGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public void Cancel()
     {
         if (_phase == Phase.Claimed)
@@ -174,6 +196,11 @@ public sealed class PinchGesture : ITouchGestures
         _tracker.Reset();
     }
 
+    /// <summary>
+    /// Returns zero. This gesture never withholds events.
+    /// </summary>
+    /// <param name="into">The buffer, which is not written.</param>
+    /// <returns>Always zero.</returns>
     public int TakeWithheld(Span<EdgeSwipeSample> into) => 0;
 
     private void Sample(long nanos)

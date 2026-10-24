@@ -4,19 +4,35 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_color_representation_manager_v1</c> global. It tracks the alpha mode, YUV coefficients, range and chroma location that each surface commits.
+/// </summary>
 public sealed class ColorRepresentationManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorSurfaceExists = 1;
     private const uint ErrorInert = 4;
 
+    /// <summary>
+    /// Holds the color representation of one surface.
+    /// </summary>
+    /// <param name="AlphaMode">How the alpha channel relates to the color channels.</param>
+    /// <param name="Coefficients">The matrix coefficients that convert YUV to RGB.</param>
+    /// <param name="Range">The quantization range of the YUV values.</param>
+    /// <param name="ChromaLocation">The chroma sample location, or <see langword="null"/> when the client did not set one.</param>
     public readonly record struct Representation(
         WpColorRepresentationSurfaceV1.AlphaMode AlphaMode,
         WpColorRepresentationSurfaceV1.Coefficients Coefficients,
         WpColorRepresentationSurfaceV1.Range Range,
         WpColorRepresentationSurfaceV1.ChromaLocation? ChromaLocation)
     {
+        /// <summary>
+        /// Gets the representation of a surface without state: premultiplied electrical alpha, identity coefficients, full range and no chroma location.
+        /// </summary>
         public static Representation Default { get; } = new(
             WpColorRepresentationSurfaceV1.AlphaMode.PremultipliedElectrical,
             WpColorRepresentationSurfaceV1.Coefficients.Identity,
@@ -31,6 +47,12 @@ public sealed class ColorRepresentationManager : IDisposable
 
     private readonly Basin.Capabilities.Defaults.SurfaceHints? _hints;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ColorRepresentationManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces get representation state.</param>
+    /// <param name="hints">The surface hints that receive the YUV encoding of each surface, or <see langword="null"/>.</param>
     public ColorRepresentationManager(
         WlServerDisplay display, CompositorGlobal compositor, Basin.Capabilities.Defaults.SurfaceHints? hints = null)
     {
@@ -39,10 +61,21 @@ public sealed class ColorRepresentationManager : IDisposable
         _global = display.CreateGlobal(WpColorRepresentationManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a surface commit applies a different representation. The argument is the new representation.
+    /// </summary>
     public event Action<Surface, Representation>? RepresentationChanged;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Gets the representation that the surface's last applied commit set.
+    /// </summary>
+    /// <param name="surface">The surface to look up.</param>
+    /// <returns>The current representation, or <see cref="Representation.Default"/> when the surface has none.</returns>
     public Representation RepresentationOf(Surface surface) =>
         _surfaces.TryGetValue(surface, out var state) ? state.Current : Representation.Default;
 
@@ -105,6 +138,11 @@ public sealed class ColorRepresentationManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Maps a representation to the YUV encoding that the renderer understands.
+    /// </summary>
+    /// <param name="representation">The representation to map.</param>
+    /// <returns>The coefficients and range, or <see langword="null"/> for identity or other coefficients that are not BT.601, BT.709 or BT.2020.</returns>
     public static (YuvCoefficients Coefficients, YuvRange Range)? YuvEncodingOf(Representation representation)
     {
         YuvCoefficients? coefficients = representation.Coefficients switch

@@ -3,8 +3,22 @@ using Basin.Scene3D;
 
 namespace Basin.Scene3D.Gltf;
 
+/// <summary>
+/// Loads a skinned avatar from a binary glTF file.
+/// </summary>
 public static class GlbAvatar
 {
+    /// <summary>
+    /// Loads the skeleton, the skinned mesh, the rigid attachments and the named clips of a GLB file. Loading allocates. A frame that uses the result does not.
+    /// </summary>
+    /// <param name="glb">The bytes of the GLB file.</param>
+    /// <param name="sampleHz">The rate in frames per second at which the clips are resampled.</param>
+    /// <param name="wanted">The node names of the attachments that start visible. The others load hidden.</param>
+    /// <param name="decode">The decoder for the file's first image, or <see langword="null"/> to load untextured.</param>
+    /// <returns>The parts of the avatar.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="glb"/> or <paramref name="wanted"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The file is not a GLB file, has no skin, or has more than <see cref="Skeleton.MaxJoints"/> joints.</exception>
+    /// <exception cref="NotSupportedException">The file requires an extension, or a primitive is not a triangle list.</exception>
     public static GlbAvatarModel Load(byte[] glb, int sampleHz, IReadOnlyCollection<string> wanted, GlbImageDecoder? decode = null)
     {
         ArgumentNullException.ThrowIfNull(glb);

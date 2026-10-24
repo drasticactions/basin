@@ -5,6 +5,10 @@ using Basin.Seat;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// The part of a compositor's soft keyboard that is the same in every shell: the engine, the router, the typer, the timer, the layouts, the saved state and the show policy.
+/// The session draws nothing and places nothing. Every member runs on the compositor loop.
+/// </summary>
 public sealed class SoftKeyboardSession : IDisposable
 {
     private readonly List<KeyboardLayout> _layouts = [];
@@ -21,6 +25,12 @@ public sealed class SoftKeyboardSession : IDisposable
     private bool _manual;
     private bool _auto;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SoftKeyboardSession"/> class. It reads the state file and loads the layouts. An xkb layout loads only after <see cref="Attach"/>.
+    /// </summary>
+    /// <param name="loop">The compositor loop that owns the key timer.</param>
+    /// <param name="options">The configuration.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> or <paramref name="options"/> is <see langword="null"/>.</exception>
     public SoftKeyboardSession(ICompositorEventLoop loop, SoftKeyboardSessionOptions options)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -45,58 +55,146 @@ public sealed class SoftKeyboardSession : IDisposable
         Engine.ShapeRequested += ChooseShape;
     }
 
+    /// <summary>
+    /// Gets the engine that turns touches into keys. The consumer feeds it the touches on the keyboard.
+    /// </summary>
     public SoftKeyboardEngine Engine { get; }
 
+    /// <summary>
+    /// Gets the typer that taps the engine's keys for a string. Its clock is the session's clock.
+    /// </summary>
     public SoftKeyboardTyper Typer { get; }
 
+    /// <summary>
+    /// Gets the text-input fallback that the consumer installs as the input-method module's fallback before the services freeze.
+    /// </summary>
     public SoftKeyboardTextInput TextInput { get; } = new();
 
+    /// <summary>
+    /// Gets the router that delivers typed keys.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The session is not attached.</exception>
     public KeyboardRouter Router => _router ?? throw new InvalidOperationException("the session is not attached to a keyboard");
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Attach"/> has run.
+    /// </summary>
     public bool IsAttached => _router is not null;
 
+    /// <summary>
+    /// Gets the loaded layouts, in the order of the options. A layout that cannot load is left out. The list is never empty.
+    /// </summary>
     public IReadOnlyList<KeyboardLayout> Layouts => _layouts;
 
+    /// <summary>
+    /// Gets the index of the selected layout in <see cref="Layouts"/>.
+    /// </summary>
     public int LayoutIndex => _layoutIndex;
 
+    /// <summary>
+    /// Gets the selected layout.
+    /// </summary>
     public KeyboardLayout CurrentLayout => _layouts[Math.Clamp(_layoutIndex, 0, _layouts.Count - 1)];
 
+    /// <summary>
+    /// Gets the keyboard size: the saved size, the chosen size, or the size of the options.
+    /// </summary>
     public KeyboardSize Size { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the user chose the size, now or in the state file.
+    /// </summary>
     public bool SizeChosen { get; private set; }
 
+    /// <summary>
+    /// Gets the state of the focused text field.
+    /// </summary>
     public FieldState Field => TextInput.Field;
 
+    /// <summary>
+    /// Gets the kind of the most recent input. It starts as <see cref="LastInput.Pointer"/>.
+    /// </summary>
     public LastInput LastInput { get; private set; } = LastInput.Pointer;
 
+    /// <summary>
+    /// Gets a value indicating whether the user raised the keyboard by hand.
+    /// </summary>
     public bool Manual => _manual;
 
+    /// <summary>
+    /// Gets a value indicating whether a focused field raised the keyboard under the policy.
+    /// </summary>
     public bool Automatic => _auto;
 
+    /// <summary>
+    /// Gets a value indicating whether the keyboard must show: <see cref="Manual"/> or <see cref="Automatic"/>.
+    /// </summary>
     public bool Wanted => _manual || _auto;
 
+    /// <summary>
+    /// Gets the show policy of the current options.
+    /// </summary>
     public SoftKeyboardPolicy Policy => _options.Policy;
 
+    /// <summary>
+    /// Gets the session's clock in milliseconds. It is the typer's clock, which never runs behind a typed string.
+    /// </summary>
     public long Now => Typer.Clock;
 
+    /// <summary>
+    /// Gets or sets the test that two surfaces belong to one window. The default compares the references.
+    /// </summary>
     public Func<Surface, Surface, bool> SameWindow { get; set; } = static (a, b) => ReferenceEquals(a, b);
 
+    /// <summary>
+    /// Occurs when the policy runs: on a touch, a hand raise or hide, a hardware key, a field activation or deactivation, or a keyboard focus change.
+    /// The arguments are <see cref="Wanted"/> and a short reason. The same value can come twice, so the handler must be idempotent.
+    /// </summary>
     public event Action<bool, string>? WantedChanged;
 
+    /// <summary>
+    /// Occurs after each commit of the text-input state, once the grid has a bottom row for the field.
+    /// </summary>
     public event Action? FieldChanged;
 
+    /// <summary>
+    /// Occurs before the policy runs on a field activation or deactivation, and when an input-method client comes or goes.
+    /// </summary>
     public event Action? TextInputChanged;
 
+    /// <summary>
+    /// Occurs when an input-method client comes or goes, after <see cref="TextInputChanged"/>.
+    /// </summary>
     public event Action? InputMethodChanged;
 
+    /// <summary>
+    /// Occurs when the seat keyboard's focus moves, with the new surface or <see langword="null"/>.
+    /// </summary>
     public event Action<Surface?>? FocusChanged;
 
+    /// <summary>
+    /// Occurs after each rebuild of the engine's grid.
+    /// </summary>
     public event Action? LayoutChanged;
 
+    /// <summary>
+    /// Occurs after the user or the consumer selects a layout, with that layout.
+    /// </summary>
     public event Action<KeyboardLayout>? LayoutSelected;
 
+    /// <summary>
+    /// Occurs after a size is chosen, with that size.
+    /// </summary>
     public event Action<KeyboardSize>? SizeChanged;
 
+    /// <summary>
+    /// Connects the session to the seat. It creates the router, builds the xkb layouts, and follows the keyboard focus and the keymap.
+    /// </summary>
+    /// <param name="keyboard">The seat keyboard.</param>
+    /// <param name="textInputs">The text-input focus, or <see langword="null"/>. A word commit goes to it first.</param>
+    /// <param name="inputMethods">The input-method clients, or <see langword="null"/> when there are none.</param>
+    /// <param name="output">The key output, or <see langword="null"/> for a <see cref="SeatKeyOutput"/> over <paramref name="keyboard"/>.</param>
+    /// <exception cref="InvalidOperationException">The session is already attached.</exception>
     public void Attach(SeatKeyboard keyboard, ITextInputFocus? textInputs, IInputMethodClients? inputMethods, ISoftKeyOutput? output = null)
     {
         ArgumentNullException.ThrowIfNull(keyboard);
@@ -133,12 +231,28 @@ public sealed class SoftKeyboardSession : IDisposable
         TextInput.FieldChanged += OnFieldChanged;
     }
 
+    /// <summary>
+    /// Records the kind of the most recent input. It does not run the policy.
+    /// </summary>
+    /// <param name="input">The kind of input.</param>
     public void NoteInput(LastInput input) => LastInput = input;
 
+    /// <summary>
+    /// Records a pointer input. It does not run the policy.
+    /// </summary>
     public void NotePointer() => LastInput = LastInput.Pointer;
 
+    /// <summary>
+    /// Tests whether a keyboard tag belongs to an input-method client.
+    /// </summary>
+    /// <param name="tag">The tag of the keyboard.</param>
+    /// <returns><see langword="false"/> when the tag is not an input-method client or the session has no input-method clients.</returns>
     public bool IsInputMethodKeyboard(object? tag) => _clients?.IsInputMethodClient(tag) ?? false;
 
+    /// <summary>
+    /// Records a hardware key. A press clears both intents and raises <see cref="WantedChanged"/> when the keyboard was wanted.
+    /// </summary>
+    /// <param name="pressed"><see langword="true"/> for a press. A release does nothing.</param>
     public void NoteHardwareKey(bool pressed)
     {
         if (!pressed)
@@ -155,6 +269,10 @@ public sealed class SoftKeyboardSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Records a touch. A touch on the window of the active field sets the automatic intent and raises <see cref="WantedChanged"/>.
+    /// </summary>
+    /// <param name="surface">The surface under the touch, or <see langword="null"/> for none.</param>
     public void NoteTouch(Surface? surface)
     {
         LastInput = LastInput.Touch;
@@ -165,12 +283,19 @@ public sealed class SoftKeyboardSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sets the manual intent and raises <see cref="WantedChanged"/>.
+    /// </summary>
     public void Raise()
     {
         _manual = true;
         WantedChanged?.Invoke(true, "manual");
     }
 
+    /// <summary>
+    /// Clears both intents and raises <see cref="WantedChanged"/> with <see langword="false"/>.
+    /// </summary>
+    /// <param name="why">The reason that the event carries.</param>
     public void Hide(string why)
     {
         ArgumentNullException.ThrowIfNull(why);
@@ -179,12 +304,18 @@ public sealed class SoftKeyboardSession : IDisposable
         WantedChanged?.Invoke(false, why);
     }
 
+    /// <summary>
+    /// Clears both intents without an event. The consumer calls it when a focus change makes the intent stale.
+    /// </summary>
     public void ClearIntent()
     {
         _manual = false;
         _auto = false;
     }
 
+    /// <summary>
+    /// Tells the session that the consumer took the keyboard down. It clears the manual intent, resets the engine and clears the symbol lock.
+    /// </summary>
     public void NoteHidden()
     {
         _manual = false;
@@ -192,6 +323,10 @@ public sealed class SoftKeyboardSession : IDisposable
         Engine.State.ClearSymbolLock();
     }
 
+    /// <summary>
+    /// Selects a layout, saves the choice to the state file and rebuilds the grid. An index out of range does nothing.
+    /// </summary>
+    /// <param name="index">The index in <see cref="Layouts"/>.</param>
     public void SelectLayout(int index)
     {
         if (index < 0 || index >= _layouts.Count)
@@ -206,6 +341,11 @@ public sealed class SoftKeyboardSession : IDisposable
         LayoutSelected?.Invoke(CurrentLayout);
     }
 
+    /// <summary>
+    /// Selects the first layout with an id.
+    /// </summary>
+    /// <param name="id">The layout id.</param>
+    /// <returns><see langword="false"/> when no loaded layout has the id.</returns>
     public bool SelectLayout(string id)
     {
         ArgumentNullException.ThrowIfNull(id);
@@ -219,6 +359,10 @@ public sealed class SoftKeyboardSession : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Sets the size as the user's choice, saves it to the state file and raises <see cref="SizeChanged"/>.
+    /// </summary>
+    /// <param name="size">The chosen size.</param>
     public void ChooseSize(KeyboardSize size)
     {
         Size = size;
@@ -227,6 +371,11 @@ public sealed class SoftKeyboardSession : IDisposable
         SizeChanged?.Invoke(size);
     }
 
+    /// <summary>
+    /// Reads the shape name from a layout id: <c>win8-thumb-en-us</c> gives <c>thumb</c>, and <c>xkb-full</c> gives <c>full</c>. Any other id is returned unchanged.
+    /// </summary>
+    /// <param name="layout">The layout.</param>
+    /// <returns>The shape name.</returns>
     public static string ShapeOf(KeyboardLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -240,6 +389,11 @@ public sealed class SoftKeyboardSession : IDisposable
         return id.StartsWith("xkb-", StringComparison.Ordinal) ? id[4..] : id;
     }
 
+    /// <summary>
+    /// Applies new options at run time. The layouts reload only when the layout list changes, and the size changes only when the user chose none.
+    /// The state path and the locale of the new options take effect on the next layout reload.
+    /// </summary>
+    /// <param name="options">The new options.</param>
     public void Reload(SoftKeyboardSessionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -264,6 +418,9 @@ public sealed class SoftKeyboardSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Rebuilds the engine's grid or pages from the current layout and field, and raises <see cref="LayoutChanged"/>.
+    /// </summary>
     public void Rebuild()
     {
         var grid = CurrentGrid(out var pages);
@@ -280,6 +437,9 @@ public sealed class SoftKeyboardSession : IDisposable
         LayoutChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Removes the key timer and stops following the seat keyboard and the input-method clients.
+    /// </summary>
     public void Dispose()
     {
         _timer?.Dispose();

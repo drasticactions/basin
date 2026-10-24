@@ -3,12 +3,18 @@ using Wayland.Server;
 
 namespace Basin.Diagnostics;
 
+/// <summary>
+/// Connects libwayland diagnostics to the basin log.
+/// </summary>
 public static class WaylandDiagnostics
 {
     private static readonly BasinLogger Log = BasinLog.For("wayland");
 
     private static bool _routed;
 
+    /// <summary>
+    /// Sends the server and client log output of libwayland to the <c>wayland</c> category as warnings. Only the first call has an effect, and a missing native entry point is ignored.
+    /// </summary>
     public static void RouteToBasinLog()
     {
         if (_routed || !WaylandLog.IsSupported)
@@ -30,6 +36,11 @@ public static class WaylandDiagnostics
         }
     }
 
+    /// <summary>
+    /// Logs each protocol message of a display at the debug level. Allocation scopes are disabled until the trace is disposed, because each message allocates.
+    /// </summary>
+    /// <param name="display">The display to trace.</param>
+    /// <returns>The handle that stops the trace and restores <see cref="AllocationScope.Enabled"/>.</returns>
     public static IDisposable TraceProtocol(WlServerDisplay display)
     {
         ArgumentNullException.ThrowIfNull(display);

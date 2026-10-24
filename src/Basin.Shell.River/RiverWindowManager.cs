@@ -8,8 +8,15 @@ using Wayland.Server;
 
 namespace Basin.Shell.River;
 
+/// <summary>
+/// The compositor half of river-window-management-v1. It hands window-management policy to one client and keeps the mechanism: sequences, transactions, scene nodes, borders and bindings.
+/// The consumer owns the shells, seats, outputs and input path, and calls in. All members must run on the compositor thread.
+/// </summary>
 public sealed class RiverWindowManager : IDisposable
 {
+    /// <summary>
+    /// The highest version of river-window-management-v1 that the global advertises.
+    /// </summary>
     public const int Version = 5;
 
     private readonly WlServerDisplay _display;
@@ -45,6 +52,19 @@ public sealed class RiverWindowManager : IDisposable
     private bool _sessionLockChanged;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RiverWindowManager"/> class.
+    /// It advertises the window management, bindings, layer shell, input management, xkb config and libinput config globals at once.
+    /// </summary>
+    /// <param name="display">The display that the globals are created on.</param>
+    /// <param name="loop">The loop that runs the idle sequences, the transaction deadlines and the watchdog.</param>
+    /// <param name="scene">The scene that pointer positions are hit-tested against.</param>
+    /// <param name="windowTree">The tree that window subtrees go in. Shell surfaces and popups go in sibling trees under its parent.</param>
+    /// <param name="xdgShell">The xdg-shell whose toplevels and popups this instance manages.</param>
+    /// <param name="layout">The output layout that <see cref="Arrangement"/> places outputs in.</param>
+    /// <param name="seats">The seats that the window manager can see. The list is read once.</param>
+    /// <param name="options">The settings, or <see langword="null"/> for the defaults.</param>
+    /// <exception cref="ArgumentNullException">An argument other than <paramref name="options"/> is <see langword="null"/>.</exception>
     public RiverWindowManager(
         WlServerDisplay display,
         ICompositorEventLoop loop,
@@ -89,16 +109,36 @@ public sealed class RiverWindowManager : IDisposable
         LibinputConfig = new RiverLibinputConfig(this, display);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a window manager client holds a live binding to the global.
+    /// </summary>
     public bool HasWindowManager => _manager is { IsDestroyed: false };
 
+    /// <summary>
+    /// Occurs after the window manager unbinds, disconnects or is disconnected, once the open sequence is finished and window state is reset.
+    /// </summary>
     public event Action? WindowManagerLost;
 
+    /// <summary>
+    /// Occurs after a render sequence applies the window manager's render order to the scene.
+    /// </summary>
     public event Action? Restacked;
 
+    /// <summary>
+    /// Occurs when the window manager does not finish a manage or render sequence within <see cref="RiverWindowManagerOptions.UnresponsiveTimeoutMs"/>.
+    /// It fires before a disconnect that <see cref="RiverWindowManagerOptions.DisconnectUnresponsiveManager"/> asks for.
+    /// </summary>
     public event Action? WindowManagerUnresponsive;
 
+    /// <summary>
+    /// Gets the number of outputs that showed a fullscreen window after the last fullscreen pass.
+    /// Only the topmost fullscreen window on each output counts.
+    /// </summary>
     public int DisplayedFullscreenCount { get; private set; }
 
+    /// <summary>
+    /// Gets the number of windows that show a frozen frame while a transaction waits for them.
+    /// </summary>
     public int FrozenWindowCount
     {
         get
@@ -116,20 +156,47 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the number of manage sequences that started since construction.
+    /// </summary>
     public long ManageSequences { get; private set; }
 
+    /// <summary>
+    /// Gets the number of render sequences that started since construction.
+    /// </summary>
     public long RenderSequences { get; private set; }
 
+    /// <summary>
+    /// Gets the number of sequences that the watchdog found unfinished at its deadline.
+    /// </summary>
     public long UnresponsiveSequences { get; private set; }
 
+    /// <summary>
+    /// Gets the arrangement that places the outputs added through <see cref="AddOutput"/>.
+    /// </summary>
     public RiverOutputArrangement Arrangement { get; } = new();
 
+    /// <summary>
+    /// Gets or sets the foreign toplevel list that supplies window identifiers.
+    /// The window manager gets an identifier for a window only when this and <see cref="Toplevels"/> are both set.
+    /// </summary>
     public ForeignToplevelListManager? ForeignToplevels { get; set; }
 
+    /// <summary>
+    /// Gets or sets the toplevel model that maps a window's surface to its entry in <see cref="ForeignToplevels"/>.
+    /// </summary>
     public Basin.Capabilities.IToplevelModel? Toplevels { get; set; }
 
+    /// <summary>
+    /// Gets or sets the window capture source that each render sequence updates with the geometry of every window.
+    /// A hidden window or one that is not displayable reports an empty geometry.
+    /// </summary>
     public XdgToplevelSource? ToplevelSource { get; set; }
 
+    /// <summary>
+    /// Gets or sets the xdg-decoration manager that carries decoration modes between clients and the window manager.
+    /// Without it, every window reports that it only supports client-side decoration, and the manager's decoration requests are recorded but not applied.
+    /// </summary>
     public XdgDecorationManager? Decorations
     {
         get => _xdgDecorations;
@@ -170,6 +237,10 @@ public sealed class RiverWindowManager : IDisposable
         _ => RiverWindowV1.DecorationHint.NoPreference,
     };
 
+    /// <summary>
+    /// Gets or sets the session lock manager whose lock state the window manager hears.
+    /// While the session is locked, the compositor ignores the window manager's focus requests.
+    /// </summary>
     public SessionLockManager? SessionLock
     {
         get => _sessionLock;
@@ -211,6 +282,11 @@ public sealed class RiverWindowManager : IDisposable
         MarkManageDirty();
     }
 
+    /// <summary>
+    /// Starts to manage an output and appends it to <see cref="Arrangement"/>. An output that is already managed does nothing.
+    /// </summary>
+    /// <param name="global">The global of the output to add.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="global"/> is <see langword="null"/>.</exception>
     public void AddOutput(OutputGlobal global)
     {
         ArgumentNullException.ThrowIfNull(global);
@@ -228,6 +304,12 @@ public sealed class RiverWindowManager : IDisposable
         MarkManageDirty();
     }
 
+    /// <summary>
+    /// Stops managing an output and tells the window manager that it is removed. An unknown output does nothing.
+    /// Windows that asked to be fullscreen on it lose that request.
+    /// </summary>
+    /// <param name="output">The output to remove.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public void RemoveOutput(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -257,12 +339,24 @@ public sealed class RiverWindowManager : IDisposable
         MarkManageDirty();
     }
 
+    /// <summary>
+    /// Manages the X11 windows of an Xwayland window manager as river windows from their first map.
+    /// </summary>
+    /// <param name="xwayland">The Xwayland window manager whose mapped windows to manage.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="xwayland"/> is <see langword="null"/>.</exception>
     public void Adopt(XWaylandWm xwayland)
     {
         ArgumentNullException.ThrowIfNull(xwayland);
         xwayland.WindowMapped += OnXWindowMapped;
     }
 
+    /// <summary>
+    /// Reports that a seat pressed, touched or tapped a surface. A surface inside a window, including its decorations, reports the window.
+    /// A surface of a shell surface reports that shell surface. Other surfaces report nothing.
+    /// </summary>
+    /// <param name="seat">The seat that interacted.</param>
+    /// <param name="surface">The surface that received the input.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> or <paramref name="surface"/> is <see langword="null"/>.</exception>
     public void NotifyInteraction(Basin.Seat.Seat seat, Surface surface)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -282,6 +376,13 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Records the pointer position of a seat. It asks for a manage sequence only when the pointer enters a different window or a pointer operation runs.
+    /// During a pointer operation it also clears the client pointer focus.
+    /// </summary>
+    /// <param name="seat">The seat whose pointer moved.</param>
+    /// <param name="x">The horizontal position in logical layout coordinates.</param>
+    /// <param name="y">The vertical position in logical layout coordinates.</param>
     public void NotifyPointerPosition(Basin.Seat.Seat seat, double x, double y)
     {
         if (SeatFor(seat) is not { } river)
@@ -308,10 +409,25 @@ public sealed class RiverWindowManager : IDisposable
         MarkManageDirty();
     }
 
+    /// <summary>
+    /// Reports that the buttons of a seat came up during a pointer operation. The operation continues until the window manager ends it.
+    /// </summary>
+    /// <param name="seat">The seat whose buttons came up.</param>
     public void NotifyPointerReleased(Basin.Seat.Seat seat) => SeatFor(seat)?.ReportOperationReleased();
 
+    /// <summary>
+    /// Asks for a manage sequence soon. Several requests before the sequence starts give one sequence.
+    /// </summary>
     public void RequestManage() => MarkManageDirty();
 
+    /// <summary>
+    /// Finds the scene subtrees that hold a managed window's content and its popups, for window capture.
+    /// </summary>
+    /// <param name="surface">The root surface of the window.</param>
+    /// <param name="content">The window's subtree, or <see langword="null"/> when no window owns the surface.</param>
+    /// <param name="popups">The subtree of the window's popups, or <see langword="null"/> when no window owns the surface.</param>
+    /// <returns><see langword="true"/> when a managed window has <paramref name="surface"/> as its root surface.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public bool TryCaptureTrees(Surface surface, out SceneNode? content, out SceneNode? popups)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -330,6 +446,13 @@ public sealed class RiverWindowManager : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Tells the window manager how many capture sessions record a window. An unmanaged window does nothing.
+    /// </summary>
+    /// <param name="window">The toplevel that is captured.</param>
+    /// <param name="count">The number of live capture sessions.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
     public void SetCaptureSessions(XdgToplevelWindow window, int count)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -341,6 +464,13 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Tells the window manager how many capture sessions record an output. An unmanaged output or an unchanged count does nothing.
+    /// </summary>
+    /// <param name="output">The output that is captured.</param>
+    /// <param name="count">The number of live capture sessions.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="count"/> is negative.</exception>
     public void SetCaptureSessions(IOutput output, int count)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -352,6 +482,12 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Passes a client's preferred presentation mode for a window to the window manager. An unmanaged window does nothing.
+    /// </summary>
+    /// <param name="window">The toplevel that gave the hint.</param>
+    /// <param name="hint">The presentation mode that the client prefers.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="window"/> is <see langword="null"/>.</exception>
     public void SetPresentationHint(XdgToplevelWindow window, PresentationMode hint)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -362,6 +498,12 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Finds the presentation mode that the window manager set for an output.
+    /// </summary>
+    /// <param name="output">The output to read.</param>
+    /// <returns>The mode, or <see cref="PresentationMode.Vsync"/> for an unmanaged output or one that the manager never set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public PresentationMode PresentationModeOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -370,6 +512,9 @@ public sealed class RiverWindowManager : IDisposable
             : PresentationMode.Vsync;
     }
 
+    /// <summary>
+    /// Unsubscribes from the shells, destroys the scene trees, shell surfaces and decorations, and removes every global. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -445,12 +590,24 @@ public sealed class RiverWindowManager : IDisposable
 
     private readonly RiverBindings _bindings;
 
+    /// <summary>
+    /// Gets the river-layer-shell-v1 global of this instance.
+    /// </summary>
     public RiverLayerShell LayerShell { get; }
 
+    /// <summary>
+    /// Gets the river-input-management-v1 global of this instance.
+    /// </summary>
     public RiverInputManager InputManager { get; }
 
+    /// <summary>
+    /// Gets the river-xkb-config-v1 global of this instance.
+    /// </summary>
     public RiverXkbConfig XkbConfig { get; }
 
+    /// <summary>
+    /// Gets the river-libinput-config-v1 global of this instance.
+    /// </summary>
     public RiverLibinputConfig LibinputConfig { get; }
 
     internal IOutput? OutputForWlResource(Wayland.WlOutputResource? resource) =>
@@ -461,6 +618,15 @@ public sealed class RiverWindowManager : IDisposable
 
     internal RiverSeat? RiverSeatFor(Basin.Seat.Seat seat) => SeatFor(seat);
 
+    /// <summary>
+    /// Offers a key event to the window manager's bindings. A consumed key still updates the seat's key and modifier state.
+    /// The consumer must not deliver a consumed key to the focused surface.
+    /// </summary>
+    /// <param name="seat">The seat that the key came from.</param>
+    /// <param name="key">The evdev key code.</param>
+    /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
+    /// <returns><see langword="true"/> when a binding consumed the key.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public bool HandleKey(Basin.Seat.Seat seat, uint key, bool pressed)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -473,6 +639,11 @@ public sealed class RiverWindowManager : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Tells the bindings that the modifier state of a seat changed. The consumer calls it after each modifier update.
+    /// </summary>
+    /// <param name="seat">The seat whose modifiers changed.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public void NotifyModifiers(Basin.Seat.Seat seat)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -482,6 +653,16 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Offers a pointer button to a running pointer operation or to the window manager's pointer bindings.
+    /// During an operation it routes the button through the seat itself, so the seat's button count stays correct.
+    /// </summary>
+    /// <param name="seat">The seat that the button came from.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="button">The evdev button code.</param>
+    /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
+    /// <returns><see langword="true"/> when the button was consumed. The consumer must then not route it again.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public bool HandlePointerButton(Basin.Seat.Seat seat, uint timeMs, uint button, bool pressed)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -505,6 +686,12 @@ public sealed class RiverWindowManager : IDisposable
         return river.HandleButton(button, pressed, RiverModifiers.From(seat.Keyboard));
     }
 
+    /// <summary>
+    /// Tells whether the window manager runs a pointer operation, for example a move or a resize, on a seat.
+    /// </summary>
+    /// <param name="seat">The seat to check.</param>
+    /// <returns><see langword="true"/> while an operation is active on the seat.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public bool HasPointerOperation(Basin.Seat.Seat seat)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -514,6 +701,10 @@ public sealed class RiverWindowManager : IDisposable
     internal RiverSeat? ResolveSeat(RiverSeatV1Resource? resource) =>
         resource is null ? null : _seats.Find(s => ReferenceEquals(s.Resource, resource));
 
+    /// <summary>
+    /// Gets or sets the wl_compositor global that resolves surface resources.
+    /// Without it, the window manager's requests for shell surfaces and decorations are ignored.
+    /// </summary>
     public CompositorGlobal? Compositor { get; set; }
 
     internal void HoldNextCommit(object surface)
@@ -1256,8 +1447,15 @@ public sealed class RiverWindowManager : IDisposable
         MarkManageDirty();
     }
 
+    /// <summary>
+    /// Occurs when the window manager asks the compositor to end the session.
+    /// </summary>
     public event Action? ExitSessionRequested;
 
+    /// <summary>
+    /// Occurs when a manage sequence applies a pointer warp. The arguments are the seat and the new position in logical layout coordinates, clamped into the outputs.
+    /// The consumer moves its cursor to that position.
+    /// </summary>
     public event Action<Basin.Seat.Seat, Point>? WarpRequested;
 
     private void DetachManager()

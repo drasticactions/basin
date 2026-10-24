@@ -4,12 +4,19 @@ using Semaphore = Silk.NET.Vulkan.Semaphore;
 
 namespace Basin.Render.Vulkan;
 
+/// <summary>
+/// Makes the queue of a <see cref="VulkanDevice"/> wait for sync_file fences. It falls back to a CPU wait when the device cannot import one.
+/// </summary>
 public sealed unsafe class VulkanFenceWait : IDisposable
 {
     private readonly VulkanDevice _device;
     private readonly KhrExternalSemaphoreFd? _semaphoreFd;
     private readonly List<(Semaphore Semaphore, Fence Fence)> _slots = new(4);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanFenceWait"/> class.
+    /// </summary>
+    /// <param name="device">The device whose queue waits.</param>
     public VulkanFenceWait(VulkanDevice device)
     {
         _device = device;
@@ -21,10 +28,20 @@ public sealed unsafe class VulkanFenceWait : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the device imports sync_file fences, so that <see cref="Wait"/> does not block the CPU.
+    /// </summary>
     public bool IsGpuSide => _semaphoreFd is not null;
 
+    /// <summary>
+    /// Gets the number of semaphore and fence pairs that the object made. Finished pairs are used again.
+    /// </summary>
     public int Slots => _slots.Count;
 
+    /// <summary>
+    /// Makes later submissions on the queue wait for a fence. When the GPU wait fails, it blocks the calling thread until the fence signals.
+    /// </summary>
+    /// <param name="syncFileFd">A sync_file fd that the caller keeps, or a negative value for no wait.</param>
     public void Wait(int syncFileFd)
     {
         if (syncFileFd < 0)
@@ -64,6 +81,9 @@ public sealed unsafe class VulkanFenceWait : IDisposable
         RenderFences.WaitSyncFile(syncFileFd);
     }
 
+    /// <summary>
+    /// Waits for each pending wait submission, then destroys every semaphore and fence.
+    /// </summary>
     public void Dispose()
     {
         foreach (var (semaphore, fence) in _slots)

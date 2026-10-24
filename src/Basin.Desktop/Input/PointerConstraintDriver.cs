@@ -1,5 +1,8 @@
 namespace Basin.Desktop;
 
+/// <summary>
+/// Activates the pointer constraint of the focused surface when the pointer enters its region, and applies it to pointer motion. A <see cref="PointerConstraintsManager"/> creates one when it is given a seat.
+/// </summary>
 public sealed class PointerConstraintDriver : IDisposable
 {
     private readonly PointerConstraintsManager _constraints;
@@ -19,14 +22,29 @@ public sealed class PointerConstraintDriver : IDisposable
         _seat.Pointer.Moved += OnMoved;
     }
 
+    /// <summary>
+    /// Gets or sets the policy that can refuse a constraint. A constraint for which it returns <see langword="false"/> never activates. When it is <see langword="null"/>, all constraints are allowed.
+    /// </summary>
     public Func<PointerConstraint, bool>? Allow { get; set; }
 
+    /// <summary>
+    /// Gets the constraint that applies now. It is <see langword="null"/> when no constraint is active.
+    /// </summary>
     public PointerConstraint? Active => _active;
 
+    /// <summary>
+    /// Gets a value indicating whether the active constraint is a lock.
+    /// </summary>
     public bool IsLocked => _active is { Kind: ConstraintKind.Lock };
 
+    /// <summary>
+    /// Occurs when the active constraint changes. The arguments are the previous and the new constraint, and either can be <see langword="null"/>.
+    /// </summary>
     public event Action<PointerConstraint?, PointerConstraint?>? Changed;
 
+    /// <summary>
+    /// Recomputes the active constraint from the pointer focus and position. The driver calls it on focus changes and motion, and a consumer calls it after it changes <see cref="Allow"/>.
+    /// </summary>
     public void Refresh()
     {
         if (_disposed)
@@ -72,6 +90,14 @@ public sealed class PointerConstraintDriver : IDisposable
         Changed?.Invoke(previous, _active);
     }
 
+    /// <summary>
+    /// Applies the active constraint to a pointer move. A lock keeps the old position, and a confinement clamps the new position into the region.
+    /// </summary>
+    /// <param name="fromX">The X position before the move, in layout coordinates.</param>
+    /// <param name="fromY">The Y position before the move, in layout coordinates.</param>
+    /// <param name="layoutX">The X position after the move, changed in place.</param>
+    /// <param name="layoutY">The Y position after the move, changed in place.</param>
+    /// <returns><see langword="true"/> when the constraint changed the target position.</returns>
     public bool Constrain(double fromX, double fromY, ref double layoutX, ref double layoutY)
     {
         switch (_active)
@@ -97,6 +123,13 @@ public sealed class PointerConstraintDriver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the layout position that the cursor moves to when a lock ends, from its cursor position hint.
+    /// </summary>
+    /// <param name="constraint">The constraint that ends.</param>
+    /// <param name="layoutX">The X position in layout coordinates, or zero.</param>
+    /// <param name="layoutY">The Y position in layout coordinates, or zero.</param>
+    /// <returns><see langword="true"/> when <paramref name="constraint"/> is a lock with a hint.</returns>
     public bool ReleasePoint(PointerConstraint constraint, out double layoutX, out double layoutY)
     {
         ArgumentNullException.ThrowIfNull(constraint);
@@ -112,6 +145,9 @@ public sealed class PointerConstraintDriver : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Stops listening to the pointer. It does not deactivate the active constraint.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

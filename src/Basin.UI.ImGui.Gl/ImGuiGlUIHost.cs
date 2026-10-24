@@ -3,8 +3,21 @@ using Basin.Render.Gl;
 
 namespace Basin.UI.ImGui;
 
+/// <summary>
+/// Creates an <see cref="ImGuiUIHost"/> that renders with OpenGL ES into Argb8888 dmabufs.
+/// </summary>
 public static class ImGuiGlUIHost
 {
+    /// <summary>
+    /// Creates a GL host on the GL device of the renderer, or on a device of its own. The host checks that it can allocate and render a chrome buffer before it returns.
+    /// </summary>
+    /// <param name="shared">The GL device of the renderer, which the host uses and does not own. When it is <see langword="null"/>, the host opens its own device on <paramref name="renderNodePath"/>.</param>
+    /// <param name="renderNodePath">The DRM render node for a device of its own, for example /dev/dri/renderD128.</param>
+    /// <param name="imports">The dmabuf formats that the renderer imports, or <see langword="null"/> to let the allocator choose the modifier.</param>
+    /// <param name="declined">The reason that no host was made, or <see langword="null"/> on success.</param>
+    /// <param name="allocator">The buffer allocator for a shared device, which the host does not own. When it is <see langword="null"/>, or the host opens its own device, the host makes and owns an allocator.</param>
+    /// <param name="options">The host options, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The host, or <see langword="null"/> when ImGui does not load, no device is available, or no buffer that the renderer imports can be rendered.</returns>
     public static ImGuiUIHost? TryCreate(
         GlDevice? shared,
         string? renderNodePath,

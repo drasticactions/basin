@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_fifo_manager_v1</c> global. It holds fifo commits until the output latches a frame. A guard timer releases them when no frame comes.
+/// </summary>
 public sealed class FifoManager : IDisposable, IFrameSink
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const int GuardDelayMs = 50;
@@ -25,6 +31,15 @@ public sealed class FifoManager : IDisposable, IFrameSink
     private long _retirements;
     private long _retirementsAtGuardArm;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FifoManager"/> class and creates the global. Until a consumer latches, the output frame events latch.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces it paces.</param>
+    /// <param name="layout">The layout whose outputs it follows.</param>
+    /// <param name="loop">The loop that holds the guard timer.</param>
+    /// <param name="clock">The frame clock to join as a sink, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/>, <paramref name="compositor"/>, <paramref name="layout"/> or <paramref name="loop"/> is <see langword="null"/>.</exception>
     public FifoManager(
         WlServerDisplay display,
         CompositorGlobal compositor,
@@ -46,6 +61,12 @@ public sealed class FifoManager : IDisposable, IFrameSink
         _clock?.Add(this);
     }
 
+    /// <summary>
+    /// Latches the fifo surfaces of the frame. After this call, output frame events no longer latch.
+    /// </summary>
+    /// <param name="output">The output that the frame is for.</param>
+    /// <param name="predictedVblankNanos">The predicted vblank on the monotonic clock in nanoseconds, or 0 to latch now.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public void BeginFrame(IOutput output, long predictedVblankNanos)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -61,10 +82,18 @@ public sealed class FifoManager : IDisposable, IFrameSink
             predictedVblankNanos > 0 ? PresentTiming.GridOf(output) : -1);
     }
 
+    /// <summary>
+    /// Does nothing. Fifo barriers clear at <see cref="BeginFrame"/>.
+    /// </summary>
+    /// <param name="output">The output that presented the frame.</param>
+    /// <param name="presentedNanos">The presentation time on the monotonic clock in nanoseconds.</param>
     public void EndFrame(IOutput output, long presentedNanos)
     {
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a fifo surface has an armed barrier or a held commit.
+    /// </summary>
     public bool HasPendingBarriers
     {
         get
@@ -81,6 +110,11 @@ public sealed class FifoManager : IDisposable, IFrameSink
         }
     }
 
+    /// <summary>
+    /// Latches every fifo surface with a presentation time one refresh from now.
+    /// </summary>
+    /// <param name="output">The output whose refresh rate sets the time.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public void LatchAtNextRefresh(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -88,6 +122,10 @@ public sealed class FifoManager : IDisposable, IFrameSink
         Latch(refresh > 0 ? MonotonicClock.Nanos + (1_000_000_000_000L / refresh) : 0);
     }
 
+    /// <summary>
+    /// Releases the held commits and clears the barriers of every fifo surface that the frame limiter does not hold. After this call, output frame events no longer latch.
+    /// </summary>
+    /// <param name="presentationTimeNanos">The presentation time on the monotonic clock in nanoseconds, or 0 for now.</param>
     public void Latch(long presentationTimeNanos = 0)
     {
         _consumerLatches = true;
@@ -120,6 +158,9 @@ public sealed class FifoManager : IDisposable, IFrameSink
         _sweep.Clear();
     }
 
+    /// <summary>
+    /// Leaves the frame clock, stops following the outputs, removes the guard timer and removes the global.
+    /// </summary>
     public void Dispose()
     {
         _clock?.Remove(this);

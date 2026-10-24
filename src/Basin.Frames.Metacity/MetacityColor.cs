@@ -1,12 +1,36 @@
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// A color with straight alpha. Each channel is a value from 0 to 1.
+/// </summary>
+/// <param name="R">The red channel.</param>
+/// <param name="G">The green channel.</param>
+/// <param name="B">The blue channel.</param>
+/// <param name="A">The alpha channel.</param>
 public readonly record struct MetacityColor(double R, double G, double B, double A)
 {
+    /// <summary>
+    /// Makes an opaque color from 8-bit channels.
+    /// </summary>
+    /// <param name="r">The red channel from 0 to 255.</param>
+    /// <param name="g">The green channel from 0 to 255.</param>
+    /// <param name="b">The blue channel from 0 to 255.</param>
+    /// <returns>The color with an alpha of 1.</returns>
     public static MetacityColor FromRgb(byte r, byte g, byte b) => new(r / 255.0, g / 255.0, b / 255.0, 1.0);
 
+    /// <summary>
+    /// Makes an opaque color from a 0xRRGGBB value. The top byte is ignored.
+    /// </summary>
+    /// <param name="rgb">The color as 0xRRGGBB.</param>
+    /// <returns>The color with an alpha of 1.</returns>
     public static MetacityColor FromHex(uint rgb) =>
         FromRgb((byte)((rgb >> 16) & 0xFF), (byte)((rgb >> 8) & 0xFF), (byte)(rgb & 0xFF));
 
+    /// <summary>
+    /// Shades the color as GTK does: it multiplies the lightness and saturation in HLS by a factor and clamps them to 1.
+    /// </summary>
+    /// <param name="factor">The factor. A value above 1 makes the color lighter.</param>
+    /// <returns>The shaded color with the same alpha.</returns>
     public MetacityColor Shade(double factor)
     {
         var (h, l, s) = ToHls(R, G, B);
@@ -16,12 +40,27 @@ public readonly record struct MetacityColor(double R, double G, double B, double
         return new MetacityColor(r, g, b, A);
     }
 
+    /// <summary>
+    /// Mixes another color into this one.
+    /// </summary>
+    /// <param name="foreground">The color to mix in.</param>
+    /// <param name="alpha">The amount of <paramref name="foreground"/>, from 0 for none to 1 for all.</param>
+    /// <returns>The mixed color with the alpha of this color.</returns>
     public MetacityColor Blend(MetacityColor foreground, double alpha) =>
         new(R + (foreground.R - R) * alpha, G + (foreground.G - G) * alpha, B + (foreground.B - B) * alpha, A);
 
+    /// <summary>
+    /// Averages the red, green and blue channels with another color.
+    /// </summary>
+    /// <param name="other">The other color.</param>
+    /// <returns>The average color with the alpha of this color.</returns>
     public MetacityColor Mean(MetacityColor other) =>
         new((R + other.R) / 2, (G + other.G) / 2, (B + other.B) / 2, A);
 
+    /// <summary>
+    /// Converts the color to 8-bit channels. Each channel is truncated, not rounded, and clamped to the range 0 to 255.
+    /// </summary>
+    /// <returns>The color as straight 0xAARRGGBB.</returns>
     public uint ToArgb32() =>
         ((uint)Math.Clamp((int)(A * 255), 0, 255) << 24)
         | ((uint)Math.Clamp((int)(R * 255), 0, 255) << 16)

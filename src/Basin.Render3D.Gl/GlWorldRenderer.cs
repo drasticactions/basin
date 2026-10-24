@@ -6,6 +6,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Render3D.Gl;
 
+/// <summary>
+/// The GL 3D pass. It draws on the 2D renderer's own <see cref="GlDevice"/> and context, so it samples client textures with no second import. Use it on the compositor thread only.
+/// </summary>
 public sealed unsafe class GlWorldRenderer : IWorldRenderer
 {
     private const int MaxLights = 8;
@@ -55,6 +58,11 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
     private float _settingsAnisotropy = 8;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlWorldRenderer"/> class. It compiles its programs and creates its samplers on <paramref name="device"/>'s context.
+    /// </summary>
+    /// <param name="device">The GL device of the 2D renderer. Its context must be current.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public GlWorldRenderer(GlDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -78,14 +86,33 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
         BasinCounters.Track();
     }
 
+    /// <inheritdoc/>
     public string Name => "gl";
 
+    /// <summary>
+    /// Gets the GL device that the pass draws on.
+    /// </summary>
     public GlDevice Device => _device;
 
+    /// <summary>
+    /// Gets the number of mipmapped window copies that the last frame refreshed.
+    /// </summary>
     public int CopiesRefreshed { get; private set; }
 
+    /// <summary>
+    /// Gets the number of window layers that the last frame sampled directly, with no mipmapped copy.
+    /// </summary>
     public int DirectSamples { get; private set; }
 
+    /// <summary>
+    /// Draws the frame into <paramref name="target"/>, with portal levels through the stencil. It restores the GL state it changed and fences the target and the sampled dmabufs.
+    /// </summary>
+    /// <param name="frame">The world, the view, the visible set and the settings for this output.</param>
+    /// <param name="target">The buffer to draw into. The pass caches a render target with a depth and stencil buffer for it until it is destroyed.</param>
+    /// <returns>Always <see langword="true"/>.</returns>
+    /// <exception cref="ObjectDisposedException">The renderer is disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The render target with depth and stencil is not complete.</exception>
     public bool Render(in WorldFrame frame, IBuffer target)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -106,6 +133,7 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
         }
     }
 
+    /// <inheritdoc/>
     public void Forget(WorldWindow window)
     {
         if (_copies.Remove(window, out var copies))
@@ -117,6 +145,7 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_disposed)

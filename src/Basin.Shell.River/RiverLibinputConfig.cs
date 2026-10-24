@@ -4,6 +4,10 @@ using Wayland.Server;
 
 namespace Basin.Shell.River;
 
+/// <summary>
+/// The river-libinput-config-v1 global. It announces each libinput device with its whole state and applies the window manager's settings through <see cref="Configuration"/>.
+/// A setting that the configuration does not support gets an unsupported result.
+/// </summary>
 public sealed class RiverLibinputConfig : IDisposable
 {
     private readonly RiverWindowManager _manager;
@@ -23,10 +27,21 @@ public sealed class RiverLibinputConfig : IDisposable
             OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a window manager holds a live binding to this global.
+    /// </summary>
     public bool IsBound => _resource is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets or sets the callback that maps a configuration device id to the handle given to <see cref="RiverInputManager.AddDevice(object, string, InputDeviceType)"/>.
+    /// Without it, a libinput device is announced with no link to its input device.
+    /// </summary>
     public Func<ulong, object?>? InputDeviceFor { get; set; }
 
+    /// <summary>
+    /// Gets or sets the device configuration that reads and applies settings.
+    /// Setting it forgets the current devices and announces every device of the new configuration. With <see langword="null"/>, no device is announced.
+    /// </summary>
     public IInputDeviceConfiguration? Configuration
     {
         get => _configuration;
@@ -57,6 +72,10 @@ public sealed class RiverLibinputConfig : IDisposable
         }
     }
 
+    /// <summary>
+    /// Registers a device and announces it to the bound window manager. An id that is already registered does nothing.
+    /// </summary>
+    /// <param name="deviceId">The device id in <see cref="Configuration"/>.</param>
     public void AddDevice(ulong deviceId)
     {
         if (_devices.Exists(d => d.Id == deviceId))
@@ -69,6 +88,11 @@ public sealed class RiverLibinputConfig : IDisposable
         Announce(entry);
     }
 
+    /// <summary>
+    /// Unregisters a device. An unknown id does nothing.
+    /// The window manager does not get a removed event for the device.
+    /// </summary>
+    /// <param name="deviceId">The device id given to <see cref="AddDevice(ulong)"/>.</param>
     public void RemoveDevice(ulong deviceId)
     {
         if (_devices.Find(d => d.Id == deviceId) is { } entry)
@@ -96,6 +120,9 @@ public sealed class RiverLibinputConfig : IDisposable
         }
     }
 
+    /// <summary>
+    /// Forgets every device and accel curve, and removes the global. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

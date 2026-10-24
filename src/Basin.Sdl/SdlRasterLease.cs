@@ -5,6 +5,10 @@ using SkiaSharp;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Draws into a raster Skia surface over memory that the lease owns.
+/// <see cref="Present"/> copies it into a streaming SDL texture and presents it with vsync.
+/// </summary>
 public sealed unsafe class SdlRasterLease : ISdlRenderLease
 {
     private readonly SdlWindow _window;
@@ -19,6 +23,11 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
     private bool _drawn;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlRasterLease"/> class with an SDL renderer for the window.
+    /// </summary>
+    /// <param name="window">The window to present into. The lease must be disposed before the window.</param>
+    /// <exception cref="InvalidOperationException">SDL cannot create the renderer or the texture.</exception>
     public SdlRasterLease(SdlWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -35,12 +44,23 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         Resize(width, height);
     }
 
+    /// <inheritdoc/>
     public string Name => SdlRenderDevices.Raster;
 
+    /// <summary>
+    /// Gets the name of the SDL renderer that presents the texture, or an empty string when SDL reports none.
+    /// </summary>
     public string RendererName { get; }
 
+    /// <inheritdoc/>
     public SdlHdrState Hdr => SdlHdrState.Sdr;
 
+    /// <summary>
+    /// Sets the size of the drawing target. A new size replaces the pixels and the texture, so the next frame has age 0.
+    /// </summary>
+    /// <param name="pixelWidth">The width in device pixels. A value below 1 counts as 1.</param>
+    /// <param name="pixelHeight">The height in device pixels. A value below 1 counts as 1.</param>
+    /// <exception cref="InvalidOperationException">Skia or SDL cannot create the new target.</exception>
     public void Resize(int pixelWidth, int pixelHeight)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -69,6 +89,13 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         _drawn = false;
     }
 
+    /// <summary>
+    /// Starts a frame on the raster canvas. The lease keeps its pixels, so the age is 1 after the first present.
+    /// </summary>
+    /// <param name="canvas">The raster canvas, in device pixels.</param>
+    /// <param name="context">Always <see langword="null"/>.</param>
+    /// <param name="age">1 after the first present at the current size, else 0.</param>
+    /// <returns><see langword="false"/> when the lease has no canvas.</returns>
     public bool Begin(out SKCanvas canvas, out GRContext? context, out int age)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -78,6 +105,7 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         return _canvas is not null;
     }
 
+    /// <inheritdoc/>
     public void Present()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -88,9 +116,14 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         _ = SDL.RenderPresent(_renderer);
     }
 
+    /// <inheritdoc/>
     public bool ReadPixels(SKImageInfo info, nint pixels, int rowBytes) =>
         _surface is { } surface && surface.ReadPixels(info, pixels, rowBytes, 0, 0);
 
+    /// <summary>
+    /// Does nothing, because a raster lease has no context.
+    /// </summary>
+    /// <returns>Always <see langword="true"/>.</returns>
     public bool MakeCurrent() => true;
 
     private void ReleaseTarget()
@@ -115,6 +148,9 @@ public sealed unsafe class SdlRasterLease : ISdlRenderLease
         }
     }
 
+    /// <summary>
+    /// Frees the pixels, the texture and the SDL renderer. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

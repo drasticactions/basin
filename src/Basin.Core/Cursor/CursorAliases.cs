@@ -1,5 +1,8 @@
 namespace Basin;
 
+/// <summary>
+/// Maps legacy X11 cursor names to CSS cursor names and other names that themes use.
+/// </summary>
 public static class CursorAliases
 {
     private static readonly Dictionary<string, string[]> Table = new()
@@ -31,6 +34,11 @@ public static class CursorAliases
         ["plus"] = ["cell"],
     };
 
+    /// <summary>
+    /// Gets the other names to try when a theme has no cursor with a name.
+    /// </summary>
+    /// <param name="name">The cursor name that was not found.</param>
+    /// <returns>The alternatives in preference order, or an empty list.</returns>
     public static IReadOnlyList<string> Of(string name) =>
         Table.TryGetValue(name, out var aliases) ? aliases : [];
 }

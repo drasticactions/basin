@@ -4,6 +4,10 @@ using Basin.Diagnostics;
 
 namespace Basin.Rashader;
 
+/// <summary>
+/// A parsed librashader preset and its runtime parameters. A filter chain consumes the native
+/// preset when it is created from it.
+/// </summary>
 public sealed unsafe class RashaderPreset : IDisposable
 {
     private readonly RashaderParameter[] _parameters;
@@ -17,6 +21,14 @@ public sealed unsafe class RashaderPreset : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Loads librashader if necessary and parses a <c>.slangp</c> preset for one runtime. No failure
+    /// throws, except a null path.
+    /// </summary>
+    /// <param name="path">The path of the preset file.</param>
+    /// <param name="options">The runtime and the screen orientation to parse for.</param>
+    /// <param name="whyNot">The librashader error message when creation fails, or <see langword="null"/> on success.</param>
+    /// <returns>The preset, which the caller owns and must dispose, or <see langword="null"/> when the library or the preset fails to load.</returns>
     public static RashaderPreset? TryCreate(string path, in RashaderPresetOptions options, out string? whyNot)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -80,6 +92,10 @@ public sealed unsafe class RashaderPreset : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the runtime parameters that the preset declares. It throws <see
+    /// cref="ObjectDisposedException"/> after <see cref="Dispose"/>.
+    /// </summary>
     public IReadOnlyList<RashaderParameter> Parameters
     {
         get
@@ -97,6 +113,9 @@ public sealed unsafe class RashaderPreset : IDisposable
         return handle;
     }
 
+    /// <summary>
+    /// Frees the native preset unless a filter chain already took it. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

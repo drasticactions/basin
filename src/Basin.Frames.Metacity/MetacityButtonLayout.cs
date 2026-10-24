@@ -1,5 +1,8 @@
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// A parsed button layout in marco's <c>left:right</c> grammar, for example <c>menu:minimize,maximize,close</c>. It is immutable.
+/// </summary>
 public sealed class MetacityButtonLayout
 {
     internal const int MaxButtonsPerCorner = 11;
@@ -15,8 +18,14 @@ public sealed class MetacityButtonLayout
         Array.Fill(Right, MetacityButtonFunction.None);
     }
 
+    /// <summary>
+    /// Gets the layout <c>menu:minimize,maximize,close</c>.
+    /// </summary>
     public static MetacityButtonLayout Default { get; } = Parse("menu:minimize,maximize,close");
 
+    /// <summary>
+    /// Gets the text that the layout was parsed from. It is empty for a <see langword="null"/> input.
+    /// </summary>
     public string Text { get; }
 
     internal MetacityButtonFunction[] Left { get; }
@@ -31,6 +40,11 @@ public sealed class MetacityButtonLayout
 
     internal int RightCount { get; private set; }
 
+    /// <summary>
+    /// Parses a button layout as marco does. Unknown names are skipped, a repeated button is ignored, and <c>spacer</c> adds a gap after the button before it.
+    /// </summary>
+    /// <param name="text">The layout text, or <see langword="null"/> for no buttons.</param>
+    /// <returns>The layout. Parsing never fails.</returns>
     public static MetacityButtonLayout Parse(string? text)
     {
         var layout = new MetacityButtonLayout(text ?? string.Empty);
@@ -49,6 +63,10 @@ public sealed class MetacityButtonLayout
         return layout;
     }
 
+    /// <summary>
+    /// Gives the text that the layout was parsed from.
+    /// </summary>
+    /// <returns>The value of <see cref="Text"/>.</returns>
     public override string ToString() => Text;
 
     private static int ParseSide(string side, MetacityButtonFunction[] functions, bool[] spacers)

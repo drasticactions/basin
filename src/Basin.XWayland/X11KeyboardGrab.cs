@@ -5,6 +5,9 @@ using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Holds an active grab of the whole keyboard on an X server and reports each key event. A nested compositor uses it to take every key from the X11 host.
+/// </summary>
 public sealed unsafe class X11KeyboardGrab : IDisposable
 {
     private const byte EventKeyPress = 2;
@@ -27,6 +30,14 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
         loop.AddIdle(Pump);
     }
 
+    /// <summary>
+    /// Connects to an X server and grabs the keyboard on the root window.
+    /// </summary>
+    /// <param name="loop">The loop that reads the connection fd. The callback runs on it.</param>
+    /// <param name="display">The X display name. <see langword="null"/> uses <c>DISPLAY</c>.</param>
+    /// <param name="key">The callback for each key event. It gets the evdev key code and <see langword="true"/> for a press.</param>
+    /// <returns>The grab, or <see langword="null"/> when no X server answers or the server refuses the grab. The caller owns the result.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> or <paramref name="key"/> is <see langword="null"/>.</exception>
     public static X11KeyboardGrab? TryGrab(ICompositorEventLoop loop, string? display, Action<uint, bool> key)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -80,6 +91,9 @@ public sealed unsafe class X11KeyboardGrab : IDisposable
         return new X11KeyboardGrab(loop, conn, key);
     }
 
+    /// <summary>
+    /// Releases the keyboard grab and closes the X connection. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

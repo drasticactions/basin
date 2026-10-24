@@ -6,6 +6,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Render.Gl;
 
+/// <summary>
+/// Owns an EGL display on GBM and a GLES 3 context on one DRM node. The context is made current in the constructor, and every call must come from that thread.
+/// </summary>
 public sealed unsafe class GlDevice : IDisposable, IRenderDevice
 {
     [DllImport("libc", SetLastError = true)]
@@ -22,6 +25,10 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
 
     internal readonly delegate* unmanaged[Cdecl]<uint, void*, void> ImageTargetTexture;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlDevice"/> class and makes its context current. It throws <see cref="InvalidOperationException"/> when the node cannot be opened.
+    /// </summary>
+    /// <param name="devicePath">The path of the DRM node, for example a render node.</param>
     public GlDevice(string devicePath = "/dev/dri/renderD128")
     {
         DevicePath = devicePath;
@@ -54,24 +61,53 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         ImportsLinearYuvPlanes = ImportsLinear(DrmFormat.R8) && ImportsLinear(DrmFormat.Gr88);
     }
 
+    /// <inheritdoc/>
     public string DevicePath { get; }
 
+    /// <inheritdoc/>
     public int DrmFd => _deviceFd;
 
+    /// <summary>
+    /// Gets the dmabuf formats and modifiers that EGL can import as 2D textures. Each format also lists the invalid modifier, for a buffer with an implicit modifier.
+    /// </summary>
     public DrmFormatSet SampleableFormats { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether EGL imports linear R8 and GR88 planes as 2D textures, which the NV12 path needs.
+    /// </summary>
     public bool ImportsLinearYuvPlanes { get; }
 
+    /// <summary>
+    /// Gets the GLES entry points of the context.
+    /// </summary>
     public GL Gl => _gl;
 
+    /// <summary>
+    /// Gets the EGL display on the GBM device.
+    /// </summary>
     public EglDisplay Egl => _egl;
 
+    /// <summary>
+    /// Gets the GLES context. The device owns it.
+    /// </summary>
     public EglContext Context => _context;
 
+    /// <summary>
+    /// Occurs before a texture is deleted, so that a holder of state for the texture name can drop it. <see cref="NotifyTextureDeleting"/> raises it.
+    /// </summary>
     public event Action<uint>? TextureDeleting;
 
+    /// <summary>
+    /// Raises <see cref="TextureDeleting"/>. The owner of a texture that an effect or a renderer can sample must call it before it deletes the texture.
+    /// </summary>
+    /// <param name="texture">The name of the texture that is about to be deleted.</param>
     public void NotifyTextureDeleting(uint texture) => TextureDeleting?.Invoke(texture);
 
+    /// <summary>
+    /// Creates an allocator that makes dmabufs through the GBM device of this node. It advertises <see cref="SampleableFormats"/>.
+    /// </summary>
+    /// <param name="ledger">The ledger that records the fds of each buffer, or <see langword="null"/>.</param>
+    /// <returns>The allocator, which the caller disposes before the device.</returns>
     public Basin.Render.Gbm.GbmAllocator CreateAllocator(Basin.Diagnostics.FdLedger? ledger = null) =>
         new(_gbm, SampleableFormats, ledger);
 
@@ -79,14 +115,33 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
 
     internal GlFenceWait FenceWait => _fenceWait ??= new GlFenceWait(_egl);
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="WaitFence"/> makes the GPU wait. When it is <see langword="false"/>, a wait blocks the calling thread.
+    /// </summary>
     public bool WaitsOnGpu => FenceWait.IsGpuSide;
 
+    /// <summary>
+    /// Makes later GL commands wait for a fence. When EGL cannot wait on the GPU, it blocks the calling thread until the fence signals.
+    /// </summary>
+    /// <param name="syncFileFd">A sync_file fd that the caller keeps, or a negative value for no wait.</param>
     public void WaitFence(int syncFileFd) => FenceWait.Wait(syncFileFd);
 
+    /// <summary>
+    /// Flushes the context and exports a fence that signals when the GPU finished all earlier commands.
+    /// </summary>
+    /// <returns>A sync_file fd that the caller owns, or -1 when EGL cannot export one.</returns>
     public int ExportFence() => FenceWait.Export(_gl);
 
+    /// <summary>
+    /// Gets the GBM device on the DRM node. The device owns it.
+    /// </summary>
     public GbmDevice Gbm => _gbm;
 
+    /// <summary>
+    /// Imports a dmabuf as an EGL image. The invalid modifier imports without explicit modifier attributes.
+    /// </summary>
+    /// <param name="attributes">The dmabuf to import. Its fds stay owned by the caller.</param>
+    /// <returns>The image, which the caller disposes, or <see langword="null"/> when EGL rejects the dmabuf.</returns>
     public EglImage? ImportDmabufImage(in DmabufAttributes attributes)
     {
         Span<nint> attribs = stackalloc nint[7 + attributes.PlaneCount * 10];
@@ -125,9 +180,16 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         }
     }
 
+    /// <summary>
+    /// Attaches an EGL image to the 2D texture that is bound now, through glEGLImageTargetTexture2DOES.
+    /// </summary>
+    /// <param name="image">The image to attach. It must outlive the texture.</param>
     public void BindImageToTexture2D(EglImage image) =>
         ImageTargetTexture((uint)TextureTarget.Texture2D, (void*)image.Handle);
 
+    /// <summary>
+    /// Reads and drops pending GL errors, at most 32, so that a later error check sees only new errors.
+    /// </summary>
     public void ClearErrors()
     {
         for (var i = 0; i < 32 && _gl.GetError() != GLEnum.NoError; i++)
@@ -135,6 +197,9 @@ public sealed unsafe class GlDevice : IDisposable, IRenderDevice
         }
     }
 
+    /// <summary>
+    /// Releases the context, destroys the context, the display and the GBM device, and closes the DRM node fd.
+    /// </summary>
     public void Dispose()
     {
         _gl.Dispose();

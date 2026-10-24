@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_drm_lease_device_v1</c> global. It offers DRM connectors to clients and grants leases through <see cref="IDrmLeaseDevice"/>.
+/// </summary>
 public sealed class DrmLeaseManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     [System.Runtime.InteropServices.DllImport("libc")]
@@ -18,19 +24,37 @@ public sealed class DrmLeaseManager : IDisposable
     private readonly List<Binding> _bindings = [];
     private readonly List<ActiveLease> _leases = [];
 
+    /// <summary>
+    /// Describes a connector that the manager offers for lease.
+    /// </summary>
     public sealed class OfferedConnector
     {
+        /// <summary>
+        /// Gets the connector name, for example <c>DP-2</c>.
+        /// </summary>
         public required string Name { get; init; }
 
+        /// <summary>
+        /// Gets the text that describes the connector to a person.
+        /// </summary>
         public required string Description { get; init; }
 
+        /// <summary>
+        /// Gets the DRM object id of the connector.
+        /// </summary>
         public required uint ConnectorId { get; init; }
 
+        /// <summary>
+        /// Gets the DRM object ids that a lease of the connector includes, for example its CRTC and planes.
+        /// </summary>
         public required uint[] ObjectIds { get; init; }
 
         internal bool Withdrawn;
     }
 
+    /// <summary>
+    /// Describes a lease that the manager granted to a client.
+    /// </summary>
     public sealed class ActiveLease
     {
         private readonly DrmLeaseManager _owner;
@@ -43,8 +67,14 @@ public sealed class DrmLeaseManager : IDisposable
             LesseeId = lesseeId;
         }
 
+        /// <summary>
+        /// Gets the DRM lessee id of the lease.
+        /// </summary>
         public uint LesseeId { get; }
 
+        /// <summary>
+        /// Revokes the lease on the device, sends <c>finished</c> to the client and removes the lease from <see cref="Leases"/>.
+        /// </summary>
         public void Revoke()
         {
             _owner._device?.RevokeLease(LesseeId);
@@ -62,6 +92,12 @@ public sealed class DrmLeaseManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrmLeaseManager"/> class and creates the global. With a device, it offers the device's leasable connectors at once.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="device">The lease device, or <see langword="null"/> to offer only the connectors that <see cref="OfferConnector"/> adds.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public DrmLeaseManager(WlServerDisplay display, IDrmLeaseDevice? device)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -86,8 +122,14 @@ public sealed class DrmLeaseManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the leases that are active now.
+    /// </summary>
     public IReadOnlyList<ActiveLease> Leases => _leases;
 
+    /// <summary>
+    /// Stops following the device and removes the global. Active leases stay granted.
+    /// </summary>
     public void Dispose()
     {
         if (_device is { } live)
@@ -136,6 +178,14 @@ public sealed class DrmLeaseManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Offers a connector to every bound client and to clients that bind later.
+    /// </summary>
+    /// <param name="name">The connector name.</param>
+    /// <param name="description">The text that describes the connector.</param>
+    /// <param name="connectorId">The DRM connector id.</param>
+    /// <param name="objectIds">The DRM object ids that a lease includes.</param>
+    /// <returns>The offer. Pass it to <see cref="WithdrawConnector"/> to end it.</returns>
     public OfferedConnector OfferConnector(string name, string description, uint connectorId, uint[] objectIds)
     {
         var connector = new OfferedConnector
@@ -155,6 +205,10 @@ public sealed class DrmLeaseManager : IDisposable
         return connector;
     }
 
+    /// <summary>
+    /// Ends an offer and sends <c>withdrawn</c> to every client that got it. Leases that already exist stay active.
+    /// </summary>
+    /// <param name="connector">The offer to end.</param>
     public void WithdrawConnector(OfferedConnector connector)
     {
         connector.Withdrawn = true;

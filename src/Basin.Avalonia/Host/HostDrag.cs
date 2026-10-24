@@ -7,6 +7,9 @@ using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// Connects drag and drop between the host desktop and the compositor clients. It carries text from client drags and any data into host drags.
+/// </summary>
 public sealed class HostDrag : IDisposable
 {
     [DllImport("libc", SetLastError = true)]
@@ -27,6 +30,10 @@ public sealed class HostDrag : IDisposable
     private volatile bool _clientDragActive;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HostDrag"/> class and starts to watch client drags on the seat.
+    /// </summary>
+    /// <param name="host">The compositor host.</param>
     public HostDrag(BasinCompositorHost host)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -35,16 +42,39 @@ public sealed class HostDrag : IDisposable
         host.Seat.DataDevice.DragEnded += OnDragEnded;
     }
 
+    /// <summary>
+    /// Gets or sets the longest time to wait for a client to write the text of its drag. The default is 4 seconds.
+    /// </summary>
     public TimeSpan ReadTimeout { get; set; } = TimeSpan.FromSeconds(4);
 
+    /// <summary>
+    /// Occurs on the compositor thread when a client starts a drag, with the drag icon surface or <see langword="null"/>.
+    /// </summary>
     public event Action<Surface?>? ClientDragStarted;
 
+    /// <summary>
+    /// Occurs on the compositor thread when any drag ends.
+    /// </summary>
     public event Action? ClientDragEnded;
 
+    /// <summary>
+    /// Gets a value indicating whether a client drag is in progress. Any thread can read it.
+    /// </summary>
     public bool ClientDragActive => _clientDragActive;
 
+    /// <summary>
+    /// Gets the text of the current client drag. It does not clear the text. Any thread can call it.
+    /// </summary>
+    /// <returns>The text, or <see langword="null"/> when the client offered no text type or did not finish the write.</returns>
     public string? TakeClientDragText() => _clientDragText;
 
+    /// <summary>
+    /// Starts a compositor drag for data that the host drags onto a surface. An empty payload does nothing.
+    /// </summary>
+    /// <param name="surface">The surface under the host pointer.</param>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
+    /// <param name="payload">The data of the host drag, one entry per MIME type.</param>
     public void EnterFromHost(Surface surface, double x, double y, IReadOnlyList<(string Mime, byte[] Data)> payload)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -86,6 +116,12 @@ public sealed class HostDrag : IDisposable
         MotionFromHost(surface, x, y);
     }
 
+    /// <summary>
+    /// Moves the pointer of a host drag. It does nothing without a host drag.
+    /// </summary>
+    /// <param name="surface">The surface under the host pointer.</param>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
     public void MotionFromHost(Surface surface, double x, double y)
     {
         if (_hostSource is not null)
@@ -94,6 +130,9 @@ public sealed class HostDrag : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drops the host drag on the surface under the pointer. It does nothing without a host drag.
+    /// </summary>
     public void DropFromHost()
     {
         if (_hostSource is not null)
@@ -103,6 +142,9 @@ public sealed class HostDrag : IDisposable
         }
     }
 
+    /// <summary>
+    /// Cancels the host drag after the host pointer left. It does nothing without a host drag.
+    /// </summary>
     public void LeaveFromHost()
     {
         if (_hostSource is not null)
@@ -112,6 +154,10 @@ public sealed class HostDrag : IDisposable
         }
     }
 
+    /// <summary>
+    /// Ends the current client drag after it left for the host. It does nothing without a client drag.
+    /// </summary>
+    /// <param name="dropped"><see langword="true"/> when the host accepted the drop, <see langword="false"/> to cancel.</param>
     public void EndClientDrag(bool dropped)
     {
         if (_clientDragActive)
@@ -258,6 +304,9 @@ public sealed class HostDrag : IDisposable
         fd.Close();
     }
 
+    /// <summary>
+    /// Stops watching client drags. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

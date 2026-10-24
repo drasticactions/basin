@@ -2,10 +2,25 @@ using Basin.Capabilities;
 
 namespace Basin.Diagnostics;
 
+/// <summary>
+/// The color chunks of a PNG file: <c>cICP</c> code points from ITU-T H.273, and optional HDR mastering data.
+/// </summary>
+/// <param name="Primaries">The H.273 color primaries code.</param>
+/// <param name="Transfer">The H.273 transfer characteristics code.</param>
+/// <param name="Mastering">The source of the <c>mDCV</c> and <c>cLLI</c> chunks, or <see langword="null"/> to write neither.</param>
 public readonly record struct PngColorChunks(byte Primaries, byte Transfer, HdrStaticMetadata? Mastering = null)
 {
+    /// <summary>
+    /// Gets the chunks for sRGB primaries and the sRGB transfer function.
+    /// </summary>
     public static PngColorChunks Srgb { get; } = new(1, 13);
 
+    /// <summary>
+    /// Converts a Wayland image description to PNG color chunks.
+    /// </summary>
+    /// <param name="description">The image description. <see langword="null"/> means the SDR default.</param>
+    /// <param name="hdr">The mastering data. It is kept only for the PQ and HLG transfer functions.</param>
+    /// <returns>The chunks, or <see langword="null"/> when the primaries or the transfer function have no H.273 code.</returns>
     public static PngColorChunks? From(ImageDescription? description, HdrStaticMetadata? hdr)
     {
         description ??= ImageDescription.SdrDefault;

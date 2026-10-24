@@ -5,14 +5,31 @@ using Tomlyn.Model;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Reads input device rules from the <c>[input]</c> table and writes single settings back to a <see cref="TomlDocument"/>.
+/// </summary>
 public static class InputConfig
 {
+    /// <summary>
+    /// The name of the table that holds the catch-all settings and the per-type tables.
+    /// </summary>
     public const string Table = "input";
 
+    /// <summary>
+    /// The name of the array of tables that holds the per-device rules.
+    /// </summary>
     public const string DeviceTable = "input.device";
 
     private static readonly string[] MatchKeys = ["name", "sysname", "vendor", "product", "output"];
 
+    /// <summary>
+    /// Reads the catch-all keys, the <c>[input.TYPE]</c> tables and the <c>[[input.device]]</c> rows.
+    /// The catch-all rule comes first, then the other rules in file order. A rule with no valid setting is dropped.
+    /// </summary>
+    /// <param name="input">The reader of the <c>[input]</c> table.</param>
+    /// <param name="log">The logger for warnings about invalid values.</param>
+    /// <returns>The rules. <see cref="InputRule.Line"/> holds the position of each rule in file order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<InputRule> Read(TomlReader input, BasinLogger log)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -67,6 +84,12 @@ public static class InputConfig
         return rules;
     }
 
+    /// <summary>
+    /// Gives the TOML table that a rule comes from, for log lines, for example <c>[input.touchpad]</c> or <c>[[input.device]] name=...</c>.
+    /// </summary>
+    /// <param name="rule">The rule to describe.</param>
+    /// <returns>The table header and, for a device rule, its match keys.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="rule"/> is <see langword="null"/>.</exception>
     public static string Describe(InputRule rule)
     {
         ArgumentNullException.ThrowIfNull(rule);
@@ -110,6 +133,14 @@ public static class InputConfig
         return $"[[input.device]] {string.Join(' ', parts)}";
     }
 
+    /// <summary>
+    /// Writes one setting into the table that the match names. A device match with no row yet gets a new <c>[[input.device]]</c> row with its match keys.
+    /// </summary>
+    /// <param name="doc">The document to change.</param>
+    /// <param name="match">The match that selects the table or the device row.</param>
+    /// <param name="setting">The setting to write.</param>
+    /// <param name="value">The value to write.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="doc"/> is <see langword="null"/>.</exception>
     public static void Set(TomlDocument doc, InputMatch match, InputSetting setting, in InputSettingValue value)
     {
         ArgumentNullException.ThrowIfNull(doc);
@@ -131,6 +162,14 @@ public static class InputConfig
         doc.SetInTable(DeviceTable, index, key, literal);
     }
 
+    /// <summary>
+    /// Removes one setting from the table that the match names.
+    /// </summary>
+    /// <param name="doc">The document to change.</param>
+    /// <param name="match">The match that selects the table or the device row.</param>
+    /// <param name="setting">The setting to remove.</param>
+    /// <returns><see langword="true"/> when the key was present and is removed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="doc"/> is <see langword="null"/>.</exception>
     public static bool Remove(TomlDocument doc, InputMatch match, InputSetting setting)
     {
         ArgumentNullException.ThrowIfNull(doc);
@@ -144,6 +183,12 @@ public static class InputConfig
         return index >= 0 && doc.RemoveInTable(DeviceTable, index, key);
     }
 
+    /// <summary>
+    /// Converts a setting value to the TOML literal for its kind: a boolean, an integer, a float, an array of floats or a string.
+    /// </summary>
+    /// <param name="setting">The setting that sets the kind.</param>
+    /// <param name="value">The value to convert.</param>
+    /// <returns>The TOML literal.</returns>
     public static TomlValue Literal(InputSetting setting, in InputSettingValue value)
     {
         switch (InputSettingNames.KindOf(setting))
@@ -179,6 +224,13 @@ public static class InputConfig
             : $"input.{InputSettingNames.TypeName(match.Type!.Value)}";
     }
 
+    /// <summary>
+    /// Finds the <c>[[input.device]]</c> row whose match keys are exactly the keys of the match. A key that the match does not set must be absent from the row.
+    /// </summary>
+    /// <param name="doc">The document to search.</param>
+    /// <param name="match">The device match.</param>
+    /// <returns>The zero-based row index, or -1 when no row has the same match.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="doc"/> is <see langword="null"/>.</exception>
     public static int FindDevice(TomlDocument doc, InputMatch match)
     {
         ArgumentNullException.ThrowIfNull(doc);

@@ -4,6 +4,10 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Rashader.Vulkan;
 
+/// <summary>
+/// Runs several <see cref="RashaderFilter"/> chains in order inside one <c>Record</c> call. Two
+/// intermediate images carry the frame between chains.
+/// </summary>
 public sealed unsafe class RashaderFilterStack : IVulkanFilter, IDisposable
 {
     private readonly RashaderFilter[] _filters;
@@ -14,6 +18,11 @@ public sealed unsafe class RashaderFilterStack : IVulkanFilter, IDisposable
     private Extent2D _extent;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RashaderFilterStack"/> class. The stack takes
+    /// ownership of the filters and disposes them with itself.
+    /// </summary>
+    /// <param name="filters">The chains in the order they run.</param>
     public RashaderFilterStack(IReadOnlyList<RashaderFilter> filters)
     {
         ArgumentNullException.ThrowIfNull(filters);
@@ -21,8 +30,14 @@ public sealed unsafe class RashaderFilterStack : IVulkanFilter, IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the chains in the order they run, including chains that have failed.
+    /// </summary>
     public IReadOnlyList<RashaderFilter> Filters => _filters;
 
+    /// <summary>
+    /// Gets a value indicating whether at least one chain in the stack is still live.
+    /// </summary>
     public bool IsSupported
     {
         get
@@ -39,8 +54,15 @@ public sealed unsafe class RashaderFilterStack : IVulkanFilter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the stack needs the whole frame. It is always <see
+    /// langword="true"/>.
+    /// </summary>
     public bool NeedsFullFrame => true;
 
+    /// <summary>
+    /// Gets a value indicating whether any chain in the stack asks for a repaint every frame.
+    /// </summary>
     public bool NeedsContinuousRepaint
     {
         get
@@ -57,6 +79,13 @@ public sealed unsafe class RashaderFilterStack : IVulkanFilter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Runs every live chain in order. A chain that fails is skipped and its input goes to the next
+    /// chain. The stack records its own barriers between chains. The intermediate images follow the
+    /// target extent.
+    /// </summary>
+    /// <param name="context">The source, the final target, the viewport and the frame options.</param>
+    /// <returns><see langword="true"/> when the last live chain wrote the final target.</returns>
     public bool Record(in VulkanFilterContext context)
     {
         _live.Clear();
@@ -138,6 +167,9 @@ public sealed unsafe class RashaderFilterStack : IVulkanFilter, IDisposable
         return wrote;
     }
 
+    /// <summary>
+    /// Frees the intermediate images and disposes every chain. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

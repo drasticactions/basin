@@ -6,12 +6,24 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Serves <c>org.freedesktop.impl.portal.ScreenCast</c>. It publishes outputs and windows as PipeWire streams through <see cref="IScreencastPublisher"/>.
+/// </summary>
 public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, IScreenCastProperties
 {
+    /// <summary>
+    /// The portal cursor mode bit for a stream with no cursor.
+    /// </summary>
     public const uint CursorHidden = 1;
 
+    /// <summary>
+    /// The portal cursor mode bit for a cursor drawn into the frames.
+    /// </summary>
     public const uint CursorEmbedded = 2;
 
+    /// <summary>
+    /// The portal cursor mode bit for a cursor sent as stream metadata.
+    /// </summary>
     public const uint CursorMetadata = 4;
 
     private static ulong _nextStreamId;
@@ -26,24 +38,38 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
     private PortalOptions _options = new();
     private ToplevelInfo[] _toplevelScratch = new ToplevelInfo[32];
 
+    /// <inheritdoc/>
     public override string WireInterface => "org.freedesktop.impl.portal.ScreenCast";
 
+    /// <inheritdoc/>
     public override int Version => 6;
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Capabilities => [typeof(IToplevelModel), typeof(IDmabufCapture), typeof(IAppInfoResolver)];
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Drivers => [typeof(IScreenCapture), typeof(IScreencastPublisher), typeof(IPortalPrompts), typeof(IOutputSet)];
 
     internal override DBusHandler.DBusInterface Interface => DBusHandler.DBusInterface.OrgFreedesktopImplPortalScreenCast;
 
+    /// <summary>
+    /// Gets the source type bits that the module offers. Windows are offered only when an <see cref="IToplevelModel"/> is registered.
+    /// </summary>
     public uint AvailableSourceTypes =>
         (uint)ScreenCastSourceKind.Monitor
         | (_toplevels is null ? 0 : (uint)ScreenCastSourceKind.Window);
 
+    /// <summary>
+    /// Gets the cursor mode bits that the module offers: hidden, embedded and metadata.
+    /// </summary>
     public uint AvailableCursorModes => CursorHidden | CursorEmbedded | CursorMetadata;
 
     uint IScreenCastProperties.Version => (uint)Version;
 
+    /// <summary>
+    /// Registers the default <see cref="PortalBus"/>, and an <see cref="IOutputSet"/> over the registered <see cref="OutputLayout"/>.
+    /// </summary>
+    /// <param name="services">The registry to seed.</param>
     public override void SeedDefaults(BasinServices services)
     {
         base.SeedDefaults(services);
@@ -53,6 +79,7 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         }
     }
 
+    /// <inheritdoc/>
     protected override void Bind(BasinServices services)
     {
         _capture = services.Require<IScreenCapture>();
@@ -66,12 +93,22 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         _outputs.Changed += OnOutputsChanged;
     }
 
+    /// <inheritdoc/>
     protected override void Unbind() => _outputs.Changed -= OnOutputsChanged;
 
     ValueTask IScreenCastHandler.HandleGetPropertyAsync(IScreenCastHandler.GetPropertyContext context) => context.Handle(this);
 
     ValueTask IScreenCastHandler.HandleGetAllPropertiesAsync(IScreenCastHandler.GetAllPropertiesContext context) => context.Handle(this);
 
+    /// <summary>
+    /// Creates a screen cast session.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The session object path.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns><see cref="PortalResponse.Success"/> with the <c>session_id</c> result.</returns>
+    /// <exception cref="InvalidOperationException">The module is not installed.</exception>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
@@ -81,6 +118,14 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         return ValueTask.FromResult((PortalResponse.Success, Results.With("session_id", VariantValue.String(session.Id))));
     }
 
+    /// <summary>
+    /// Records the source types, the cursor mode, the persist mode and the restore data of a screen cast or remote desktop session. A cursor mode that is not offered closes the session.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">A screen cast or remote desktop session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">The <c>types</c>, <c>multiple</c>, <c>cursor_mode</c>, <c>persist_mode</c> and <c>restore_data</c> options.</param>
+    /// <returns><see cref="PortalResponse.Success"/>, or <see cref="PortalResponse.Other"/> when the session does not exist or the cursor mode is refused.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> SelectSourcesAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
@@ -118,6 +163,15 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         return ValueTask.FromResult((PortalResponse.Success, Results.Empty));
     }
 
+    /// <summary>
+    /// Starts the streams of a screen cast session through <see cref="StartStreamsAsync"/>.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">A screen cast or remote desktop session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>modal</c> option.</param>
+    /// <returns>The <c>streams</c> and the restore data, or a cancel or other response.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> StartAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {
@@ -138,6 +192,16 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         }
     }
 
+    /// <summary>
+    /// Chooses the sources from the restore data or a prompt, and publishes one stream per source. When one publish fails, the call releases every stream of the session.
+    /// </summary>
+    /// <param name="carrier">The session that holds the screen cast state.</param>
+    /// <param name="request">The request whose token cancels the prompt.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="modal"><see langword="true"/> to show the prompt as modal.</param>
+    /// <returns>The <c>streams</c> and the restore data, or a cancel or other response when the streams already started or the session closed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="carrier"/> or <paramref name="request"/> is <see langword="null"/>.</exception>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> StartStreamsAsync(
         IScreenCastCarrier carrier, PortalRequest request, string appId, string parentWindow, bool modal)
     {
@@ -196,6 +260,12 @@ public sealed class PortalScreenCastModule : PortalModule, IScreenCastHandler, I
         return (PortalResponse.Success, results);
     }
 
+    /// <summary>
+    /// Creates the <c>streams</c> result with the size, the source type, the mapping id and, for outputs, the position of each stream in logical pixels.
+    /// </summary>
+    /// <param name="streams">The published streams.</param>
+    /// <returns>The <c>a(ua{sv})</c> value.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="streams"/> is <see langword="null"/>.</exception>
     public static VariantValue StreamsResult(IReadOnlyList<ScreenCastStream> streams)
     {
         ArgumentNullException.ThrowIfNull(streams);

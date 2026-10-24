@@ -3,6 +3,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Render.Gl;
 
+/// <summary>
+/// Represents a linear NV12 dmabuf that is converted into an RGBA texture on the GPU. The conversion runs again after <see cref="MarkDirty"/>.
+/// </summary>
 public sealed unsafe class GlYuvTexture : ITexture, IRefreshableTexture
 {
     private const GLEnum FramebufferBinding = (GLEnum)0x8CA6;
@@ -44,16 +47,30 @@ public sealed unsafe class GlYuvTexture : ITexture, IRefreshableTexture
         gl.FramebufferTexture2D(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, TextureTarget.Texture2D, _output, 0);
     }
 
+    /// <summary>
+    /// Gets the dmabuf that the texture was imported from. The imported buffer owns its fds.
+    /// </summary>
     public DmabufAttributes Attributes { get; }
 
+    /// <inheritdoc/>
     public int Width { get; }
 
+    /// <inheritdoc/>
     public int Height { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the texture has alpha. It is always <see langword="false"/>.
+    /// </summary>
     public bool HasAlpha => false;
 
+    /// <summary>
+    /// Gets or sets the YUV matrix of the conversion. The default is BT.601. A change takes effect at the next conversion after <see cref="MarkDirty"/>.
+    /// </summary>
     public YuvCoefficients Coefficients { get; set; } = YuvCoefficients.Bt601;
 
+    /// <summary>
+    /// Gets or sets the quantization range of the source. The default is limited range. A change takes effect at the next conversion after <see cref="MarkDirty"/>.
+    /// </summary>
     public YuvRange Range { get; set; } = YuvRange.Limited;
 
     internal static GlYuvTexture? TryImport(GlDevice device, GlNvProgram program, in DmabufAttributes attributes)
@@ -83,8 +100,14 @@ public sealed unsafe class GlYuvTexture : ITexture, IRefreshableTexture
         }
     }
 
+    /// <inheritdoc/>
     public void MarkDirty() => _dirty = true;
 
+    /// <summary>
+    /// Converts the planes into the RGBA texture when the content is out of date and gets its name.
+    /// </summary>
+    /// <param name="name">The name of the RGBA 2D texture. The texture owns it.</param>
+    /// <returns>Always <see langword="true"/>.</returns>
     public bool Acquire(out uint name)
     {
         name = _output;
@@ -168,6 +191,9 @@ public sealed unsafe class GlYuvTexture : ITexture, IRefreshableTexture
         }
     }
 
+    /// <summary>
+    /// Deletes the GL objects and destroys both EGL images.
+    /// </summary>
     public void Dispose()
     {
         var gl = _device.Gl;

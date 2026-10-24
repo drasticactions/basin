@@ -4,8 +4,13 @@ using static Basin.AppMenu.AppMenuLog;
 
 namespace Basin.AppMenu;
 
+/// <summary>
+/// Serves <c>com.canonical.AppMenu.Registrar</c> on the <see cref="AppMenuBus"/>. Qt exports a global menu only when a process owns this name.
+/// It never takes the name from another owner, for example a Plasma session.
+/// </summary>
 public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
 {
+    /// <summary>The well-known bus name that the registrar asks for.</summary>
     public const string BusName = "com.canonical.AppMenu.Registrar";
 
     private const string ObjectPath = "/com/canonical/AppMenu/Registrar";
@@ -25,22 +30,42 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
     private readonly Dictionary<uint, AppMenuAddress> _windows = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AppMenuRegistrar"/> class and starts to connect and ask for <see cref="BusName"/>.
+    /// </summary>
+    /// <param name="bus">The bus connection to serve on.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="bus"/> is <see langword="null"/>.</exception>
     public AppMenuRegistrar(AppMenuBus bus)
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
         _ = StartAsync();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether this registrar owns <see cref="BusName"/>. It is <see langword="false"/> until <see cref="Ready"/> fires.
+    /// </summary>
     public bool OwnsName { get; private set; }
 
+    /// <summary>
+    /// Occurs on the compositor thread when a client registers a window, or unregisters one that was registered. The argument is the X11 window id.
+    /// </summary>
     public event Action<uint>? Changed;
 
+    /// <summary>
+    /// Occurs once on the compositor thread when the name request completes, whether or not the registrar got the name.
+    /// It does not fire when the bus is not reachable.
+    /// </summary>
     public event Action? Ready;
 
     string IPathMethodHandler.Path => ObjectPath;
 
     bool IPathMethodHandler.HandlesChildPaths => false;
 
+    /// <summary>
+    /// Finds the dbusmenu address that a client registered for a window. Registrations stay after the client leaves the bus.
+    /// </summary>
+    /// <param name="windowId">The X11 window id.</param>
+    /// <returns>The address, or <see langword="null"/> when the window has no registration.</returns>
     public AppMenuAddress? AddressOf(uint windowId)
     {
         lock (_gate)
@@ -49,6 +74,10 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes the registration of a window. The compositor calls it when the X11 window goes away. It raises no event.
+    /// </summary>
+    /// <param name="windowId">The X11 window id.</param>
     public void Forget(uint windowId)
     {
         lock (_gate)
@@ -135,6 +164,9 @@ public sealed class AppMenuRegistrar : IPathMethodHandler, IDisposable
         }
     }
 
+    /// <summary>
+    /// Forgets every registration and stops raising <see cref="Changed"/>. It does not release the bus name.
+    /// </summary>
     public void Dispose()
     {
         _disposed = true;

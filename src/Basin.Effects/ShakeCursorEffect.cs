@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's shake cursor scale animation. It does not detect shakes or draw the cursor. The consumer reports shakes and reads <see cref="Magnification"/>.
+/// </summary>
 public sealed class ShakeCursorEffect
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -14,17 +17,37 @@ public sealed class ShakeCursorEffect
     private long _deflateAtNanos;
     private bool _animating;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShakeCursorEffect"/> class.
+    /// </summary>
+    /// <param name="options">The settings. The default value uses the default <see cref="ShakeCursorOptions"/>.</param>
     public ShakeCursorEffect(ShakeCursorOptions options = default) =>
         _options = options == default ? new ShakeCursorOptions() : options;
 
+    /// <summary>
+    /// Gets the settings of the effect.
+    /// </summary>
     public ShakeCursorOptions Options => _options;
 
+    /// <summary>
+    /// Gets the current cursor scale. It is 1 at rest.
+    /// </summary>
     public double Magnification => _current;
 
+    /// <summary>
+    /// Gets the scale that the current animation moves toward.
+    /// </summary>
     public double TargetMagnification => _target;
 
+    /// <summary>
+    /// Gets a value indicating whether the cursor is enlarged or its scale still changes.
+    /// </summary>
     public bool IsActive => _current != 1.0 || _animating;
 
+    /// <summary>
+    /// Reports a shake. The first one grows the cursor to <see cref="ShakeCursorOptions.Magnification"/>, and each further one adds <see cref="ShakeCursorOptions.OverMagnification"/>. It also restarts the deflate timer.
+    /// </summary>
+    /// <param name="now">The tick of the shake.</param>
     public void Shake(in FrameTick now)
     {
         _thread.Assert();
@@ -35,6 +58,10 @@ public sealed class ShakeCursorEffect
         _deflateAtNanos = now.TargetPresentNanos + (long)(_options.DeflateAfterMillis * 1_000_000);
     }
 
+    /// <summary>
+    /// Shrinks the cursor back to its normal scale and stops the deflate timer.
+    /// </summary>
+    /// <param name="now">The tick that the shrink starts at.</param>
     public void Settle(in FrameTick now)
     {
         _thread.Assert();
@@ -42,6 +69,11 @@ public sealed class ShakeCursorEffect
         _deflateAtNanos = 0;
     }
 
+    /// <summary>
+    /// Updates the scale for a tick, and starts the shrink when the deflate time has come.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns>The value of <see cref="IsActive"/> after the step.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();

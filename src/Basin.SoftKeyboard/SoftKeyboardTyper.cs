@@ -1,5 +1,8 @@
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// Types a string by tapping the engine's own keys, as a person does. It uses Shift, Symbol, pages and long-press lists to reach each character.
+/// </summary>
 public sealed class SoftKeyboardTyper
 {
     private const int Attempts = 5;
@@ -8,6 +11,12 @@ public sealed class SoftKeyboardTyper
     private readonly SoftKeyboardEngine _engine;
     private long _floor;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SoftKeyboardTyper"/> class.
+    /// </summary>
+    /// <param name="engine">The engine whose keys the typer taps.</param>
+    /// <param name="touchId">The touch id of the taps. It must not collide with a real touch id.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="engine"/> is <see langword="null"/>.</exception>
     public SoftKeyboardTyper(SoftKeyboardEngine engine, int touchId = 900)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -15,22 +24,48 @@ public sealed class SoftKeyboardTyper
         TouchId = touchId;
     }
 
+    /// <summary>
+    /// Gets the touch id of the taps.
+    /// </summary>
     public int TouchId { get; }
 
+    /// <summary>
+    /// Gets or sets the time that each tap moves the clock forward. The default of 600 keeps two taps from being read as a double tap or a repeat.
+    /// </summary>
     public int StepMilliseconds { get; set; } = 600;
 
+    /// <summary>
+    /// Gets the clock in milliseconds: the wall clock or the typer's floor, whichever is later. The owner uses it for its own engine calls.
+    /// </summary>
     public long Clock => Math.Max(Environment.TickCount64, _floor);
 
+    /// <summary>
+    /// Occurs before each press that the typer makes.
+    /// </summary>
     public event Action? Pressing;
 
+    /// <summary>
+    /// Moves the clock floor forward from <see cref="Clock"/>.
+    /// </summary>
+    /// <param name="milliseconds">The time to move forward.</param>
+    /// <returns>The new floor.</returns>
     public long Step(int milliseconds)
     {
         _floor = Clock + milliseconds;
         return _floor;
     }
 
+    /// <summary>
+    /// Moves the clock floor forward to a time. A time behind the floor does nothing.
+    /// </summary>
+    /// <param name="time">The time in milliseconds.</param>
     public void AdvanceTo(long time) => _floor = Math.Max(_floor, time);
 
+    /// <summary>
+    /// Types each UTF-16 character of a text in turn. It stops at the first character that no key makes.
+    /// </summary>
+    /// <param name="text">The text to type.</param>
+    /// <returns><see langword="true"/> when every character was typed.</returns>
     public bool Type(ReadOnlySpan<char> text)
     {
         foreach (var c in text)
@@ -44,6 +79,11 @@ public sealed class SoftKeyboardTyper
         return true;
     }
 
+    /// <summary>
+    /// Types one character. It taps a key that makes it, or chooses it from a long-press list, after up to five steps through pages, Shift and Symbol.
+    /// </summary>
+    /// <param name="c">The character.</param>
+    /// <returns><see langword="false"/> when no key makes the character.</returns>
     public bool TypeCharacter(char c)
     {
         var text = c.ToString();
@@ -93,12 +133,34 @@ public sealed class SoftKeyboardTyper
         return false;
     }
 
+    /// <summary>
+    /// Taps the visible key that <see cref="Find"/> finds for a name.
+    /// </summary>
+    /// <param name="name">A cap's text, a function name, or an alias.</param>
+    /// <returns><see langword="false"/> when no visible key has the name.</returns>
     public bool Tap(string name) => TapCell(Find(name), StepMilliseconds);
 
+    /// <summary>
+    /// Taps the visible key that <see cref="Find"/> finds for a name, with its own clock step.
+    /// </summary>
+    /// <param name="name">A cap's text, a function name, or an alias.</param>
+    /// <param name="stepMilliseconds">The time that the tap moves the clock forward.</param>
+    /// <returns><see langword="false"/> when no visible key has the name.</returns>
     public bool Tap(string name, int stepMilliseconds) => TapCell(Find(name), stepMilliseconds);
 
+    /// <summary>
+    /// Taps a cell.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <returns><see langword="false"/> when the index is out of range.</returns>
     public bool TapCell(int cell) => TapCell(cell, StepMilliseconds);
 
+    /// <summary>
+    /// Taps a cell with its own clock step.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <param name="stepMilliseconds">The time that the tap moves the clock forward.</param>
+    /// <returns><see langword="false"/> when the index is out of range.</returns>
     public bool TapCell(int cell, int stepMilliseconds)
     {
         if (cell < 0 || cell >= _engine.Grid.CellCount)
@@ -111,6 +173,12 @@ public sealed class SoftKeyboardTyper
         return true;
     }
 
+    /// <summary>
+    /// Chooses a text from the long-press list of the key that holds it.
+    /// </summary>
+    /// <param name="text">The text of the list entry.</param>
+    /// <returns><see langword="false"/> when no long-press list has the text.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
     public bool Hold(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -124,6 +192,12 @@ public sealed class SoftKeyboardTyper
         return true;
     }
 
+    /// <summary>
+    /// Presses a cell, ticks the engine through every deadline in the hold, and releases it. A hold past the long-press time opens the list.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <param name="milliseconds">The hold time.</param>
+    /// <returns><see langword="false"/> when the index is out of range.</returns>
     public bool HoldCell(int cell, int milliseconds)
     {
         if (cell < 0 || cell >= _engine.Grid.CellCount)
@@ -147,6 +221,12 @@ public sealed class SoftKeyboardTyper
         return true;
     }
 
+    /// <summary>
+    /// Finds the first visible key by a cap's text or a function name. The aliases <c>space</c>, <c>sym</c>, <c>lang</c> and <c>enter</c> are also accepted.
+    /// </summary>
+    /// <param name="name">The name to find.</param>
+    /// <returns>The cell index, or -1 when no visible key has the name.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public int Find(string name)
     {
         ArgumentNullException.ThrowIfNull(name);

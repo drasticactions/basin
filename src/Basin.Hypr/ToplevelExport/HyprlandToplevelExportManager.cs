@@ -7,10 +7,16 @@ using Wayland.Server;
 
 namespace Basin.Hypr;
 
+/// <summary>
+/// Advertises <c>hyprland_toplevel_export_manager_v1</c>. It copies one toplevel into a client buffer through <see cref="IScreenCapture"/>. A frame without <c>ignore_damage</c> waits for damage that touches the toplevel.
+/// </summary>
 public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, IToplevelObserver, IDisposable
 {
     private static readonly BasinLogger Log = BasinLog.For("hyprland");
 
+    /// <summary>
+    /// The highest protocol version that the global advertises.
+    /// </summary>
     public const int Version = 2;
 
     private const DrmFormat ExportFormat = DrmFormat.Xrgb8888;
@@ -23,6 +29,16 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
     private readonly ICaptureDmabufConstraints? _dmabuf;
     private readonly List<Frame> _waiting = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HyprlandToplevelExportManager"/> class and subscribes to the capture damage and the toplevel model.
+    /// </summary>
+    /// <param name="display">The display that hosts the global.</param>
+    /// <param name="layout">The layout that maps output damage into layout coordinates.</param>
+    /// <param name="buffers">The registry that imports the client buffers.</param>
+    /// <param name="capture">The capture that renders the toplevel. When it is <see langword="null"/>, every frame fails.</param>
+    /// <param name="toplevels">The model that resolves the handles. When it is <see langword="null"/>, every frame fails.</param>
+    /// <param name="dmabuf">The constraints for dmabuf targets. When it is <see langword="null"/>, the frame offers only shm and refuses a dmabuf buffer.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/>, <paramref name="layout"/> or <paramref name="buffers"/> is <see langword="null"/>.</exception>
     public HyprlandToplevelExportManager(
         WlServerDisplay display,
         OutputLayout layout,
@@ -44,8 +60,14 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         _toplevels?.AddObserver(this);
     }
 
+    /// <summary>
+    /// Gets the number of frames that have a buffer and wait for damage.
+    /// </summary>
     public int WaitingFrames => _waiting.Count;
 
+    /// <summary>
+    /// Unsubscribes from the toplevel model and the capture and destroys the global. Waiting frames get no event.
+    /// </summary>
     public void Dispose()
     {
         _toplevels?.RemoveObserver(this);
@@ -53,6 +75,11 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Completes each waiting frame whose toplevel geometry intersects the damage. The frame reports the intersection as its damage.
+    /// </summary>
+    /// <param name="output">The output that changed.</param>
+    /// <param name="damage">The changed area in output buffer pixels.</param>
     public void OnSourceDamaged(IOutput output, Box damage)
     {
         var outputBox = _layout.BoxOf(output);
@@ -77,6 +104,9 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         }
     }
 
+    /// <summary>
+    /// Completes each waiting frame that asked for the cursor, with damage over the whole frame.
+    /// </summary>
     public void OnCursorChanged()
     {
         for (var i = _waiting.Count - 1; i >= 0; i--)
@@ -90,14 +120,26 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         }
     }
 
+    /// <summary>
+    /// Does nothing. A new toplevel has no waiting frame.
+    /// </summary>
+    /// <param name="toplevelId">The id of the new toplevel. It is ignored.</param>
     public void OnToplevelAdded(ulong toplevelId)
     {
     }
 
+    /// <summary>
+    /// Does nothing. A waiting frame keeps the geometry that it had when it started.
+    /// </summary>
+    /// <param name="toplevelId">The id of the changed toplevel. It is ignored.</param>
     public void OnToplevelChanged(ulong toplevelId)
     {
     }
 
+    /// <summary>
+    /// Sends <c>failed</c> to each waiting frame of the removed toplevel.
+    /// </summary>
+    /// <param name="toplevelId">The id of the removed toplevel.</param>
     public void OnToplevelRemoved(ulong toplevelId)
     {
         for (var i = _waiting.Count - 1; i >= 0; i--)
@@ -136,6 +178,12 @@ public sealed class HyprlandToplevelExportManager : ICaptureDamageObserver, ITop
         };
     }
 
+    /// <summary>
+    /// Converts the 32-bit window handle of the protocol into a toplevel id. It first tries the handle as an id, then matches the low 32 bits of every id.
+    /// </summary>
+    /// <param name="toplevels">The model to search.</param>
+    /// <param name="handle">The handle that the client sent.</param>
+    /// <returns>The toplevel id, or 0 when the model is <see langword="null"/>, no toplevel matches, or more than one toplevel matches.</returns>
     public static ulong ResolveHandle(IToplevelModel? toplevels, uint handle)
     {
         if (toplevels is null || handle == 0)

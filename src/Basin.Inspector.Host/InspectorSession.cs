@@ -8,6 +8,9 @@ using Basin.UI.ImGui;
 
 namespace Basin.Inspector;
 
+/// <summary>
+/// The inspector overlay wired to a compositor: the ImGui host, the library panels, the seat input, the outputs, the settings and the control methods.
+/// </summary>
 public sealed class InspectorSession : IDisposable
 {
     private readonly InspectorSessionOptions _options;
@@ -26,6 +29,11 @@ public sealed class InspectorSession : IDisposable
     private FrameSettle? _settle;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InspectorSession"/> class. It subscribes to the driver and keyboard events until <see cref="Dispose"/>, but builds no host or overlay yet.
+    /// </summary>
+    /// <param name="options">The compositor parts to wire to.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
     public InspectorSession(InspectorSessionOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -59,18 +67,39 @@ public sealed class InspectorSession : IDisposable
         options.Seat.Keyboard.KeymapChanged += OnKeymapChanged;
     }
 
+    /// <summary>
+    /// Gets the settings that the session uses now. <see cref="Apply"/> replaces them.
+    /// </summary>
     public InspectorSettings Settings { get; private set; }
 
+    /// <summary>
+    /// Gets the tree that holds the overlay node: the consumer's layer, or the layer that the session owns.
+    /// </summary>
     public SceneTree Layer => _layer;
 
+    /// <summary>
+    /// Gets the input path that the consumer gives its pointer, key and touch events to.
+    /// </summary>
     public InspectorInput Input { get; }
 
+    /// <summary>
+    /// Gets the overlay. It is <see langword="null"/> until <see cref="Build"/> succeeds.
+    /// </summary>
     public InspectorOverlay? Overlay => _overlay;
 
+    /// <summary>
+    /// Gets the ImGui host. It is <see langword="null"/> until the first build when the options give no host.
+    /// </summary>
     public ImGuiUIHost? Host => _host;
 
+    /// <summary>
+    /// Gets the driver of the host that the session built. It is <see langword="null"/> when the options give the host.
+    /// </summary>
     public UIDriver? Driver => _driver;
 
+    /// <summary>
+    /// Gets or sets the consumer's frame settle. A new value moves the session's <see cref="UIDriver"/> from the old settle to the new one.
+    /// </summary>
     public FrameSettle? Settle
     {
         get => _settle;
@@ -91,12 +120,26 @@ public sealed class InspectorSession : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the overlay exists and is open.
+    /// </summary>
     public bool IsOpen => _overlay is { IsOpen: true };
 
+    /// <summary>
+    /// Gets the reason why no overlay can be built, or <see langword="null"/> when nothing has declined yet.
+    /// </summary>
     public string? Declined => !Settings.Enabled ? "[inspector] enabled is false" : _hostDeclined;
 
+    /// <summary>
+    /// Occurs after the overlay opens or closes, or shows or hides a panel.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Builds the host and the overlay with the library panels on the first call, and then gives the same overlay. The configured panels are shown.
+    /// </summary>
+    /// <returns>The overlay, or <see langword="null"/> when the settings disable it or no host can be built. <see cref="Declined"/> then gives the reason.</returns>
+    /// <exception cref="ObjectDisposedException">The session is disposed.</exception>
     public InspectorOverlay? Build()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -146,6 +189,10 @@ public sealed class InspectorSession : IDisposable
         return overlay;
     }
 
+    /// <summary>
+    /// Picks the output to open on: the configured output, then the consumer's default, then the output under the pointer, then the first output.
+    /// </summary>
+    /// <returns>The output, or <see langword="null"/> when there are no outputs.</returns>
     public OutputView? DefaultView()
     {
         if (Settings.Output is { } name)
@@ -176,6 +223,9 @@ public sealed class InspectorSession : IDisposable
         return _options.Driver.Views.FirstOrDefault();
     }
 
+    /// <summary>
+    /// Opens the overlay on <see cref="DefaultView"/> and prints the <c>INSPECTOR</c> line when the settings say to open at start. Otherwise it does nothing.
+    /// </summary>
     public void Start()
     {
         if (!Settings.Enabled || !Settings.Open)
@@ -191,8 +241,15 @@ public sealed class InspectorSession : IDisposable
         Line(Describe());
     }
 
+    /// <summary>
+    /// Makes the <c>INSPECTOR</c> line for the current state.
+    /// </summary>
+    /// <returns>The line without a line break.</returns>
     public string Describe() => InspectorIpc.Describe(_overlay, Declined);
 
+    /// <summary>
+    /// Closes the open overlay, or builds it and opens it on <see cref="DefaultView"/>. It then prints the <c>INSPECTOR</c> line.
+    /// </summary>
     public void Toggle()
     {
         if (Build() is { } overlay)
@@ -210,8 +267,16 @@ public sealed class InspectorSession : IDisposable
         Line(Describe());
     }
 
+    /// <summary>
+    /// Closes the overlay. It does nothing when there is no overlay.
+    /// </summary>
     public void Close() => _overlay?.Close();
 
+    /// <summary>
+    /// Takes new settings, for example on a reload. A disabled overlay closes, and the font size and the refresh rates change at once.
+    /// </summary>
+    /// <param name="next">The new settings.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="next"/> is <see langword="null"/>.</exception>
     public void Apply(InspectorSettings next)
     {
         ArgumentNullException.ThrowIfNull(next);
@@ -234,6 +299,12 @@ public sealed class InspectorSession : IDisposable
         ApplyRefresh();
     }
 
+    /// <summary>
+    /// Adds the <c>inspector/*</c> methods and the <c>inspector/input</c> method, which prints the counts of events that the overlay took.
+    /// </summary>
+    /// <param name="methods">The registry that receives the methods.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="methods"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The options give no <see cref="InspectorSessionOptions.Report"/>.</exception>
     public void Register(IpcMethodRegistry methods)
     {
         ArgumentNullException.ThrowIfNull(methods);
@@ -253,6 +324,9 @@ public sealed class InspectorSession : IDisposable
             $"INSPECTOR-INPUT motions={Input.Motions} presses={Input.Presses} scrolls={Input.Scrolls} keys={Input.Keys} touches={Input.Touches}"));
     }
 
+    /// <summary>
+    /// Unsubscribes from the events, disposes the overlay and the owned layer, and disposes the host and its driver when the session built them. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

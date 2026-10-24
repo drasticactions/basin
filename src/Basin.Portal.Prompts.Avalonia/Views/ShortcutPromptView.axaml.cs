@@ -5,8 +5,15 @@ using Avalonia.Markup.Xaml;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// The Avalonia view of a <see cref="ShortcutPromptModel"/>. A click on a row starts capture, and the next non-modifier key binds the chord.
+/// During capture, Escape stops capture and Backspace clears the row.
+/// </summary>
 public sealed partial class ShortcutPromptView : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShortcutPromptView"/> class. The view takes keyboard focus when it attaches.
+    /// </summary>
     public ShortcutPromptView()
     {
         AvaloniaXamlLoader.Load(this);

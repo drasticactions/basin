@@ -1,5 +1,8 @@
 namespace Basin.Scene;
 
+/// <summary>
+/// Shows a Wayland surface and its subsurfaces in the scene, and follows each commit. It destroys itself when the surface is destroyed.
+/// </summary>
 public sealed class SceneSurface
 {
     private readonly List<SceneSurface> _childScenes = [];
@@ -7,6 +10,11 @@ public sealed class SceneSurface
     private readonly SceneBuffer _content;
     private readonly SceneTree _above;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneSurface"/> class and shows the current state of the surface.
+    /// </summary>
+    /// <param name="parent">The tree to add the surface tree to.</param>
+    /// <param name="surface">The surface to show.</param>
     public SceneSurface(SceneTree parent, Surface surface)
     {
         Surface = surface;
@@ -26,12 +34,24 @@ public sealed class SceneSurface
 
     private readonly Pixman.PixmanRegion32 _damageScratch = new();
 
+    /// <summary>
+    /// Gets the surface that this node shows.
+    /// </summary>
     public Surface Surface { get; }
 
+    /// <summary>
+    /// Gets the tree that holds the subsurfaces below, the content and the subsurfaces above. Position this tree to move the surface.
+    /// </summary>
     public SceneTree Tree { get; }
 
+    /// <summary>
+    /// Gets the buffer node that shows the surface's own buffer and takes its input.
+    /// </summary>
     public SceneBuffer Content => _content;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the surface and its subsurfaces take input. Setting it applies to every subsurface.
+    /// </summary>
     public bool InputEnabled
     {
         get => _content.InputEnabled;
@@ -45,10 +65,20 @@ public sealed class SceneSurface
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Destroy"/> has run.
+    /// </summary>
     public bool IsDestroyed { get; private set; }
 
+    /// <summary>
+    /// Gets the buffer that shows in place of the client's buffer, or <see langword="null"/> when the client's buffer shows.
+    /// </summary>
     public IBuffer? Substitute { get; private set; }
 
+    /// <summary>
+    /// Shows a different buffer in place of the client's buffer, for example a converted copy. The substitute shows only while the client has a buffer attached.
+    /// </summary>
+    /// <param name="buffer">The buffer to show, or <see langword="null"/> to show the client's buffer again.</param>
     public void SetSubstitute(IBuffer? buffer)
     {
         if (IsDestroyed || ReferenceEquals(buffer, Substitute))
@@ -61,8 +91,15 @@ public sealed class SceneSurface
         _content.NotifyContentChanged();
     }
 
+    /// <summary>
+    /// Occurs once, at the end of <see cref="Destroy"/>.
+    /// </summary>
     public event Action? Destroyed;
 
+    /// <summary>
+    /// Sends the frame-done events of the surface and of each subsurface.
+    /// </summary>
+    /// <param name="timestampMs">The frame time, in milliseconds.</param>
     public void SendFrameDone(uint timestampMs)
     {
         Surface.SendFrameDone(timestampMs);
@@ -72,6 +109,9 @@ public sealed class SceneSurface
         }
     }
 
+    /// <summary>
+    /// Stops following the surface, destroys the subsurface nodes and <see cref="Tree"/>, then raises <see cref="Destroyed"/>. A second call does nothing.
+    /// </summary>
     public void Destroy()
     {
         if (IsDestroyed)

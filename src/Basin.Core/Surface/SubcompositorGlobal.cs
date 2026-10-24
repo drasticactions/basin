@@ -3,19 +3,27 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// The <c>wl_subcompositor</c> global. It gives surfaces the <see cref="Subsurface"/> role and refuses a parent that makes a loop.
+/// </summary>
 public sealed class SubcompositorGlobal : IDisposable
 {
+    /// <summary>The <c>wl_subcompositor</c> version that this global advertises.</summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
 
+    /// <summary>Initializes a new instance of the <see cref="SubcompositorGlobal"/> class and creates the global.</summary>
+    /// <param name="display">The display that gets the global.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces.</param>
     public SubcompositorGlobal(WlServerDisplay display, CompositorGlobal compositor)
     {
         _compositor = compositor;
         _global = display.CreateGlobal(WlSubcompositor.Interface, Version, OnBind);
     }
 
+    /// <summary>Destroys the global.</summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

@@ -9,10 +9,20 @@ using static Basin.Sdl.SdlLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// The render device for the <see cref="SdlRenderDevices.Vulkan"/> name. On Linux it shares the render node device with a dmabuf importer when that device can present.
+/// Otherwise it builds a device of its own through the SDL Vulkan loader, with no dmabuf import.
+/// </summary>
 public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
 {
+    /// <summary>
+    /// The render node that the device tries first for dmabuf import.
+    /// </summary>
     public const string DefaultRenderNode = "/dev/dri/renderD128";
 
+    /// <summary>
+    /// The instance extension that the device enables when it is offered, so that a lease can present HDR10.
+    /// </summary>
     public const string SwapchainColorspace = "VK_EXT_swapchain_colorspace";
 
     private readonly string? _renderNode;
@@ -25,21 +35,33 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
     private bool _ownsDevice;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlVulkanDevice"/> class. It creates no Vulkan object until the first lease.
+    /// </summary>
+    /// <param name="renderNode">The render node to share with the dmabuf importer. A path that does not exist, or <see langword="null"/>, turns the sharing off.</param>
     public SdlVulkanDevice(string? renderNode = DefaultRenderNode)
     {
         _renderNode = renderNode is not null && File.Exists(renderNode) ? renderNode : null;
     }
 
+    /// <inheritdoc/>
     public string Name => SdlRenderDevices.Vulkan;
 
+    /// <inheritdoc/>
     public SDL.WindowFlags WindowFlags => SDL.WindowFlags.Vulkan;
 
+    /// <inheritdoc/>
     public GRContext? Context => _context;
 
+    /// <inheritdoc/>
     public nint EglDisplay => 0;
 
+    /// <summary>
+    /// Gets the Skia Vulkan renderer that owns the shared render node device. It is <see langword="null"/> when the device runs standalone or before the first lease.
+    /// </summary>
     public IRenderer? DmabufRenderer => _skia;
 
+    /// <inheritdoc/>
     public string? RenderNode => _skia is null ? null : _renderNode;
 
     internal Vk Api { get; private set; } = null!;
@@ -58,8 +80,17 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
 
     internal KhrSwapchain Swapchains { get; private set; } = null!;
 
+    /// <summary>
+    /// Gets a value indicating whether the Skia context was abandoned after a device loss.
+    /// </summary>
     public bool IsLost => _context is { IsAbandoned: true };
 
+    /// <summary>
+    /// Creates a Vulkan lease for a window. The first call builds the instance, the device and the Skia context.
+    /// </summary>
+    /// <param name="window">A window that was created with <see cref="WindowFlags"/>.</param>
+    /// <returns>A new lease that the caller owns and must dispose before the window.</returns>
+    /// <exception cref="InvalidOperationException">Vulkan or Skia cannot build a device that presents to the window.</exception>
     public ISdlRenderLease CreateLease(SdlWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -401,6 +432,7 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
         }
     }
 
+    /// <inheritdoc/>
     public bool TryRecover()
     {
         if (_disposed || _context is not { IsAbandoned: true })
@@ -413,6 +445,9 @@ public sealed unsafe class SdlVulkanDevice : ISdlRenderDevice
         return true;
     }
 
+    /// <summary>
+    /// Waits for the device to go idle, releases every Vulkan object and the SDL Vulkan library. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

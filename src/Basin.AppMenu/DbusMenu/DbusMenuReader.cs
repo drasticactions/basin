@@ -3,6 +3,9 @@ using static Basin.AppMenu.AppMenuLog;
 
 namespace Basin.AppMenu;
 
+/// <summary>
+/// Reads a com.canonical.dbusmenu menu into an <see cref="AppMenu"/> and sends activations back. Layout and property signals cause a whole re-read.
+/// </summary>
 public sealed class DbusMenuReader : IAppMenuSource
 {
     private const string Interface = "com.canonical.dbusmenu";
@@ -17,6 +20,13 @@ public sealed class DbusMenuReader : IAppMenuSource
     private bool _failed;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DbusMenuReader"/> class and starts the first read.
+    /// </summary>
+    /// <param name="bus">The shared bus connection.</param>
+    /// <param name="busName">The bus name of the client.</param>
+    /// <param name="objectPath">The com.canonical.dbusmenu object path.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public DbusMenuReader(AppMenuBus bus, string busName, string objectPath)
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
@@ -25,14 +35,23 @@ public sealed class DbusMenuReader : IAppMenuSource
         _ = StartAsync();
     }
 
+    /// <inheritdoc/>
     public AppMenuAddressKind Kind => AppMenuAddressKind.DbusMenu;
 
+    /// <inheritdoc/>
     public AppMenu Menu { get; } = new();
 
+    /// <inheritdoc/>
     public bool IsReady { get; private set; }
 
+    /// <inheritdoc/>
     public event Action? Failed;
 
+    /// <summary>
+    /// Sends <c>AboutToShow</c> for the item. When the client answers that the menu needs an update, the reader reads the menu again.
+    /// </summary>
+    /// <param name="item">The submenu item that opens.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="item"/> is <see langword="null"/>.</exception>
     public void AboutToShow(AppMenuItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -44,6 +63,12 @@ public sealed class DbusMenuReader : IAppMenuSource
         _ = AboutToShowAsync(connection, item.Id);
     }
 
+    /// <summary>
+    /// Sends a <c>clicked</c> event for the item and does not wait for a reply. It does nothing before the connection exists or after dispose.
+    /// </summary>
+    /// <param name="item">The item that the user chose.</param>
+    /// <param name="timestamp">The input event time in milliseconds.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="item"/> is <see langword="null"/>.</exception>
     public void Activate(AppMenuItem item, uint timestamp)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -61,6 +86,9 @@ public sealed class DbusMenuReader : IAppMenuSource
         _ = connection.TrySendMessage(writer.CreateMessage());
     }
 
+    /// <summary>
+    /// Stops watching the client's signals. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

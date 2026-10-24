@@ -6,6 +6,9 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Render3D.Vulkan;
 
+/// <summary>
+/// The Vulkan 3D pass. It draws on the 2D renderer's <see cref="VulkanDevice"/> into dmabuf targets only, and draws the same image as the GL pass. Use it on the compositor thread only.
+/// </summary>
 public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
 {
     private const int MaxLights = 8;
@@ -56,6 +59,12 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
     private uint _stencilReference;
     private float _directMax = 1.2f;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanWorldRenderer"/> class. It creates its pipelines, samplers and frame slots on <paramref name="device"/>.
+    /// </summary>
+    /// <param name="device">The Vulkan device of the 2D renderer.</param>
+    /// <param name="anisotropy">The maximum anisotropic filtering for window and atlas textures. It applies only when the device enables <c>samplerAnisotropy</c>. This pass ignores <see cref="WorldRenderSettings.Anisotropy"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public VulkanWorldRenderer(VulkanDevice device, float anisotropy = 8)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -82,14 +91,33 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
         BasinCounters.Track();
     }
 
+    /// <inheritdoc/>
     public string Name => "vulkan";
 
+    /// <summary>
+    /// Gets the Vulkan device that the pass draws on.
+    /// </summary>
     public VulkanDevice Device => _device;
 
+    /// <summary>
+    /// Gets the number of mipmapped window copies that the last frame refreshed.
+    /// </summary>
     public int CopiesRefreshed { get; private set; }
 
+    /// <summary>
+    /// Gets the number of window layers that the last frame sampled directly, with no mipmapped copy.
+    /// </summary>
     public int DirectSamples { get; private set; }
 
+    /// <summary>
+    /// Records and submits the frame into <paramref name="target"/>. It waits for the target's readers and the sampled dmabufs' writers, and fences them after the submit.
+    /// </summary>
+    /// <param name="frame">The world, the view, the visible set and the settings for this output.</param>
+    /// <param name="target">The dmabuf to draw into. The pass caches a framebuffer for it until it is destroyed.</param>
+    /// <returns>Always <see langword="true"/>.</returns>
+    /// <exception cref="ObjectDisposedException">The renderer is disposed.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="target"/> is not a dmabuf, or the device cannot import it.</exception>
     public bool Render(in WorldFrame frame, IBuffer target)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -110,6 +138,7 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
         }
     }
 
+    /// <inheritdoc/>
     public void Forget(WorldWindow window)
     {
         if (_windows.Remove(window, out var state))
@@ -124,6 +153,7 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
         }
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         if (_disposed)

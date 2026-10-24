@@ -2,6 +2,9 @@ using Pixman;
 
 namespace Basin.Capabilities.Defaults;
 
+/// <summary>
+/// Stores opacity and visible regions in a dictionary. It forgets a surface when the surface is destroyed or returns to the defaults.
+/// </summary>
 public sealed class DefaultSurfaceAppearance : ISurfaceAppearance
 {
     private readonly Dictionary<Surface, Entry> _entries = [];
@@ -14,9 +17,11 @@ public sealed class DefaultSurfaceAppearance : ISurfaceAppearance
         public Action? OnDestroyed;
     }
 
+    /// <inheritdoc/>
     public double OpacityOf(Surface surface) =>
         _entries.TryGetValue(surface, out var entry) ? entry.Opacity : 1.0;
 
+    /// <inheritdoc/>
     public bool TryVisibleRegion(Surface surface, out PixmanRegion32 region)
     {
         if (_entries.TryGetValue(surface, out var entry) && entry.Visible is { IsEmpty: false } visible)
@@ -29,6 +34,7 @@ public sealed class DefaultSurfaceAppearance : ISurfaceAppearance
         return false;
     }
 
+    /// <inheritdoc/>
     public void SetOpacity(Surface surface, double opacity)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -52,6 +58,7 @@ public sealed class DefaultSurfaceAppearance : ISurfaceAppearance
         _observers.Changed(surface);
     }
 
+    /// <inheritdoc/>
     public void SetVisibleRegion(Surface surface, PixmanRegion32 region)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -77,6 +84,7 @@ public sealed class DefaultSurfaceAppearance : ISurfaceAppearance
         _observers.Changed(surface);
     }
 
+    /// <inheritdoc/>
     public void ClearVisibleRegion(Surface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -91,8 +99,10 @@ public sealed class DefaultSurfaceAppearance : ISurfaceAppearance
         _observers.Changed(surface);
     }
 
+    /// <inheritdoc/>
     public void AddObserver(ISurfaceAppearanceObserver observer) => _observers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(ISurfaceAppearanceObserver observer) => _observers.Remove(observer);
 
     private Entry Track(Surface surface)

@@ -1,7 +1,15 @@
 namespace Basin;
 
+/// <summary>
+/// Holds the RGB-to-YUV arithmetic that the GPU conversions implement, as a CPU reference.
+/// </summary>
 public static class YuvConversion
 {
+    /// <summary>
+    /// Gets the luma weights of red and blue for a YUV matrix.
+    /// </summary>
+    /// <param name="coefficients">The matrix.</param>
+    /// <returns>The red weight and the blue weight.</returns>
     public static (float Kr, float Kb) Weights(YuvCoefficients coefficients) => coefficients switch
     {
         YuvCoefficients.Bt601 => (0.299f, 0.114f),
@@ -9,6 +17,15 @@ public static class YuvConversion
         _ => (0.2126f, 0.0722f),
     };
 
+    /// <summary>
+    /// Converts one 8-bit RGB color to 8-bit YCbCr.
+    /// </summary>
+    /// <param name="r">The red value.</param>
+    /// <param name="g">The green value.</param>
+    /// <param name="b">The blue value.</param>
+    /// <param name="coefficients">The YUV matrix.</param>
+    /// <param name="range">The quantization range of the output.</param>
+    /// <returns>The luma and the two chroma values.</returns>
     public static (byte Y, byte Cb, byte Cr) Reference(byte r, byte g, byte b, YuvCoefficients coefficients, YuvRange range)
     {
         var (kr, kb) = Weights(coefficients);
@@ -21,6 +38,14 @@ public static class YuvConversion
             : (Byte(y), Byte(cb + 0.5), Byte(cr + 0.5));
     }
 
+    /// <summary>
+    /// Fits a source into a target with the same aspect ratio, centered. The size and the position are even, so chroma samples do not cross the edge.
+    /// </summary>
+    /// <param name="sourceWidth">The source width.</param>
+    /// <param name="sourceHeight">The source height.</param>
+    /// <param name="targetWidth">The target width.</param>
+    /// <param name="targetHeight">The target height.</param>
+    /// <returns>The destination box in the target. A source with no size fills the whole target.</returns>
     public static Box Fit(int sourceWidth, int sourceHeight, int targetWidth, int targetHeight)
     {
         if (sourceWidth <= 0 || sourceHeight <= 0)
@@ -38,6 +63,13 @@ public static class YuvConversion
         return new Box(x, y, width, height);
     }
 
+    /// <summary>
+    /// Describes the two planes of a linear NV12 dmabuf as two single-plane buffers: an R8 luma plane and a half-size GR88 chroma plane. The fds are shared, not duplicated.
+    /// </summary>
+    /// <param name="nv12">The NV12 buffer.</param>
+    /// <param name="luma">The luma plane, or the default value on failure.</param>
+    /// <param name="chroma">The chroma plane, or the default value on failure.</param>
+    /// <returns><see langword="false"/> when the buffer is not linear NV12 with two planes.</returns>
     public static bool TrySplit(in DmabufAttributes nv12, out DmabufAttributes luma, out DmabufAttributes chroma)
     {
         luma = default;

@@ -6,6 +6,10 @@ using SkiaSharp;
 
 namespace Basin.Render.Skia;
 
+/// <summary>
+/// The Skia Ganesh renderer on a GLES context. It draws on a DRM render node and runs on the
+/// compositor thread only.
+/// </summary>
 public sealed class SkiaGlRenderer : IRenderer
 {
     internal const uint GlTexture2D = 0x0DE1;
@@ -23,6 +27,11 @@ public sealed class SkiaGlRenderer : IRenderer
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly Dictionary<(uint Texture, int Width, int Height), (GRBackendTexture Backend, SKImage Image)> _backdropImages = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SkiaGlRenderer"/> class. It opens its own GL device
+    /// on the render node.
+    /// </summary>
+    /// <param name="devicePath">The DRM render node to open.</param>
     public SkiaGlRenderer(string devicePath = "/dev/dri/renderD128")
     {
         _device = new GlDevice(devicePath);
@@ -71,10 +80,19 @@ public sealed class SkiaGlRenderer : IRenderer
         }
     }
 
+    /// <summary>
+    /// Gets the GL device that the renderer draws on. The renderer owns it.
+    /// </summary>
     public GlDevice Device => _device;
 
     IRenderDevice? IRenderer.Device => Device;
 
+    /// <summary>
+    /// Creates a render stack with a new <see cref="SkiaGlRenderer"/> and an allocator on the same
+    /// device. The renderer is disposed when the allocator cannot be made.
+    /// </summary>
+    /// <param name="renderNodePath">The DRM render node to open, for example <c>/dev/dri/renderD128</c>.</param>
+    /// <returns>The stack, which owns the renderer and the allocator.</returns>
     public static RenderStack CreateStack(string renderNodePath)
     {
         var renderer = new SkiaGlRenderer(renderNodePath);
@@ -89,8 +107,15 @@ public sealed class SkiaGlRenderer : IRenderer
         }
     }
 
+    /// <summary>
+    /// Gets the Ganesh context. The renderer owns it.
+    /// </summary>
     public GRContext Context => _context;
 
+    /// <summary>
+    /// Gets a value indicating whether a pass can run backdrop effects. It is always <see
+    /// langword="true"/> on this renderer.
+    /// </summary>
     public bool SupportsBackdropEffects => true;
 
     internal bool BackdropImage(uint texture, int width, int height, out SKImage image)
@@ -116,16 +141,27 @@ public sealed class SkiaGlRenderer : IRenderer
         return true;
     }
 
+    /// <inheritdoc/>
     public DrmFormatSet DmabufTextureFormats => _device.SampleableFormats;
 
+    /// <inheritdoc/>
     public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
 
+    /// <summary>
+    /// Gets how the renderer takes a color conversion. It is always <see
+    /// cref="ColorTransformCapability.Decomposed"/>.
+    /// </summary>
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
     internal SkiaColorTransforms ColorTransforms { get; } = new();
 
+    /// <inheritdoc/>
     public bool WaitsOnGpu => _device.WaitsOnGpu;
 
+    /// <summary>
+    /// Gets how much a signal fence of a pass promises. It is always <see
+    /// cref="RenderFencePrecision.Context"/>.
+    /// </summary>
     public RenderFencePrecision FencePrecision => RenderFencePrecision.Context;
 
     private int _completionFence = -1;
@@ -136,6 +172,11 @@ public sealed class SkiaGlRenderer : IRenderer
         _completionFence = fd;
     }
 
+    /// <summary>
+    /// Takes the completion fence of the most recently submitted pass. A second call returns -1 until
+    /// another pass submits.
+    /// </summary>
+    /// <returns>A sync_file fd that the caller owns, or -1 when there is no fence.</returns>
     public int ExportLastSubmissionFence()
     {
         var fd = _completionFence;
@@ -143,6 +184,12 @@ public sealed class SkiaGlRenderer : IRenderer
         return fd;
     }
 
+    /// <summary>
+    /// Imports a dmabuf as a GPU texture, or wraps a memory buffer that uploads on each change. It
+    /// never throws for a foreign or hostile buffer.
+    /// </summary>
+    /// <param name="buffer">The buffer to import.</param>
+    /// <returns>The texture, which the caller disposes, or <see langword="null"/> when the dmabuf format is not in <see cref="DmabufTextureFormats"/> or the import fails.</returns>
     public ITexture? ImportTexture(IBuffer buffer)
     {
         _thread.Assert();
@@ -156,17 +203,33 @@ public sealed class SkiaGlRenderer : IRenderer
         return new SkiaGlShmTexture(this, buffer);
     }
 
+    /// <summary>
+    /// Compiles the SkSL variant of a pixel shader. A source that does not compile throws with the
+    /// compiler log.
+    /// </summary>
+    /// <param name="source">The shader source. Only its SkSL text is read.</param>
+    /// <param name="uniforms">The uniforms that the shader declares after the uniforms of basin, in order.</param>
+    /// <returns>The shader, which the caller disposes, or <see langword="null"/> when the source has no SkSL.</returns>
     public IPixelShader? CompilePixelShader(in PixelShaderSource source, ReadOnlySpan<PixelShaderUniform> uniforms)
     {
         return source.Sksl is null ? null : SkiaPixelShader.Create(source, uniforms);
     }
 
+    /// <inheritdoc/>
     public IColorLut? ImportLut(ColorLut3D lut)
     {
         _thread.Assert();
         return SkiaColorLut.Create(lut);
     }
 
+    /// <summary>
+    /// Begins a pass that draws into a dmabuf or a CPU buffer. The renderer caches one Skia surface per
+    /// target until the buffer is destroyed. An abandoned context drops every cached target and throws
+    /// <see cref="InvalidOperationException"/>.
+    /// </summary>
+    /// <param name="target">A BGRA dmabuf or a 4-byte memory buffer to draw into.</param>
+    /// <param name="options">The fences and the output color description of the pass.</param>
+    /// <returns>The renderer's single pass object. The caller must submit it before the next pass begins.</returns>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         _thread.Assert();
@@ -194,6 +257,10 @@ public sealed class SkiaGlRenderer : IRenderer
         return _pass;
     }
 
+    /// <summary>
+    /// Tells Ganesh that code outside Skia changed GL state. Call it after raw GL calls on the device
+    /// context, before the next Skia draw.
+    /// </summary>
     public void NotifyGlStateTouched() => _context.ResetContext(uint.MaxValue);
 
     private TargetEntry ImportTarget(IBuffer target)
@@ -236,6 +303,9 @@ public sealed class SkiaGlRenderer : IRenderer
         return entry;
     }
 
+    /// <summary>
+    /// Frees every cached target and image, abandons the Ganesh context and disposes the GL device.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

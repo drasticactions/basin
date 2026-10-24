@@ -2,14 +2,23 @@ using System.Runtime.InteropServices;
 
 namespace Basin;
 
+/// <summary>
+/// Places outputs in one shared space of logical coordinates, so the pointer and windows can move between them. Each output covers its logical size from <see cref="OutputScaling.LogicalSize"/>. The layout holds geometry only, no policy.
+/// </summary>
 public sealed class OutputLayout
 {
     private readonly List<Entry> _entries = [];
     private readonly List<(IOutput Output, Point Position)> _projection = [];
     private bool _projectionStale = true;
 
+    /// <summary>
+    /// Occurs when an output is added, moved or removed, or when a commit changes the logical box of an output in the layout. A move to the current position does not raise it.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Gets each output in the layout with the logical position of its top-left corner, in the order of addition. The span is valid until the next change to the layout.
+    /// </summary>
     public ReadOnlySpan<(IOutput Output, Point Position)> Outputs
     {
         get
@@ -29,6 +38,9 @@ public sealed class OutputLayout
         }
     }
 
+    /// <summary>
+    /// Gets a text key built from the name and the logical box of each output. Two layouts with the same key have the same geometry. Each read allocates a new string.
+    /// </summary>
     public string Id
     {
         get
@@ -45,6 +57,12 @@ public sealed class OutputLayout
         }
     }
 
+    /// <summary>
+    /// Adds an output at a logical position, or moves it there when it is already in the layout. The layout removes the output when it is destroyed.
+    /// </summary>
+    /// <param name="output">The output to add.</param>
+    /// <param name="x">The horizontal position of the top-left corner.</param>
+    /// <param name="y">The vertical position of the top-left corner.</param>
     public void Add(IOutput output, int x, int y)
     {
         TryRemove(output);
@@ -58,6 +76,12 @@ public sealed class OutputLayout
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Moves an output in the layout to a new logical position. It does nothing when the output is not in the layout or already at that position.
+    /// </summary>
+    /// <param name="output">The output to move.</param>
+    /// <param name="x">The new horizontal position of the top-left corner.</param>
+    /// <param name="y">The new vertical position of the top-left corner.</param>
     public void Move(IOutput output, int x, int y)
     {
         foreach (var entry in _entries)
@@ -78,6 +102,10 @@ public sealed class OutputLayout
         }
     }
 
+    /// <summary>
+    /// Removes an output from the layout. It does nothing when the output is not in the layout.
+    /// </summary>
+    /// <param name="output">The output to remove.</param>
     public void Remove(IOutput output)
     {
         if (TryRemove(output))
@@ -130,6 +158,11 @@ public sealed class OutputLayout
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// Tells whether the layout carries an output. An output out of the layout gets no pointer, no surface enter and no layout events.
+    /// </summary>
+    /// <param name="output">The output to look for.</param>
+    /// <returns><see langword="true"/> when the output is in the layout.</returns>
     public bool Contains(IOutput output)
     {
         foreach (var entry in _entries)
@@ -143,6 +176,9 @@ public sealed class OutputLayout
         return false;
     }
 
+    /// <summary>
+    /// Gets the smallest logical box that contains every output, or an empty box when the layout has no outputs. Each read computes it from the live modes and scales.
+    /// </summary>
     public Box Bounds
     {
         get
@@ -170,6 +206,11 @@ public sealed class OutputLayout
         }
     }
 
+    /// <summary>
+    /// Gets the logical box of an output from its position and its current logical size.
+    /// </summary>
+    /// <param name="output">The output to look up.</param>
+    /// <returns>The box, or an empty box when the output is not in the layout.</returns>
     public Box BoxOf(IOutput output)
     {
         foreach (var entry in _entries)
@@ -183,6 +224,10 @@ public sealed class OutputLayout
         return default;
     }
 
+    /// <summary>
+    /// Packs outputs from left to right in the given order at y zero, with no gaps. Outputs that are not in the layout are skipped. Run it again after a change to a mode, a scale or a transform.
+    /// </summary>
+    /// <param name="outputs">The outputs in the order from left to right.</param>
     public void ArrangeHorizontally(IEnumerable<IOutput> outputs)
     {
         ArgumentNullException.ThrowIfNull(outputs);
@@ -199,6 +244,13 @@ public sealed class OutputLayout
         }
     }
 
+    /// <summary>
+    /// Converts a point in the panel pixels of an output to layout coordinates. It applies the output transform and divides by the scale.
+    /// </summary>
+    /// <param name="output">The output that the point is on.</param>
+    /// <param name="physicalX">The horizontal position in panel pixels.</param>
+    /// <param name="physicalY">The vertical position in panel pixels.</param>
+    /// <returns>The point in logical layout coordinates.</returns>
     public (double X, double Y) ToLayout(IOutput output, double physicalX, double physicalY)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -214,6 +266,13 @@ public sealed class OutputLayout
         return (box.X + (x / scale), box.Y + (y / scale));
     }
 
+    /// <summary>
+    /// Converts a normalized point on the panel of an output to layout coordinates, for example from a touchscreen. It applies the output transform.
+    /// </summary>
+    /// <param name="output">The output that the point is on.</param>
+    /// <param name="normalizedX">The horizontal position on the panel from 0 to 1.</param>
+    /// <param name="normalizedY">The vertical position on the panel from 0 to 1.</param>
+    /// <returns>The point in logical layout coordinates.</returns>
     public (double X, double Y) FromNormalized(IOutput output, double normalizedX, double normalizedY)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -227,6 +286,12 @@ public sealed class OutputLayout
         return (box.X + (x * box.Width), box.Y + (y * box.Height));
     }
 
+    /// <summary>
+    /// Finds the output whose logical box contains a point. The first output in layout order wins where boxes overlap.
+    /// </summary>
+    /// <param name="x">The horizontal layout position.</param>
+    /// <param name="y">The vertical layout position.</param>
+    /// <returns>The output, or <see langword="null"/> when no output contains the point.</returns>
     public IOutput? OutputAt(double x, double y)
     {
         foreach (var entry in _entries)
@@ -241,6 +306,12 @@ public sealed class OutputLayout
         return null;
     }
 
+    /// <summary>
+    /// Finds the point on an output that is nearest to a layout point. A point on an output comes back unchanged.
+    /// </summary>
+    /// <param name="x">The horizontal layout position.</param>
+    /// <param name="y">The vertical layout position.</param>
+    /// <returns>The nearest point, or the same point when the layout has no output with a size.</returns>
     public (double X, double Y) ClosestPoint(double x, double y)
     {
         if (OutputAt(x, y) is not null)

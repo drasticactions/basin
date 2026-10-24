@@ -2,10 +2,20 @@ using System.Xml;
 
 namespace Basin.Freedesktop;
 
+/// <summary>
+/// Finds the MIME type of a file from its name with the shared-mime-info glob, icon and alias files. It never reads file contents.
+/// The files are read on first use and cached until <see cref="Invalidate"/>. The class is not thread-safe.
+/// </summary>
 public sealed class MimeGlobs
 {
+    /// <summary>
+    /// The MIME type that <see cref="TypeOf(string)"/> gives a directory.
+    /// </summary>
     public const string Directory = "inode/directory";
 
+    /// <summary>
+    /// The MIME type that <see cref="TypeOf(string)"/> gives a name that no glob matches.
+    /// </summary>
     public const string Unknown = "application/octet-stream";
 
     private readonly IReadOnlyList<string> _dataDirectories;
@@ -18,11 +28,21 @@ public sealed class MimeGlobs
     private readonly Dictionary<string, string?> _comments = new(StringComparer.Ordinal);
     private bool _loaded;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MimeGlobs"/> class. Nothing is read until the first lookup.
+    /// </summary>
+    /// <param name="dataDirectories">The data directories in order of importance, or <see langword="null"/> for <see cref="XdgDirectories.DataDirectories"/> as it is now.</param>
     public MimeGlobs(IReadOnlyList<string>? dataDirectories = null)
     {
         _dataDirectories = dataDirectories ?? XdgDirectories.DataDirectories();
     }
 
+    /// <summary>
+    /// Finds the MIME type of a path. An existing directory gives <see cref="Directory"/>, anything else is matched by its file name.
+    /// </summary>
+    /// <param name="path">The path to classify.</param>
+    /// <returns>The canonical MIME type, or <see cref="Unknown"/> when no glob matches.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public string TypeOf(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -34,6 +54,13 @@ public sealed class MimeGlobs
         return TypeOfName(Path.GetFileName(path)) ?? Unknown;
     }
 
+    /// <summary>
+    /// Matches a file name against the globs: literal names first, then <c>*.ext</c> suffixes with the longest match winning, then full patterns.
+    /// In one class a higher weight wins, then a longer pattern.
+    /// </summary>
+    /// <param name="fileName">The file name without a directory.</param>
+    /// <returns>The canonical MIME type, or <see langword="null"/> when no glob matches.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="fileName"/> is <see langword="null"/>.</exception>
     public string? TypeOfName(string fileName)
     {
         ArgumentNullException.ThrowIfNull(fileName);
@@ -63,6 +90,12 @@ public sealed class MimeGlobs
         return Best(_patterns, g => Matches(g, fileName, literal: false)) is { } pattern ? Canonical(pattern.MimeType) : null;
     }
 
+    /// <summary>
+    /// Lists the icon names to try for a MIME type, after an alias resolves to its canonical type.
+    /// </summary>
+    /// <param name="mimeType">The MIME type.</param>
+    /// <returns>The type's icon or its name with <c>/</c> replaced by <c>-</c>, then its generic icon, then <c>MEDIA-x-generic</c>. It is never empty.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mimeType"/> is <see langword="null"/>.</exception>
     public IReadOnlyList<string> IconNamesOf(string mimeType)
     {
         ArgumentNullException.ThrowIfNull(mimeType);
@@ -85,6 +118,12 @@ public sealed class MimeGlobs
         return names;
     }
 
+    /// <summary>
+    /// Reads the untranslated <c>comment</c> element from <c>mime/TYPE.xml</c> in the first data directory that has the file. The answer is cached.
+    /// </summary>
+    /// <param name="mimeType">The MIME type. An alias resolves to its canonical type.</param>
+    /// <returns>The description, or <see langword="null"/> when no file has one.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="mimeType"/> is <see langword="null"/>.</exception>
     public string? CommentOf(string mimeType)
     {
         ArgumentNullException.ThrowIfNull(mimeType);
@@ -110,6 +149,9 @@ public sealed class MimeGlobs
         return comment;
     }
 
+    /// <summary>
+    /// Drops every cached glob, icon, alias and comment. The next lookup reads the files again.
+    /// </summary>
     public void Invalidate()
     {
         _loaded = false;

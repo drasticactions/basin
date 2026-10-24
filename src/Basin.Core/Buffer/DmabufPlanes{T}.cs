@@ -5,6 +5,10 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// A fixed array of four values, one per dmabuf plane.
+/// </summary>
+/// <typeparam name="T">The value type of each plane entry.</typeparam>
 [InlineArray(4)]
 public struct DmabufPlanes<T>
 {

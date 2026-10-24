@@ -4,6 +4,9 @@ using Basin;
 
 namespace Basin.Session;
 
+/// <summary>
+/// Checks a password with a PAM helper process, without a block on the compositor loop. The helper reads the password on stdin and writes "1" on success.
+/// </summary>
 public sealed unsafe class PamCheck : IDisposable
 {
     private const int CloseOnExec = 0x80000;
@@ -25,6 +28,15 @@ public sealed unsafe class PamCheck : IDisposable
         _done = done;
     }
 
+    /// <summary>
+    /// Starts the helper process and writes the password to it. The result arrives later through <paramref name="done"/> on the loop thread.
+    /// </summary>
+    /// <param name="loop">The loop that watches the helper output and reaps the process.</param>
+    /// <param name="argv">The helper command line. The first item is the program, which the PATH search finds.</param>
+    /// <param name="password">The password bytes. The helper gets the bytes up to the first zero byte.</param>
+    /// <param name="done">The callback that gets <see langword="true"/> when the helper accepted the password. It is not called after <see cref="Dispose"/>.</param>
+    /// <param name="error">The reason for failure when the result is <see langword="null"/>, otherwise <see langword="null"/>.</param>
+    /// <returns>The running check, which the caller owns and must dispose, or <see langword="null"/> when the process did not start.</returns>
     public static PamCheck? Start(ICompositorEventLoop loop, IReadOnlyList<string> argv, byte[] password, Action<bool> done, out string? error)
     {
         var check = new PamCheck(loop, done);
@@ -189,6 +201,9 @@ public sealed unsafe class PamCheck : IDisposable
         return PamNative.WaitPid(pid, &status, WaitNoHang) != 0;
     }
 
+    /// <summary>
+    /// Cancels the check, closes the pipe and reaps the helper. A helper that is still running is killed.
+    /// </summary>
     public void Dispose()
     {
         _finished = true;

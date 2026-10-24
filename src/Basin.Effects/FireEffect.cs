@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The burn reveal. A burn line moves down a window and reveals or hides it, with particle flames or a pixel shader along the line.
+/// </summary>
 public sealed class FireEffect : IMeshSource
 {
     private const int SpriteSize = 16;
@@ -38,8 +41,15 @@ public sealed class FireEffect : IMeshSource
     private Box _contentBounds;
     private readonly DarkSource _darkSource;
 
+    /// <summary>
+    /// Gets or sets the compiled <see cref="FireShader"/>. Set it before <see cref="Begin(TransformStack, bool, long)"/>. When it is <see langword="null"/>, the particle path runs.
+    /// </summary>
     public IPixelShader? Shader { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FireEffect"/> class. The random generator starts from the seed once, here.
+    /// </summary>
+    /// <param name="options">The settings. The default value means <see cref="FireOptions()"/>.</param>
     public FireEffect(FireOptions options = default)
     {
         _options = options == default ? new FireOptions() : options;
@@ -47,14 +57,31 @@ public sealed class FireEffect : IMeshSource
         _darkSource = new DarkSource(this);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the effect holds a live transform node.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Starts a burn anchored exactly at a tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="hiding"><see langword="true"/> to burn the window away, <see langword="false"/> to burn it into view.</param>
+    /// <param name="now">The tick that anchors the start.</param>
+    /// <param name="durationNanos">The duration in nanoseconds for a window 400 pixels high. The effect scales it with the height.</param>
     public void Begin(TransformStack stack, bool hiding, in FrameTick now, long durationNanos)
     {
         Begin(stack, hiding, durationNanos);
         _timeline.Anchor(now);
     }
 
+    /// <summary>
+    /// Starts a burn with an unanchored timeline. It adds a <c>fire</c> node to the stack, which must not already hold one.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="hiding"><see langword="true"/> to burn the window away, <see langword="false"/> to burn it into view.</param>
+    /// <param name="durationNanos">The duration in nanoseconds for a window 400 pixels high. The effect scales it with the height.</param>
+    /// <exception cref="InvalidOperationException">The stack already holds a <c>fire</c> node.</exception>
     public void Begin(TransformStack stack, bool hiding, long durationNanos)
     {
         End();
@@ -133,6 +160,12 @@ public sealed class FireEffect : IMeshSource
         return wrapper;
     }
 
+    /// <summary>
+    /// Advances the burn. When the timeline ends and the last particle dies, the effect calls <see cref="End"/> itself.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the burn needs more frames.</returns>
     public bool Step(TransformStack stack, in FrameTick tick)
     {
         if (_node is not { IsDestroyed: false } || (_flame is null && _shaderNode is null))
@@ -200,6 +233,10 @@ public sealed class FireEffect : IMeshSource
         return false;
     }
 
+    /// <summary>
+    /// Destroys the meshes, moves the window content back out of the clip wrapper, and frees the sprite.
+    /// </summary>
+    /// <param name="stack">The transform stack to remove the <c>fire</c> node from. When it is <see langword="null"/>, the node stays in the stack.</param>
     public void End(TransformStack? stack = null)
     {
         if (_node is { IsDestroyed: false } node)
@@ -231,8 +268,10 @@ public sealed class FireEffect : IMeshSource
         _node = null;
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds) => _alive * 6;
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into) => WriteQuads(into, dark: false);
 
     private void WriteQuads(Span<MeshVertex> into, bool dark)

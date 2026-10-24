@@ -1,5 +1,8 @@
 namespace Basin.Themes.MsStyles;
 
+/// <content>
+/// Holds the property, enumeration and class tables of the style map.
+/// </content>
 public static partial class MsStylesStyleMap
 {
     private static readonly MsStylesPropertyName[] PropertyNames =

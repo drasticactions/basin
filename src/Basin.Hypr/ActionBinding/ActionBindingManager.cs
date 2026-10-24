@@ -6,8 +6,14 @@ using static Basin.Hypr.HyprLog;
 
 namespace Basin.Hypr;
 
+/// <summary>
+/// Advertises <c>gamescope_action_binding_manager</c>. It registers each armed keyboard trigger as a shortcut in an <see cref="IGlobalShortcuts"/> registry and sends <c>triggered</c> when the shortcut fires.
+/// </summary>
 public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
 {
+    /// <summary>
+    /// The highest protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const string AppIdPrefix = "gamescope-action-binding";
@@ -28,6 +34,13 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
     private uint _sequence;
     private ulong _nextBinding;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ActionBindingManager"/> class and subscribes to <paramref name="registry"/>.
+    /// </summary>
+    /// <param name="display">The display that hosts the global.</param>
+    /// <param name="registry">The shortcut registry. When it is <see langword="null"/>, bindings can arm but never fire.</param>
+    /// <param name="policy">The policy that decides which clients can register triggers. <see langword="null"/> selects <see cref="SandboxActionBindingPolicy"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public ActionBindingManager(WlServerDisplay display, IGlobalShortcuts? registry, IActionBindingPolicy? policy)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -37,8 +50,18 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
         _global = display.CreateGlobal(Protocol.GamescopeActionBindingManager.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets the number of triggers that are registered in the shortcut registry now, over all bindings.
+    /// </summary>
     public int Armed => _byShortcut.Count;
 
+    /// <summary>
+    /// Converts a list of keysyms into one key and a modifier mask. An uppercase Latin letter becomes lowercase. A list of only modifiers uses the last modifier as the key.
+    /// </summary>
+    /// <param name="keysyms">The keysyms of one trigger, in any order.</param>
+    /// <param name="keysym">The non-modifier keysym, or the last modifier keysym when the list has only modifiers.</param>
+    /// <param name="modifiers">The modifiers that must be held with <paramref name="keysym"/>.</param>
+    /// <returns><see langword="false"/> when the list is empty or holds more than one non-modifier key.</returns>
     public static bool TryChord(ReadOnlySpan<uint> keysyms, out uint keysym, out Modifiers modifiers)
     {
         keysym = 0;
@@ -78,12 +101,25 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Does nothing. The manager tracks only the shortcuts that it registered itself.
+    /// </summary>
+    /// <param name="shortcut">The shortcut that was added. It is ignored.</param>
     public void ShortcutRegistered(in GlobalShortcutInfo shortcut)
     {
     }
 
+    /// <summary>
+    /// Forgets the binding of a removed shortcut, so that a later activation of the same id does not fire it.
+    /// </summary>
+    /// <param name="shortcut">The shortcut that was removed.</param>
     public void ShortcutRemoved(in GlobalShortcutInfo shortcut) => _byShortcut.Remove((shortcut.AppId, shortcut.Id));
 
+    /// <summary>
+    /// Sends <c>triggered</c> to the binding that owns the shortcut, with the current monotonic time. A one-shot binding then disarms its other triggers.
+    /// </summary>
+    /// <param name="shortcut">The shortcut that was pressed. A shortcut that no binding owns is ignored.</param>
+    /// <param name="timestampMs">The time of the press. The event uses the current clock instead.</param>
     public void ShortcutActivated(in GlobalShortcutInfo shortcut, ulong timestampMs)
     {
         if (!_byShortcut.TryGetValue((shortcut.AppId, shortcut.Id), out var binding))
@@ -99,10 +135,18 @@ public sealed class ActionBindingManager : IGlobalShortcutObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Does nothing. The protocol has no release event.
+    /// </summary>
+    /// <param name="shortcut">The shortcut that was released. It is ignored.</param>
+    /// <param name="timestampMs">The time of the release. It is ignored.</param>
     public void ShortcutDeactivated(in GlobalShortcutInfo shortcut, ulong timestampMs)
     {
     }
 
+    /// <summary>
+    /// Unsubscribes from the registry and destroys the global. Shortcuts that bindings registered stay in the registry.
+    /// </summary>
     public void Dispose()
     {
         _registry?.RemoveObserver(this);

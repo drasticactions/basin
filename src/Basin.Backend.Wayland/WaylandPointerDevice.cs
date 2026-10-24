@@ -4,6 +4,9 @@ using Wayland;
 
 namespace Basin.Backend.Wayland;
 
+/// <summary>
+/// Reports the parent seat's pointer on this backend's outputs, in output-local physical pixels. Events over a host frame go to that frame instead.
+/// </summary>
 public sealed class WaylandPointerDevice : IParentCursor, IDisposable
 {
     private readonly ParentCursorSurface _cursor;
@@ -177,34 +180,62 @@ public sealed class WaylandPointerDevice : IParentCursor, IDisposable
                 direction));
     }
 
+    /// <summary>Occurs when the pointer enters an output. The arguments are the output and X and Y in output-local physical pixels.</summary>
     public event Action<WaylandOutput, double, double>? Enter;
 
+    /// <summary>Occurs when the pointer leaves an output, or when the parent removes the pointer while it is on one.</summary>
     public event Action? Leave;
 
+    /// <summary>
+    /// Occurs when the pointer moves on an output. The arguments are the time in milliseconds and X and Y in output-local physical pixels.
+    /// </summary>
     public event Action<uint, double, double>? Motion;
 
+    /// <summary>
+    /// Occurs when a button changes state outside the host frame. The arguments are the time in milliseconds, the Linux input event code and the pressed state.
+    /// </summary>
     public event Action<uint, uint, bool>? Button;
 
+    /// <summary>
+    /// Occurs once per axis at the end of each parent pointer frame that carried scroll events. The first argument is the time in milliseconds.
+    /// Scroll over the host frame is dropped.
+    /// </summary>
     public event Action<uint, PointerAxis>? Axis;
 
+    /// <summary>Occurs when a swipe gesture starts. The arguments are the time in milliseconds and the finger count.</summary>
     public event Action<uint, uint>? SwipeBegin;
 
+    /// <summary>Occurs when a swipe gesture moves. The arguments are the time in milliseconds and the delta in physical pixels.</summary>
     public event Action<uint, double, double>? SwipeUpdate;
 
+    /// <summary>Occurs when a swipe gesture ends. The arguments are the time in milliseconds and whether the gesture was cancelled.</summary>
     public event Action<uint, bool>? SwipeEnd;
 
+    /// <summary>Occurs when a pinch gesture starts. The arguments are the time in milliseconds and the finger count.</summary>
     public event Action<uint, uint>? PinchBegin;
 
+    /// <summary>
+    /// Occurs when a pinch gesture changes. The arguments are the time in milliseconds, the delta in physical pixels, the absolute scale and the rotation delta in degrees.
+    /// </summary>
     public event Action<uint, double, double, double, double>? PinchUpdate;
 
+    /// <summary>Occurs when a pinch gesture ends. The arguments are the time in milliseconds and whether the gesture was cancelled.</summary>
     public event Action<uint, bool>? PinchEnd;
 
+    /// <summary>
+    /// Occurs when a hold gesture starts. The arguments are the time in milliseconds and the finger count. A parent below gestures version 3 never raises it.
+    /// </summary>
     public event Action<uint, uint>? HoldBegin;
 
+    /// <summary>Occurs when a hold gesture ends. The arguments are the time in milliseconds and whether the gesture was cancelled.</summary>
     public event Action<uint, bool>? HoldEnd;
 
+    /// <summary>
+    /// Occurs on relative pointer motion. The arguments are the time in microseconds, the accelerated delta in physical pixels and the unaccelerated delta.
+    /// </summary>
     public event Action<ulong, double, double, double, double>? RelativeMotion;
 
+    /// <summary>Gets a value indicating whether the parent has a relative pointer manager, so <see cref="RelativeMotion"/> can occur.</summary>
     public bool HasRelativeMotion => _relative is not null;
 
     internal WlPointer Proxy => _pointer;
@@ -301,12 +332,22 @@ public sealed class WaylandPointerDevice : IParentCursor, IDisposable
         _hold.End += (_, e) => HoldEnd?.Invoke(e.Time, e.Cancelled != 0);
     }
 
+    /// <summary>
+    /// Shows <paramref name="image"/> as the parent cursor over the outputs. The pixels are copied, so the caller keeps the buffer.
+    /// </summary>
+    /// <param name="image">The cursor image in physical pixels.</param>
+    /// <param name="hotspotX">The hotspot X in physical pixels.</param>
+    /// <param name="hotspotY">The hotspot Y in physical pixels.</param>
+    /// <param name="scale">The density the image is meant for, usually the scale of the output under the pointer.</param>
+    /// <returns><see langword="false"/> when the parent cursor surface cannot show the image.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="image"/> is <see langword="null"/>.</exception>
     public bool SetCursor(IBuffer image, int hotspotX, int hotspotY, double scale = 1.0)
     {
         ArgumentNullException.ThrowIfNull(image);
         return _cursor.Show(image, hotspotX, hotspotY, scale);
     }
 
+    /// <summary>Hides the parent cursor over the outputs. The cursor over the host frame is not changed.</summary>
     public void HideCursor() => _cursor.Hide();
 
     internal bool SetFrameCursor(IBuffer image, int hotspotX, int hotspotY, double scale)
@@ -320,6 +361,7 @@ public sealed class WaylandPointerDevice : IParentCursor, IDisposable
         return _frameCursor.Show(image, hotspotX, hotspotY, scale);
     }
 
+    /// <summary>Destroys the gesture and relative pointer objects and both parent cursor surfaces.</summary>
     public void Dispose()
     {
         _relative?.Dispose();

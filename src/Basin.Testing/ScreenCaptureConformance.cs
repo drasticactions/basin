@@ -3,16 +3,39 @@ using Xunit;
 
 namespace Basin.Testing;
 
+/// <summary>
+/// The conformance rows every <see cref="IScreenCapture"/> implementation must pass.
+/// A test class derives from it and supplies the capture, the output and the target buffers.
+/// </summary>
 public abstract class ScreenCaptureConformance
 {
+    /// <summary>
+    /// Creates the capture under test. Each row calls it once.
+    /// </summary>
+    /// <returns>A new capture that can see <see cref="Output"/>.</returns>
     protected abstract IScreenCapture Create();
 
+    /// <summary>
+    /// Gets the output that the rows capture from.
+    /// </summary>
     protected abstract IOutput Output { get; }
 
+    /// <summary>
+    /// Creates a target buffer that matches a described capture format.
+    /// </summary>
+    /// <param name="format">The size and pixel format the target must have.</param>
+    /// <returns>A buffer that the row releases through <see cref="DestroyTarget"/>.</returns>
     protected abstract IBuffer CreateTarget(in CaptureFormat format);
 
+    /// <summary>
+    /// Destroys a buffer that <see cref="CreateTarget"/> returned.
+    /// </summary>
+    /// <param name="target">The buffer to destroy.</param>
     protected abstract void DestroyTarget(IBuffer target);
 
+    /// <summary>
+    /// Checks that a supported output source has a description with a tight stride.
+    /// </summary>
     [Fact]
     public void Describes_every_source_it_supports()
     {
@@ -28,6 +51,9 @@ public abstract class ScreenCaptureConformance
         Assert.Equal(format.Width * format.Format.BytesPerPixel(), format.Stride);
     }
 
+    /// <summary>
+    /// Checks that an unsupported source has no description.
+    /// </summary>
     [Fact]
     public void An_unsupported_source_is_never_described_or_captured()
     {
@@ -41,6 +67,9 @@ public abstract class ScreenCaptureConformance
         Assert.False(capture.TryDescribe(source, out _));
     }
 
+    /// <summary>
+    /// Checks that an empty region captures the whole source.
+    /// </summary>
     [Fact]
     public void Capture_fills_the_target_for_an_empty_region()
     {
@@ -60,6 +89,9 @@ public abstract class ScreenCaptureConformance
         }
     }
 
+    /// <summary>
+    /// Checks that a region smaller than the source captures into a target of the region's size.
+    /// </summary>
     [Fact]
     public void Capture_respects_a_partial_region()
     {
@@ -83,6 +115,9 @@ public abstract class ScreenCaptureConformance
         }
     }
 
+    /// <summary>
+    /// Checks that a reported cursor is visible and has a size.
+    /// </summary>
     [Fact]
     public void A_cursor_state_is_answered_consistently()
     {
@@ -95,6 +130,9 @@ public abstract class ScreenCaptureConformance
         }
     }
 
+    /// <summary>
+    /// Checks that a cursor set through <see cref="IScreenCapture.SetCursor"/> is reported, and that clearing it withdraws it.
+    /// </summary>
     [Fact]
     public void A_published_cursor_is_reported_and_withdrawn()
     {
@@ -129,6 +167,9 @@ public abstract class ScreenCaptureConformance
         }
     }
 
+    /// <summary>
+    /// Checks that 1000 capture cycles allocate no managed memory after a warm-up.
+    /// </summary>
     [Fact]
     public void Capture_allocates_nothing_across_1000_frames()
     {

@@ -5,10 +5,19 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_idle_notifier_v1</c> and <c>zwp_idle_inhibit_manager_v1</c> globals. Idle notifications time out on the loop and reset on activity.
+/// </summary>
 public sealed class IdleManager : IDisposable
 {
+    /// <summary>
+    /// The version that the idle notifier global advertises.
+    /// </summary>
     public const int NotifierVersion = 2;
 
+    /// <summary>
+    /// The version that the idle inhibit global advertises.
+    /// </summary>
     public const int InhibitVersion = 1;
 
     private readonly WlGlobal _notifyGlobal;
@@ -18,6 +27,14 @@ public sealed class IdleManager : IDisposable
     private readonly IIdleSource? _idle;
     private readonly List<Notification> _notifications = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IdleManager"/> class and creates both globals.
+    /// </summary>
+    /// <param name="display">The display that holds the globals.</param>
+    /// <param name="loop">The loop that holds the notification timers.</param>
+    /// <param name="compositor">The compositor global that resolves inhibiting surfaces.</param>
+    /// <param name="idle">The source of activity and inhibition, or <see langword="null"/>. Without one, no notification ever becomes idle.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public IdleManager(WlServerDisplay display, ICompositorEventLoop loop, CompositorGlobal compositor, IIdleSource? idle)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -33,8 +50,14 @@ public sealed class IdleManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the idle source reports an inhibitor. It is <see langword="false"/> without a source.
+    /// </summary>
     public bool IsInhibited => _idle?.IsInhibited ?? false;
 
+    /// <summary>
+    /// Stops following the idle source and removes both globals.
+    /// </summary>
     public void Dispose()
     {
         if (_idle is { } live)
@@ -47,6 +70,9 @@ public sealed class IdleManager : IDisposable
         _inhibitGlobal.Dispose();
     }
 
+    /// <summary>
+    /// Resets every idle notification and restarts its timer when an idle source exists. A notification that was idle sends <c>resumed</c>.
+    /// </summary>
     public void NotifyActivity()
     {
         foreach (var notification in _notifications)

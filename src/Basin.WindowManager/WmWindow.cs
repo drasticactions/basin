@@ -2,6 +2,9 @@ using Basin.WindowManager.Protocol;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// A client window that the compositor hands to the manager. Its properties hold the state from the start of the current sequence, so a callback never sees a half-updated window.
+/// </summary>
 public sealed class WmWindow : IRenderWindow
 {
     private readonly RiverWindowManager _wm;
@@ -104,48 +107,114 @@ public sealed class WmWindow : IRenderWindow
         };
     }
 
+    /// <summary>
+    /// Gets the application id that the client set, or <see langword="null"/> when it set none.
+    /// </summary>
     public string? AppId { get; private set; }
 
+    /// <summary>
+    /// Gets the title that the client set, or <see langword="null"/> when it set none.
+    /// </summary>
     public string? Title { get; private set; }
 
+    /// <summary>
+    /// Gets the window that this window names as its parent, for example the owner of a dialog. It is <see langword="null"/> for a window with no parent.
+    /// </summary>
     public WmWindow? Parent { get; private set; }
 
+    /// <summary>
+    /// Gets the compositor's unique identifier for the window, which is never reused. It is <see langword="null"/> before protocol version 4.
+    /// </summary>
     public string? Identifier { get; private set; }
 
+    /// <summary>
+    /// Gets the process id of the client that created the window, or zero when unknown. A pid can be reused, so do not use it for security decisions.
+    /// </summary>
     public int UnreliablePid { get; private set; }
 
+    /// <summary>
+    /// Gets the minimum and maximum dimensions that the client prefers. The manager can propose dimensions outside this range.
+    /// </summary>
     public DimensionsHint SizeHint { get; private set; }
 
+    /// <summary>
+    /// Gets the decoration styles that the client supports and prefers. It is <see cref="DecorationHint.NoPreference"/> until the client sends a hint.
+    /// </summary>
     public DecorationHint DecorationHint { get; private set; } = DecorationHint.NoPreference;
 
+    /// <inheritdoc/>
     public Size Dimensions { get; private set; }
 
+    /// <summary>
+    /// Gets the presentation mode that the client prefers. It is <see cref="PresentationMode.Vsync"/> until the client sends a hint.
+    /// </summary>
     public PresentationMode PresentationHint { get; private set; }
 
+    /// <summary>
+    /// Gets the number of screen capture sessions that record this window.
+    /// </summary>
     public int CaptureSessions { get; private set; }
 
+    /// <inheritdoc/>
     public WmNode Node => _node ??= new WmNode(_wm, _proxy.GetNode());
 
+    /// <summary>
+    /// Gets a value indicating whether the window closed. It becomes true when the event arrives, before <see cref="Closed"/> fires.
+    /// </summary>
     public bool IsClosed { get; private set; }
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked to be maximized. The manager can ignore the request.
+    /// </summary>
     public event Action? MaximizeRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked to leave the maximized state.
+    /// </summary>
     public event Action? UnmaximizeRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked to be fullscreen. The argument is the output it named, or <see langword="null"/> when it named none.
+    /// </summary>
     public event Action<WmOutput?>? FullscreenRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked to leave fullscreen.
+    /// </summary>
     public event Action? ExitFullscreenRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked to be minimized.
+    /// </summary>
     public event Action? MinimizeRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked for a window menu. The argument is the menu position relative to the window's top-left corner.
+    /// </summary>
     public event Action<Point>? ShowWindowMenuRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked for an interactive move on a seat. It does not fire when the seat is gone.
+    /// </summary>
     public event Action<WmSeat>? PointerMoveRequested;
 
+    /// <summary>
+    /// Occurs at the start of a sequence when the client asked for an interactive resize on a seat, with the edges to move. It does not fire when the seat is gone.
+    /// </summary>
     public event Action<WmSeat, Edges>? PointerResizeRequested;
 
+    /// <summary>
+    /// Occurs at the start of the next sequence after the window closed. The library destroys the window when that manage sequence ends.
+    /// </summary>
     public event Action? Closed;
 
+    /// <summary>
+    /// Proposes a content size. The client can take another size, and the size it takes arrives in <see cref="Dimensions"/> in a later render sequence.
+    /// </summary>
+    /// <param name="width">The width in logical pixels. Zero lets the client choose.</param>
+    /// <param name="height">The height in logical pixels. Zero lets the client choose.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A dimension is negative.</exception>
     public void ProposeDimensions(int width, int height)
     {
         _wm.EnsureManage(nameof(ProposeDimensions));
@@ -154,8 +223,22 @@ public sealed class WmWindow : IRenderWindow
         _proxy.ProposeDimensions(width, height);
     }
 
+    /// <summary>
+    /// Proposes a content size from a <see cref="Size"/>.
+    /// </summary>
+    /// <param name="size">The size in logical pixels. A zero component lets the client choose it.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A component is negative.</exception>
     public void ProposeDimensions(Size size) => ProposeDimensions(size.Width, size.Height);
 
+    /// <summary>
+    /// Recommends a maximum content size to the client. The client can ignore it.
+    /// </summary>
+    /// <param name="maxWidth">The largest width in logical pixels. Zero removes the bound.</param>
+    /// <param name="maxHeight">The largest height in logical pixels. Zero removes the bound.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
+    /// <exception cref="NotSupportedException">The bound protocol version is lower than 4.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">A bound is negative.</exception>
     public void SetDimensionBounds(int maxWidth, int maxHeight)
     {
         _wm.EnsureManage(nameof(SetDimensionBounds));
@@ -165,30 +248,52 @@ public sealed class WmWindow : IRenderWindow
         _proxy.SetDimensionBounds(maxWidth, maxHeight);
     }
 
+    /// <summary>
+    /// Asks the client to close the window. The client can ignore it or wait, and <see cref="Closed"/> fires only when it does close.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void Close()
     {
         _wm.EnsureManage(nameof(Close));
         _proxy.Close();
     }
 
+    /// <summary>
+    /// Tells the client to draw its own titlebar and borders. This is the default.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void UseClientSideDecorations()
     {
         _wm.EnsureManage(nameof(UseClientSideDecorations));
         _proxy.UseCsd();
     }
 
+    /// <summary>
+    /// Tells the client that the manager draws the titlebar and borders.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void UseServerSideDecorations()
     {
         _wm.EnsureManage(nameof(UseServerSideDecorations));
         _proxy.UseSsd();
     }
 
+    /// <summary>
+    /// Tells the client which of its edges touch other elements of a tiled layout, so it can drop shadows there.
+    /// </summary>
+    /// <param name="edges">The tiled edges. <see cref="Edges.None"/> tells the client it is not tiled.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void SetTiled(Edges edges)
     {
         _wm.EnsureManage(nameof(SetTiled));
         _proxy.SetTiled((RiverWindowV1.Edges)edges);
     }
 
+    /// <summary>
+    /// Tells the client which window actions the manager supports. It sends nothing when the value equals the last one sent, so a manager can call it in every manage sequence.
+    /// </summary>
+    /// <param name="capabilities">The supported actions. A client that never gets this request assumes all of them.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void SetCapabilities(WindowCapabilities capabilities)
     {
         _wm.EnsureManage(nameof(SetCapabilities));
@@ -201,6 +306,11 @@ public sealed class WmWindow : IRenderWindow
         _proxy.SetCapabilities((RiverWindowV1.Capabilities)capabilities);
     }
 
+    /// <summary>
+    /// Tells the client whether it is maximized. This changes no size or position.
+    /// </summary>
+    /// <param name="maximized"><see langword="true"/> for maximized, <see langword="false"/> for not maximized.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void InformMaximized(bool maximized)
     {
         _wm.EnsureManage(nameof(InformMaximized));
@@ -214,6 +324,11 @@ public sealed class WmWindow : IRenderWindow
         }
     }
 
+    /// <summary>
+    /// Tells the client whether it is fullscreen. This changes no size and does not make the window the only one shown. <see cref="Fullscreen(WmOutput)"/> does that.
+    /// </summary>
+    /// <param name="fullscreen"><see langword="true"/> for fullscreen, <see langword="false"/> for not fullscreen.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void InformFullscreen(bool fullscreen)
     {
         _wm.EnsureManage(nameof(InformFullscreen));
@@ -227,6 +342,11 @@ public sealed class WmWindow : IRenderWindow
         }
     }
 
+    /// <summary>
+    /// Tells the client that an interactive resize starts or ends. The manager still sets the size and position.
+    /// </summary>
+    /// <param name="resizing"><see langword="true"/> at the start of the resize, <see langword="false"/> at the end.</param>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void InformResizing(bool resizing)
     {
         _wm.EnsureManage(nameof(InformResizing));
@@ -240,6 +360,12 @@ public sealed class WmWindow : IRenderWindow
         }
     }
 
+    /// <summary>
+    /// Shows the window fullscreen on an output. This does not tell the client. Call <see cref="InformFullscreen(bool)"/> for that.
+    /// </summary>
+    /// <param name="output">The output that the window fills.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void Fullscreen(WmOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -247,24 +373,31 @@ public sealed class WmWindow : IRenderWindow
         _proxy.Fullscreen(output.Proxy);
     }
 
+    /// <summary>
+    /// Ends the fullscreen display that <see cref="Fullscreen(WmOutput)"/> started. This does not tell the client.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void ExitFullscreen()
     {
         _wm.EnsureManage(nameof(ExitFullscreen));
         _proxy.ExitFullscreen();
     }
 
+    /// <inheritdoc/>
     public void Show()
     {
         _wm.EnsureRender(nameof(Show));
         _proxy.Show();
     }
 
+    /// <inheritdoc/>
     public void Hide()
     {
         _wm.EnsureRender(nameof(Hide));
         _proxy.Hide();
     }
 
+    /// <inheritdoc/>
     public void SetBorders(Edges edges, int width, WmColor color)
     {
         _wm.EnsureRender(nameof(SetBorders));
@@ -272,8 +405,13 @@ public sealed class WmWindow : IRenderWindow
         _proxy.SetBorders((RiverWindowV1.Edges)edges, width, color.R, color.G, color.B, color.A);
     }
 
+    /// <summary>
+    /// Removes the borders that <see cref="SetBorders"/> set.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage or render sequence is in progress.</exception>
     public void ClearBorders() => SetBorders(Edges.None, 0, WmColor.Transparent);
 
+    /// <inheritdoc/>
     public void SetClipBox(Rect box)
     {
         _wm.EnsureRender(nameof(SetClipBox));
@@ -283,6 +421,7 @@ public sealed class WmWindow : IRenderWindow
         _proxy.SetClipBox(box.X, box.Y, box.Width, box.Height);
     }
 
+    /// <inheritdoc/>
     public void SetContentClipBox(Rect box)
     {
         _wm.EnsureRender(nameof(SetContentClipBox));
@@ -292,6 +431,12 @@ public sealed class WmWindow : IRenderWindow
         _proxy.SetContentClipBox(box.X, box.Y, box.Width, box.Height);
     }
 
+    /// <summary>
+    /// Gives a surface the decoration role above the window in the render order. It needs no sequence.
+    /// </summary>
+    /// <param name="surface">A surface with no role and no buffer attached or committed yet.</param>
+    /// <returns>The decoration, which the caller owns and disposes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public WmDecoration CreateDecorationAbove(Wayland.WlSurface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -299,6 +444,12 @@ public sealed class WmWindow : IRenderWindow
         return new WmDecoration(_wm, _proxy.GetDecorationAbove(surface));
     }
 
+    /// <summary>
+    /// Gives a surface the decoration role below the window in the render order. It needs no sequence.
+    /// </summary>
+    /// <param name="surface">A surface with no role and no buffer attached or committed yet.</param>
+    /// <returns>The decoration, which the caller owns and disposes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public WmDecoration CreateDecorationBelow(Wayland.WlSurface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -306,6 +457,7 @@ public sealed class WmWindow : IRenderWindow
         return new WmDecoration(_wm, _proxy.GetDecorationBelow(surface));
     }
 
+    /// <inheritdoc/>
     public override string ToString() =>
         $"window '{AppId ?? "?"}' \"{Title ?? string.Empty}\" {Dimensions.Width}x{Dimensions.Height}";
 

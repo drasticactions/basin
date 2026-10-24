@@ -6,6 +6,10 @@ using SkiaSharp;
 
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// The Skia objects that every metacity painter of a compositor shares: decoded images, shaders, icons and pooled paints.
+/// It must be used on the thread that made it.
+/// </summary>
 public sealed class MetacityResources : IDisposable
 {
     internal const int MiniIconSize = 16;
@@ -23,6 +27,9 @@ public sealed class MetacityResources : IDisposable
     private readonly Dictionary<MetacityDrawOp, (SKPathEffect Effect, double Scale)> _dashes = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MetacityResources"/> class.
+    /// </summary>
     public MetacityResources()
     {
         Fill = SkiaCensus.Track(new SKPaint { IsAntialias = true, Style = SKPaintStyle.Fill });
@@ -88,6 +95,9 @@ public sealed class MetacityResources : IDisposable
         return vertices;
     }
 
+    /// <summary>
+    /// Gets or sets the icon theme name for icons looked up by name. The first named lookup reads it, and later changes have no effect.
+    /// </summary>
     public string? IconTheme { get; set; }
 
     private readonly record struct ImageKey(MetacityImageInfo Info, int Width, int Height, uint Colorize);
@@ -518,6 +528,9 @@ public sealed class MetacityResources : IDisposable
 
     private IconSearch? _search;
 
+    /// <summary>
+    /// Releases every Skia object that the resources made.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

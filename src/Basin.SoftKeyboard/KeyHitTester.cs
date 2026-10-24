@@ -1,5 +1,8 @@
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// Finds the key under a point for one layout of a <see cref="KeyGrid"/>. Its buffers fit the largest grid, so a change of grid allocates nothing.
+/// </summary>
 public sealed class KeyHitTester
 {
     private readonly float[] _columnRights = new float[KeyGrid.MaxCells];
@@ -9,12 +12,21 @@ public sealed class KeyHitTester
     private float _width;
     private float _height;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KeyHitTester"/> class. Call <see cref="Layout"/> before <see cref="Find"/>.
+    /// </summary>
+    /// <param name="grid">The grid to test against.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="grid"/> is <see langword="null"/>.</exception>
     public KeyHitTester(KeyGrid grid)
     {
         ArgumentNullException.ThrowIfNull(grid);
         _grid = grid;
     }
 
+    /// <summary>
+    /// Gets or sets the grid. A new grid is laid out again at the last width and height.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public KeyGrid Grid
     {
         get => _grid;
@@ -26,14 +38,33 @@ public sealed class KeyHitTester
         }
     }
 
+    /// <summary>
+    /// Gets the keyboard width of the last layout, in logical pixels.
+    /// </summary>
     public float Width => _width;
 
+    /// <summary>
+    /// Gets the keymap height of the last layout, in logical pixels.
+    /// </summary>
     public float Height => _height;
 
+    /// <summary>
+    /// Gets the rect of each cell of the grid, by cell index.
+    /// </summary>
     public ReadOnlySpan<KeyRect> Rects => _rects.AsSpan(0, _grid.CellCount);
 
+    /// <summary>
+    /// Gives the rect of one cell.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <returns>The cell's rect in keyboard coordinates.</returns>
     public KeyRect RectOf(int cell) => _rects[cell];
 
+    /// <summary>
+    /// Lays the grid out at a size and keeps the row and column limits for <see cref="Find"/>.
+    /// </summary>
+    /// <param name="width">The keyboard width in logical pixels.</param>
+    /// <param name="keymapHeight">The height of the key rows in logical pixels.</param>
     public void Layout(float width, float keymapHeight)
     {
         _width = width;
@@ -47,6 +78,14 @@ public sealed class KeyHitTester
         _grid.Layout(width, keymapHeight, _rects);
     }
 
+    /// <summary>
+    /// Finds the cell under a point. An invisible key gives its touch to the visible neighbor with the same plain cap.
+    /// A point above or left of the keymap maps to the first row or the first column.
+    /// </summary>
+    /// <param name="x">The horizontal position in keyboard coordinates.</param>
+    /// <param name="y">The vertical position, from the top of the keymap.</param>
+    /// <param name="diamonds"><see langword="true"/> to apply the row-edge correction, which compares a touch near a row edge with the key above or below it.</param>
+    /// <returns>The cell index, or -1 below or right of the keymap, on a spacer, or on no key.</returns>
     public int Find(float x, float y, bool diamonds = true)
     {
         var row = 0;

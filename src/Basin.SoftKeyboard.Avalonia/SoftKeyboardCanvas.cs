@@ -6,6 +6,9 @@ using Avalonia.Rendering;
 
 namespace Basin.SoftKeyboard.Avalonia;
 
+/// <summary>
+/// Draws a <see cref="SoftKeyboardEngine"/> through an <see cref="ISoftKeyboardSkin"/> and, in <see cref="SoftKeyboardInput.Pointer"/> mode, drives the engine from pointer events.
+/// </summary>
 public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabilities.IInputPaneView
 {
     private SoftKeyboardEngine? _engine;
@@ -13,12 +16,18 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
     private SoftKeyboardInput _input;
     private readonly HashSet<int> _down = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SoftKeyboardCanvas"/> class. The canvas does not take focus and clips to its bounds.
+    /// </summary>
     public SoftKeyboardCanvas()
     {
         Focusable = false;
         ClipToBounds = true;
     }
 
+    /// <summary>
+    /// Gets or sets the engine to draw and drive. The canvas redraws on the engine's Invalidated event. A new engine forgets the held pointers.
+    /// </summary>
     public SoftKeyboardEngine? Engine
     {
         get => _engine;
@@ -45,6 +54,9 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         }
     }
 
+    /// <summary>
+    /// Gets or sets the skin that draws the keyboard. With no skin, the canvas draws nothing.
+    /// </summary>
     public ISoftKeyboardSkin? Skin
     {
         get => _skin;
@@ -55,8 +67,14 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         }
     }
 
+    /// <summary>
+    /// Gets or sets the clock in milliseconds that the canvas gives to the engine. The default is <see cref="Environment.TickCount64"/>.
+    /// </summary>
     public Func<long> Clock { get; set; } = static () => Environment.TickCount64;
 
+    /// <summary>
+    /// Gets or sets where the canvas gets its touches. <see cref="SoftKeyboardInput.External"/> also makes the canvas invisible to hit tests.
+    /// </summary>
     public SoftKeyboardInput Input
     {
         get => _input;
@@ -67,10 +85,21 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         }
     }
 
+    /// <summary>
+    /// Gets or sets the canvas y where the engine's first row starts. When it is <see langword="null"/>, the engine's padding is used.
+    /// </summary>
     public double? KeymapTop { get; set; }
 
+    /// <summary>
+    /// Occurs in <see cref="SoftKeyboardInput.Pointer"/> mode when the last captured pointer loses its capture.
+    /// </summary>
     public event Action? TouchesEnded;
 
+    /// <summary>
+    /// Tells whether a point takes input. In pointer mode, a point takes input from the padding above the keys down, and anywhere while a long-press list is open.
+    /// </summary>
+    /// <param name="point">The point in canvas coordinates.</param>
+    /// <returns><see langword="false"/> in <see cref="SoftKeyboardInput.External"/> mode or outside the bounds.</returns>
     public bool HitTest(global::Avalonia.Point point)
     {
         if (_input != SoftKeyboardInput.Pointer || !new Rect(Bounds.Size).Contains(point))
@@ -83,6 +112,10 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
 
     private double Top(SoftKeyboardEngine engine) => KeymapTop ?? engine.Padding;
 
+    /// <summary>
+    /// Calls the skin to draw the background, each visible key, the layer over the keys and the open long-press list, in that order.
+    /// </summary>
+    /// <param name="context">The context to draw into.</param>
     public override void Render(DrawingContext context)
     {
         if (_skin is not { } skin)
@@ -162,6 +195,7 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         }
     }
 
+    /// <inheritdoc/>
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
         base.OnPointerPressed(e);
@@ -182,6 +216,7 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         e.Handled = true;
     }
 
+    /// <inheritdoc/>
     protected override void OnPointerMoved(PointerEventArgs e)
     {
         base.OnPointerMoved(e);
@@ -193,6 +228,7 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         }
     }
 
+    /// <inheritdoc/>
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {
         base.OnPointerReleased(e);
@@ -211,6 +247,7 @@ public sealed class SoftKeyboardCanvas : Control, ICustomHitTest, Basin.Capabili
         e.Handled = true;
     }
 
+    /// <inheritdoc/>
     protected override void OnPointerCaptureLost(PointerCaptureLostEventArgs e)
     {
         base.OnPointerCaptureLost(e);

@@ -5,8 +5,14 @@ using static Basin.Pty.PtyLog;
 
 namespace Basin.Pty;
 
+/// <summary>
+/// A child process on a pseudo-terminal, driven from the compositor event loop with no threads. All members and events run on the compositor thread.
+/// </summary>
 public sealed class PtySession : IDisposable
 {
+    /// <summary>
+    /// The largest number of bytes that one readiness callback reads from the terminal before it returns to the loop.
+    /// </summary>
     public const int ReadBudget = 64 * 1024;
 
     private const int ExitDrainMs = 100;
@@ -37,20 +43,49 @@ public sealed class PtySession : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the process ID of the child. The child also leads its own session and process group with this ID.
+    /// </summary>
     public int ProcessId { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the session is alive. It is <see langword="false"/> after <see cref="Exited"/> fires or after <see cref="Dispose"/>.
+    /// </summary>
     public bool Running => !_finished && !_disposed;
 
+    /// <summary>
+    /// Gets the way the child ended. It is <see langword="null"/> until <see cref="Exited"/> fires.
+    /// </summary>
     public PtyExit? ExitState => _finished ? _exit : null;
 
+    /// <summary>
+    /// Gets the number of bytes that <see cref="Write"/> accepted but the terminal has not taken yet.
+    /// </summary>
     public int QueuedBytes => _pendingLength;
 
+    /// <summary>
+    /// Gets the number of children of disposed sessions that the library has not reaped yet.
+    /// </summary>
     public static int Orphans => PtyReaper.Pending;
 
+    /// <summary>
+    /// Occurs when the child writes to the terminal. The span is valid only during the call, and each call carries at most <see cref="ReadBudget"/> bytes.
+    /// </summary>
     public event Action<ReadOnlySpan<byte>>? Output;
 
+    /// <summary>
+    /// Occurs once, after the child is reaped and after the last <see cref="Output"/>. It does not occur after <see cref="Dispose"/>.
+    /// </summary>
     public event Action<PtyExit>? Exited;
 
+    /// <summary>
+    /// Opens a pseudo-terminal, sets its size, and spawns the program as the leader of a new session on it.
+    /// </summary>
+    /// <param name="loop">The loop that watches the terminal and the child.</param>
+    /// <param name="start">The program, its environment and the initial terminal size.</param>
+    /// <param name="failure">The reason when the start fails, otherwise <see langword="null"/>.</param>
+    /// <returns>The running session that the caller must dispose, or <see langword="null"/> when the terminal or the spawn fails.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> or <paramref name="start"/> is <see langword="null"/>.</exception>
     public static PtySession? TryStart(ICompositorEventLoop loop, PtyStartInfo start, out string? failure)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -81,8 +116,16 @@ public sealed class PtySession : IDisposable
         return session;
     }
 
+    /// <summary>
+    /// Blocks until the children of disposed sessions are reaped, and kills the ones still alive after the grace period. Call it at exit, when the loop does not dispatch again.
+    /// </summary>
+    /// <param name="grace">The time to wait before the remaining children get <c>SIGKILL</c>.</param>
     public static void CollectOrphans(TimeSpan grace) => PtyReaper.Collect(grace);
 
+    /// <summary>
+    /// Sends bytes to the child as terminal input. Bytes that the terminal cannot take now are queued and sent when it becomes writable, so the call never blocks.
+    /// </summary>
+    /// <param name="data">The bytes to send. The call copies what it queues. After exit or dispose, the call ignores the data.</param>
     public void Write(ReadOnlySpan<byte> data)
     {
         if (_disposed || _finished || data.IsEmpty)
@@ -115,6 +158,13 @@ public sealed class PtySession : IDisposable
         _masterWatch?.UpdateFd(FdReadiness.Readable | FdReadiness.Writable);
     }
 
+    /// <summary>
+    /// Sets the terminal size, which sends <c>SIGWINCH</c> to the foreground process group. It does nothing after <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="columns">The width in character cells.</param>
+    /// <param name="rows">The height in character cells.</param>
+    /// <param name="pixelWidth">The width in pixels, or 0 when unknown.</param>
+    /// <param name="pixelHeight">The height in pixels, or 0 when unknown.</param>
     public void Resize(int columns, int rows, int pixelWidth, int pixelHeight)
     {
         if (_disposed || _master < 0)
@@ -125,6 +175,10 @@ public sealed class PtySession : IDisposable
         _ = PtyNative.SetWindow(_master, columns, rows, pixelWidth, pixelHeight);
     }
 
+    /// <summary>
+    /// Sends a signal to the child's process group. It does nothing after the child is reaped or after <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="signal">The POSIX signal number.</param>
     public void Signal(int signal)
     {
         if (_disposed || _exit is not null)
@@ -135,6 +189,9 @@ public sealed class PtySession : IDisposable
         _ = PtyNative.Kill(-ProcessId, signal);
     }
 
+    /// <summary>
+    /// Sends <c>SIGHUP</c> to the child's process group and closes the terminal. A child that is still alive is reaped later on the loop, and gets <c>SIGKILL</c> after 3 seconds.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

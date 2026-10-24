@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// The params of <c>workspaces/move</c>. The <c>id</c> and <c>group</c> keys are required.
+/// </summary>
 public sealed class IpcWorkspaceMoveParams : IIpcParams, IIpcReusable
 {
     private ulong _id;
@@ -9,16 +12,30 @@ public sealed class IpcWorkspaceMoveParams : IIpcParams, IIpcReusable
 
     private int _present;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcWorkspaceMoveParams"/> class.
+    /// Every required key starts absent. The deserializer uses this constructor.
+    /// </summary>
     public IpcWorkspaceMoveParams()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcWorkspaceMoveParams"/> class.
+    /// Both keys are present.
+    /// </summary>
+    /// <param name="id">The workspace to move.</param>
+    /// <param name="group">The group that receives it.</param>
     public IpcWorkspaceMoveParams(ulong id, ulong group)
     {
         Id = id;
         Group = group;
     }
 
+    /// <summary>
+    /// Gets or sets the id of the workspace to move.
+    /// JSON can carry it as a number or as a string of decimal digits.
+    /// </summary>
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public ulong Id
     {
@@ -30,6 +47,10 @@ public sealed class IpcWorkspaceMoveParams : IIpcParams, IIpcReusable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the id of the group that receives the workspace.
+    /// JSON can carry it as a number or as a string of decimal digits.
+    /// </summary>
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public ulong Group
     {
@@ -41,6 +62,7 @@ public sealed class IpcWorkspaceMoveParams : IIpcParams, IIpcReusable
         }
     }
 
+    /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'id' is required"

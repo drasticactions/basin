@@ -5,6 +5,9 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// An <see cref="IBuffer"/> over dmabuf planes. It owns the plane file descriptors and closes them when the storage is freed.
+/// </summary>
 public sealed class DmabufBuffer : BufferBase, IBuffer
 {
     [DllImport("libc")]
@@ -14,6 +17,12 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
     private readonly FdLedger? _ledger;
     private readonly WlClient? _fdOwner;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DmabufBuffer"/> class. The buffer takes ownership of each plane file descriptor.
+    /// </summary>
+    /// <param name="attributes">The dmabuf description.</param>
+    /// <param name="ledger">The ledger that records each plane file descriptor, or <see langword="null"/>.</param>
+    /// <param name="fdOwner">The client whose fd table the descriptors came from, or <see langword="null"/> when they belong to this process.</param>
     public DmabufBuffer(in DmabufAttributes attributes, FdLedger? ledger = null, WlClient? fdOwner = null)
         : base(attributes.Width, attributes.Height)
     {
@@ -33,12 +42,20 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
         }
     }
 
+    /// <inheritdoc/>
     public override DrmFormat Format => _attributes.Format;
 
+    /// <summary>Gets the format modifier.</summary>
     public ulong Modifier => _attributes.Modifier;
 
+    /// <summary>Gets the <c>dev_t</c> that the client asked to sample on, or zero when it named none.</summary>
     public ulong SamplingDevice => _attributes.SamplingDevice;
 
+    /// <summary>
+    /// Gets the dmabuf planes. The buffer keeps ownership of the file descriptors.
+    /// </summary>
+    /// <param name="attributes">The dmabuf description.</param>
+    /// <returns><see langword="true"/> until the storage is freed.</returns>
     public bool TryGetDmabuf(out DmabufAttributes attributes)
     {
         attributes = _attributes;
@@ -99,8 +116,12 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
     private ulong _syncFlags;
     private int _mapDepth;
 
+    /// <summary>
+    /// Gets a value indicating whether the CPU can map the buffer. That requires a linear modifier and all planes in one allocation.
+    /// </summary>
     public bool IsCpuMappable => _attributes.Modifier == DrmFormatSet.ModifierLinear && OneAllocation();
 
+    /// <inheritdoc/>
     protected override bool TryMap(BufferDataAccess access, out BufferDataView view)
     {
         view = default;
@@ -121,6 +142,7 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
         return true;
     }
 
+    /// <inheritdoc/>
     protected override void Unmap()
     {
         if (_mapDepth > 0 && --_mapDepth == 0)
@@ -191,6 +213,7 @@ public sealed class DmabufBuffer : BufferBase, IBuffer
         return true;
     }
 
+    /// <inheritdoc/>
     protected override void OnFreeStorage()
     {
         if (_mapping != 0)

@@ -1,5 +1,8 @@
 namespace Basin;
 
+/// <summary>
+/// The names of the Wayland interfaces that give a client power over other clients or the session, for example screen capture, input injection and session lock.
+/// </summary>
 public static class PrivilegedProtocols
 {
     private static readonly HashSet<string> Names =
@@ -39,7 +42,11 @@ public static class PrivilegedProtocols
         "hyprland_input_capture_manager_v1",
     ];
 
+    /// <summary>Tests whether an interface is privileged.</summary>
+    /// <param name="interfaceName">The Wayland interface name, for example <c>zwlr_screencopy_manager_v1</c>.</param>
+    /// <returns><see langword="true"/> when the interface is on the list.</returns>
     public static bool Contains(string interfaceName) => Names.Contains(interfaceName);
 
+    /// <summary>Gets every privileged interface name.</summary>
     public static IReadOnlyCollection<string> All => Names;
 }

@@ -6,10 +6,16 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_screencopy_manager_v1</c> global. It copies output contents into client buffers and accumulates damage for copies that wait for damage.
+/// </summary>
 public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
 {
     private static readonly BasinLogger Log = BasinLog.For("capture");
 
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 3;
 
     private readonly WlGlobal _global;
@@ -61,6 +67,15 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScreencopyManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="layout">The layout that maps capture regions to outputs.</param>
+    /// <param name="buffers">The registry that resolves client buffers.</param>
+    /// <param name="capture">The capture implementation. With <see langword="null"/>, every copy fails.</param>
+    /// <param name="dmabuf">The dmabuf device and formats to offer, or <see langword="null"/> to offer shared memory only.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/>, <paramref name="layout"/> or <paramref name="buffers"/> is <see langword="null"/>.</exception>
     public ScreencopyManager(
         WlServerDisplay display,
         OutputLayout layout,
@@ -82,6 +97,9 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the damage observation and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_capture is { } live)
@@ -92,12 +110,21 @@ public sealed class ScreencopyManager : ICaptureDamageObserver, IDisposable
         _global.Dispose();
     }
 
+    /// <inheritdoc/>
     public void OnSourceDamaged(IOutput output, Box damage) => NotifyOutputDamaged(output, damage);
 
+    /// <summary>
+    /// Does nothing. Screencopy frames do not wait for a cursor change.
+    /// </summary>
     public void OnCursorChanged()
     {
     }
 
+    /// <summary>
+    /// Adds damage to every accumulator for the output and completes the frames that wait for damage on it.
+    /// </summary>
+    /// <param name="output">The output that changed.</param>
+    /// <param name="damage">The changed area in output buffer pixels.</param>
     public void NotifyOutputDamaged(IOutput output, Box damage)
     {
         foreach (var (key, accumulator) in _accumulated)

@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_input_method_manager_v2</c> global and relays text input to one input method client. While no client is bound, a fallback input method can serve instead.
+/// </summary>
 public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, IDisposable
 {
+    /// <summary>
+    /// The highest global version that the relay advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlServerDisplay _display;
@@ -22,11 +28,22 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
     private Surface? _activeSurface;
     private readonly ITextInputMethod? _fallback;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InputMethodRelay"/> class with no fallback, and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="seat">The seat whose keymap and modifiers go to the keyboard grab, or <see langword="null"/>.</param>
     public InputMethodRelay(WlServerDisplay display, Seat.Seat? seat)
         : this(display, seat, fallback: null)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="InputMethodRelay"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="seat">The seat whose keymap and modifiers go to the keyboard grab, or <see langword="null"/>.</param>
+    /// <param name="fallback">The input method that receives every request too. Its events pass through only while no client is bound.</param>
     public InputMethodRelay(WlServerDisplay display, Seat.Seat? seat, ITextInputMethod? fallback)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -49,8 +66,14 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <summary>
+    /// Gets the fallback input method. It is <see langword="null"/> when none was given.
+    /// </summary>
     public ITextInputMethod? Fallback => _fallback;
 
+    /// <summary>
+    /// Gets a value indicating whether a client input method is bound. Only one can be bound, and a second one receives <c>unavailable</c>.
+    /// </summary>
     public bool HasInputMethodClient => _method is { IsDestroyed: false };
 
     private void OnFallbackPreedit(PreeditString preedit)
@@ -102,24 +125,35 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         ForwardSeatModifiers();
     }
 
+    /// <inheritdoc/>
     public bool IsAvailable => HasInputMethodClient || (_fallback?.IsAvailable ?? false);
 
+    /// <inheritdoc/>
     public bool HasKeyboardGrab => _grab is { IsDestroyed: false };
 
+    /// <inheritdoc/>
     public bool IsInputMethodClient(object? client) =>
         client is WlClient wlClient && _method is { IsDestroyed: false } method &&
         ReferenceEquals(method.Client, wlClient);
 
+    /// <inheritdoc/>
     public event Action<PreeditString>? Preedit;
 
+    /// <inheritdoc/>
     public event Action<string>? CommitString;
 
+    /// <inheritdoc/>
     public event Action<uint, uint>? DeleteSurroundingText;
 
+    /// <inheritdoc/>
     public event Action? Done;
 
+    /// <inheritdoc/>
     public event Action? AvailabilityChanged;
 
+    /// <summary>
+    /// Stops following the seat and the fallback, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_seat is { } seat)
@@ -139,6 +173,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         _global.Dispose();
     }
 
+    /// <inheritdoc/>
     public void Activate(Surface surface)
     {
         _fallback?.Activate(surface);
@@ -154,6 +189,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <inheritdoc/>
     public void Deactivate(Surface surface)
     {
         _fallback?.Deactivate(surface);
@@ -170,6 +206,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <inheritdoc/>
     public void SurroundingText(string text, uint cursor, uint anchor)
     {
         _fallback?.SurroundingText(text, cursor, anchor);
@@ -179,6 +216,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <inheritdoc/>
     public void ContentType(uint hint, uint purpose)
     {
         _fallback?.ContentType(hint, purpose);
@@ -188,11 +226,16 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <summary>
+    /// Passes the text cursor area to the fallback only. The input method protocol has no request for it.
+    /// </summary>
+    /// <param name="rect">The cursor area in surface-local coordinates.</param>
     public void CursorRectangle(in Box rect)
     {
         _fallback?.CursorRectangle(rect);
     }
 
+    /// <inheritdoc/>
     public void Commit(uint serial)
     {
         _fallback?.Commit(serial);
@@ -202,6 +245,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <inheritdoc/>
     public void ForwardKey(uint timeMs, uint keycode, bool pressed)
     {
         if (_grab is { IsDestroyed: false } grab)
@@ -214,6 +258,7 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <inheritdoc/>
     public void ForwardModifiers(uint depressed, uint latched, uint locked, uint group)
     {
         if (_grab is { IsDestroyed: false } grab)
@@ -222,6 +267,9 @@ public sealed class InputMethodRelay : ITextInputMethod, IInputMethodClients, ID
         }
     }
 
+    /// <summary>
+    /// Sends the current modifier state of the seat to the keyboard grab. It does nothing without a seat or a grab.
+    /// </summary>
     public void ForwardSeatModifiers()
     {
         if (_seat is { } seat)

@@ -7,6 +7,10 @@ using Prowl.Vector;
 
 namespace Basin.UI.Paper;
 
+/// <summary>
+/// A chrome surface that runs a Prowl.Paper user interface on a Quill surface. Compositor input becomes Paper input.
+/// Use it on the thread that made it.
+/// </summary>
 public sealed class PaperSurface : IUISurface, IUISurfaceObserver
 {
     private const uint BtnLeft = 0x110;
@@ -42,6 +46,11 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
     private bool _disposed;
     private PaperCursor _cursor = PaperCursor.Default;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PaperSurface"/> class with no host. The caller must call <see cref="Draw"/> when <see cref="IsDirty"/> is set.
+    /// </summary>
+    /// <param name="inner">The Quill surface to draw on. This surface owns and disposes it.</param>
+    /// <param name="clockNanos">The monotonic clock in nanoseconds, or <see langword="null"/> for <see cref="MonotonicClock.Nanos"/>.</param>
     public PaperSurface(IQuillUISurface inner, Func<long>? clockNanos = null)
         : this(inner, clockNanos, null)
     {
@@ -61,42 +70,93 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         _inner.AddObserver(this);
     }
 
+    /// <summary>
+    /// Gets the Paper instance that the surface draws with.
+    /// </summary>
     public Prowl.PaperUI.Paper Paper => _paper;
 
+    /// <summary>
+    /// Gets the Quill surface that the surface draws on.
+    /// </summary>
     public IQuillUISurface Inner => _inner;
 
+    /// <summary>
+    /// Gets or sets the function that builds the user interface for each frame. An exception from it raises <see cref="Faulted"/>.
+    /// </summary>
     public Action<Prowl.PaperUI.Paper>? Build { get; set; }
 
+    /// <summary>
+    /// Gets or sets the source of the text that key presses type. Without it, only committed input method text reaches text fields.
+    /// </summary>
     public IKeyText? KeyText { get; set; }
 
+    /// <summary>
+    /// Gets the cursor that Paper asked for last.
+    /// </summary>
     public PaperCursor Cursor => _cursor;
 
+    /// <summary>
+    /// Gets a value indicating whether the surface needs a new frame.
+    /// </summary>
     public bool IsDirty => _dirty;
 
+    /// <summary>
+    /// Gets a value indicating whether the surface must keep drawing, because the last frame changed, input just arrived or a key is held.
+    /// </summary>
     public bool IsMoving => _moving || _followUp > 0 || _keysHeld > 0;
 
+    /// <summary>
+    /// Gets the number of frames that Paper has drawn into the surface.
+    /// </summary>
     public int Frames => _tap.Frames;
 
+    /// <inheritdoc/>
     public UISurfaceSize Size => _inner.Size;
 
+    /// <inheritdoc/>
     public double PositionX => _inner.PositionX;
 
+    /// <inheritdoc/>
     public double PositionY => _inner.PositionY;
 
+    /// <inheritdoc/>
     public bool AcceptsInput => _inner.AcceptsInput;
 
+    /// <summary>
+    /// Gets a value indicating whether a Paper element captures the keyboard, for example a focused text field.
+    /// </summary>
     public bool WantsTextInput => _paper.WantsCaptureKeyboard;
 
+    /// <summary>
+    /// Occurs during a frame when Paper changes the cursor.
+    /// </summary>
     public event Action<PaperCursor>? CursorChanged;
 
+    /// <summary>
+    /// Occurs when <see cref="Build"/> or Paper throws during a frame. The frame still ends.
+    /// </summary>
     public event Action<Exception>? Faulted;
 
+    /// <summary>
+    /// Passes the layout position to the Quill surface.
+    /// </summary>
+    /// <param name="x">The left edge in layout coordinates.</param>
+    /// <param name="y">The top edge in layout coordinates.</param>
     public void SetPosition(double x, double y) => _inner.SetPosition(x, y);
 
+    /// <inheritdoc/>
     public void AddObserver(IUISurfaceObserver observer) => _observers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(IUISurfaceObserver observer) => _observers.Remove(observer);
 
+    /// <summary>
+    /// Configures the Quill surface, sets the Paper resolution to match and marks the surface dirty.
+    /// </summary>
+    /// <param name="logicalWidth">The width in logical pixels. It must be positive.</param>
+    /// <param name="logicalHeight">The height in logical pixels. It must be positive.</param>
+    /// <param name="scale">The scale from logical to buffer pixels. It must be positive.</param>
+    /// <returns><see langword="false"/> when the surface is disposed or the Quill surface refuses the values.</returns>
     public bool Configure(int logicalWidth, int logicalHeight, double scale)
     {
         _thread.Assert();
@@ -112,6 +172,9 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         return true;
     }
 
+    /// <summary>
+    /// Marks the surface dirty and asks the host for a pump. It does nothing when the surface is already dirty or disposed.
+    /// </summary>
     public void Invalidate()
     {
         if (_disposed || _dirty)
@@ -123,6 +186,10 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         _host?.Wake();
     }
 
+    /// <summary>
+    /// Draws one Paper frame into the Quill surface and tells the observers. A dispose during the frame takes effect after it.
+    /// </summary>
+    /// <returns><see langword="false"/> when the surface is disposed, is drawing already or has no valid size.</returns>
     public bool Draw()
     {
         _thread.Assert();
@@ -173,16 +240,32 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         return true;
     }
 
+    /// <inheritdoc/>
     public bool TryAcquire(out UIFrame frame) => _inner.TryAcquire(out frame);
 
+    /// <inheritdoc/>
     public bool AcceptsInputAt(double x, double y) => _inner.AcceptsInputAt(x, y);
 
+    /// <summary>
+    /// Gets the xcursor name of the cursor that Paper asked for last. The point is not used.
+    /// </summary>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
+    /// <returns>The xcursor name.</returns>
     public string? CursorAt(double x, double y) => PaperCursors.NameOf(_cursor);
 
+    /// <inheritdoc/>
     public void NotifyPointerEnter(double x, double y) => PointerAt(x, y);
 
+    /// <inheritdoc/>
     public void NotifyPointerMotion(uint timeMs, double x, double y) => PointerAt(x, y);
 
+    /// <summary>
+    /// Tells Paper that a pointer button changed. Buttons other than left, right, middle, side and extra are ignored.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="button">The evdev button code.</param>
+    /// <param name="pressed"><see langword="true"/> when the button went down.</param>
     public void NotifyPointerButton(uint timeMs, uint button, bool pressed)
     {
         var btn = ButtonOf(button);
@@ -197,6 +280,12 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         Input();
     }
 
+    /// <summary>
+    /// Tells Paper that the pointer scrolled. Paper gets one wheel step for each 15 units of vertical scroll. Horizontal scroll is ignored.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="dx">The horizontal scroll distance.</param>
+    /// <param name="dy">The vertical scroll distance, in wl_pointer axis units.</param>
     public void NotifyPointerAxis(uint timeMs, double dx, double dy)
     {
         if (_disposed || dy == 0)
@@ -208,6 +297,9 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         Input();
     }
 
+    /// <summary>
+    /// Moves the Paper pointer outside the surface. It does nothing while a button is held, so a drag continues.
+    /// </summary>
     public void NotifyPointerLeave()
     {
         if (_disposed || _buttonsHeld > 0)
@@ -218,11 +310,21 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         PointerAt(Outside, Outside);
     }
 
+    /// <summary>
+    /// Asks for a new frame. The keys that are down at entry are not sent to Paper.
+    /// </summary>
+    /// <param name="pressed">The evdev codes of the keys that are down at entry.</param>
     public void NotifyKeyboardEnter(ReadOnlySpan<uint> pressed)
     {
         Input();
     }
 
+    /// <summary>
+    /// Sends a key change to Paper. On a press it also types the text that <see cref="KeyText"/> gives for the key.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The evdev key code.</param>
+    /// <param name="pressed"><see langword="true"/> when the key went down.</param>
     public void NotifyKey(uint timeMs, uint key, bool pressed)
     {
         if (_disposed)
@@ -253,6 +355,9 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         Input();
     }
 
+    /// <summary>
+    /// Releases every key that Paper sees as held.
+    /// </summary>
     public void NotifyKeyboardLeave()
     {
         if (_disposed)
@@ -274,6 +379,10 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         Input();
     }
 
+    /// <summary>
+    /// Types committed input method text into Paper. A carriage return becomes a line feed.
+    /// </summary>
+    /// <param name="text">The committed text.</param>
     public void NotifyTextCommit(ReadOnlySpan<char> text)
     {
         if (_disposed)
@@ -285,6 +394,13 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         Input();
     }
 
+    /// <summary>
+    /// Presses the left button at the touch point. Only the first touch point acts, and other points are ignored while it is down.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The touch point id.</param>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
     public void NotifyTouchDown(uint timeMs, int id, double x, double y)
     {
         if (_touchId is not null)
@@ -297,6 +413,13 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         NotifyPointerButton(timeMs, BtnLeft, true);
     }
 
+    /// <summary>
+    /// Moves the Paper pointer when the point is the touch point that acts.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The touch point id.</param>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
     public void NotifyTouchMotion(uint timeMs, int id, double x, double y)
     {
         if (_touchId == id)
@@ -305,6 +428,11 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         }
     }
 
+    /// <summary>
+    /// Releases the left button and moves the pointer outside when the point is the touch point that acts.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The touch point id.</param>
     public void NotifyTouchUp(uint timeMs, int id)
     {
         if (_touchId != id)
@@ -317,6 +445,9 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         PointerAt(Outside, Outside);
     }
 
+    /// <summary>
+    /// Releases the left button of the touch point that acts and moves the pointer outside.
+    /// </summary>
     public void NotifyTouchCancel()
     {
         if (_touchId is null)
@@ -329,12 +460,27 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         PointerAt(Outside, Outside);
     }
 
+    /// <summary>
+    /// Returns no popup. Paper draws its popups inside the surface.
+    /// </summary>
+    /// <param name="anchor">The anchor box in surface-local logical coordinates.</param>
+    /// <param name="gravity">The direction in which the popup extends from the anchor.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public IUISurface? CreatePopup(in Box anchor, UIPopupGravity gravity) => null;
 
+    /// <summary>
+    /// Ignores damage from the Quill surface. The surface reports its own damage after each <see cref="Draw"/>.
+    /// </summary>
+    /// <param name="surface">The Quill surface.</param>
+    /// <param name="damage">The changed region.</param>
     public void OnSurfaceDamaged(IUISurface surface, PixmanRegion32 damage)
     {
     }
 
+    /// <summary>
+    /// Disposes this surface when the Quill surface is disposed first.
+    /// </summary>
+    /// <param name="surface">The disposed surface.</param>
     public void OnSurfaceDestroyed(IUISurface surface)
     {
         if (ReferenceEquals(surface, _inner) && !_disposed)
@@ -343,6 +489,9 @@ public sealed class PaperSurface : IUISurface, IUISurfaceObserver
         }
     }
 
+    /// <summary>
+    /// Disposes the Paper canvas and the Quill surface and tells the observers. During a <see cref="Draw"/> the dispose waits until the frame ends.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

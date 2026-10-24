@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the xdg-foreign exporter and importer globals, v1 and v2. A client can make a surface of another client the parent of its own surface.
+/// </summary>
 public sealed class XdgForeignManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that all four globals advertise.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _exporterV1Global;
@@ -31,6 +37,11 @@ public sealed class XdgForeignManager : IDisposable
         public required List<IImported> Importers;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XdgForeignManager"/> class and creates the four globals.
+    /// </summary>
+    /// <param name="display">The display that holds the globals.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces.</param>
     public XdgForeignManager(WlServerDisplay display, CompositorGlobal compositor)
     {
         _compositor = compositor;
@@ -40,8 +51,14 @@ public sealed class XdgForeignManager : IDisposable
         _importerGlobal = display.CreateGlobal(ZxdgImporterV2.Interface, Version, OnBindImporter);
     }
 
+    /// <summary>
+    /// Occurs when a client sets an imported surface as the parent of its own surface. The arguments are the child and the parent.
+    /// </summary>
     public event Action<Surface, Surface>? ParentRequested;
 
+    /// <summary>
+    /// Removes the four globals. Bound clients keep their resources.
+    /// </summary>
     public void Dispose()
     {
         _exporterV1Global.Dispose();

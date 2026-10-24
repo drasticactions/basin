@@ -9,6 +9,9 @@ using static Basin.Avalonia.ViewLog;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// Mirrors UTF-8 text between the compositor clipboard selection and the Avalonia host clipboard.
+/// </summary>
 public sealed class HostClipboard : IDisposable
 {
     private const string TextMime = "text/plain;charset=utf-8";
@@ -33,6 +36,13 @@ public sealed class HostClipboard : IDisposable
     private string? _lastText;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HostClipboard"/> class and starts to mirror client text to the host.
+    /// </summary>
+    /// <param name="host">The compositor host. It must provide an <see cref="ISelectionStore"/>.</param>
+    /// <param name="hostClipboard">Gets the host clipboard on the UI thread, or <see langword="null"/> when there is none.</param>
+    /// <param name="postToCompositor">Runs work on the compositor thread.</param>
+    /// <exception cref="InvalidOperationException">The host has no <see cref="ISelectionStore"/>.</exception>
     public HostClipboard(BasinCompositorHost host, Func<IClipboard?> hostClipboard, Action<Action> postToCompositor)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -44,6 +54,9 @@ public sealed class HostClipboard : IDisposable
         _store.SelectionChanged += OnSelectionChanged;
     }
 
+    /// <summary>
+    /// Gets or sets the longest time to wait for a client to write the clipboard text. The default is 4 seconds.
+    /// </summary>
     public TimeSpan ReadTimeout { get; set; } = TimeSpan.FromSeconds(4);
 
     private void OnSelectionChanged(SelectionKind kind)
@@ -131,6 +144,10 @@ public sealed class HostClipboard : IDisposable
         });
     }
 
+    /// <summary>
+    /// Reads the host clipboard text and makes it the compositor clipboard selection. Empty text and text that the mirror set last are skipped.
+    /// </summary>
+    /// <returns>A task that completes after the selection is posted to the compositor thread.</returns>
     public async Task PushFromHostAsync()
     {
         string? text = null;
@@ -238,6 +255,9 @@ public sealed class HostClipboard : IDisposable
         fd.Close();
     }
 
+    /// <summary>
+    /// Stops the mirror from clients to the host. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

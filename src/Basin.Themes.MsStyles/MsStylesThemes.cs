@@ -2,10 +2,20 @@ using Basin.Freedesktop;
 
 namespace Basin.Themes.MsStyles;
 
+/// <summary>
+/// Finds installed visual styles. A theme is a directory that holds an <c>.msstyles</c> file. Names match without case.
+/// </summary>
 public static class MsStylesThemes
 {
+    /// <summary>
+    /// The file name extension of a visual style.
+    /// </summary>
     public const string Extension = ".msstyles";
 
+    /// <summary>
+    /// Lists the directories that hold GTK-style theme directories: <c>~/.themes</c>, then <c>themes</c> under each XDG data directory.
+    /// </summary>
+    /// <returns>The directory paths in search order. A path is listed whether it exists or not.</returns>
     public static IReadOnlyList<string> ThemeRoots()
     {
         var roots = new List<string>();
@@ -19,6 +29,10 @@ public static class MsStylesThemes
         return roots;
     }
 
+    /// <summary>
+    /// Lists the <c>msstyles</c> directories under each XDG data directory.
+    /// </summary>
+    /// <returns>The directory paths in search order. A path is listed whether it exists or not.</returns>
     public static IReadOnlyList<string> StyleRoots()
     {
         var roots = new List<string>();
@@ -26,6 +40,10 @@ public static class MsStylesThemes
         return roots;
     }
 
+    /// <summary>
+    /// Lists the theme directory of the wine prefix. The prefix is <c>WINEPREFIX</c>, or <c>~/.wine</c> when it is not set.
+    /// </summary>
+    /// <returns>The <c>drive_c/windows/resources/themes</c> directory of the prefix, or an empty list when it does not exist.</returns>
     public static IReadOnlyList<string> WineRoots()
     {
         var roots = new List<string>();
@@ -44,6 +62,12 @@ public static class MsStylesThemes
         return roots;
     }
 
+    /// <summary>
+    /// Finds the file of an installed theme. A name that contains a slash is a path.
+    /// </summary>
+    /// <param name="name">The theme name, which is the name of its directory, or a path.</param>
+    /// <returns>The path of the <c>.msstyles</c> file, or <see langword="null"/> when no file is found.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public static string? Find(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -71,6 +95,10 @@ public static class MsStylesThemes
         return null;
     }
 
+    /// <summary>
+    /// Lists every installed theme. It loads each file to read its variants, so it reads every theme file in full. A file that does not load is left out.
+    /// </summary>
+    /// <returns>The themes, sorted by name. When two roots have the same name, the first root wins.</returns>
     public static IReadOnlyList<MsStylesThemeEntry> Available()
     {
         var found = new SortedDictionary<string, string>(StringComparer.OrdinalIgnoreCase);

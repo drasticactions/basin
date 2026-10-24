@@ -6,8 +6,13 @@ using static Basin.Greetd.GreetdLog;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// A connection to greetd, read as a loop fd source. It allows one outstanding request and raises <see cref="Response"/> on the loop.
+/// Every call must come from the thread that created it.
+/// </summary>
 public sealed class GreetdClient : IDisposable
 {
+    /// <summary>The environment variable that greetd sets to the path of its socket.</summary>
     public const string SocketVariable = "GREETD_SOCK";
 
     private const int ReceiveChunk = 4096;
@@ -28,14 +33,33 @@ public sealed class GreetdClient : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a request is sent and its response has not arrived.
+    /// </summary>
     public bool IsAwaitingResponse { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the connection is closed or disposed. A closed client cannot send.
+    /// </summary>
     public bool IsClosed { get; private set; }
 
+    /// <summary>
+    /// Occurs on the loop for each response, after <see cref="IsAwaitingResponse"/> becomes false. A handler can send the next request.
+    /// </summary>
     public event Action<GreetdResponse>? Response;
 
+    /// <summary>
+    /// Occurs once when greetd closes the socket, a read or write fails, or greetd sends a frame the client cannot read. The argument is the reason. <see cref="Dispose"/> does not raise it.
+    /// </summary>
     public event Action<string>? Closed;
 
+    /// <summary>
+    /// Connects to the greetd socket at <paramref name="path"/> and reads it on <paramref name="loop"/>.
+    /// </summary>
+    /// <param name="loop">The loop that reads the socket and raises the events.</param>
+    /// <param name="path">The path of the Unix socket.</param>
+    /// <returns>A connected client. The caller owns it.</returns>
+    /// <exception cref="SocketException">The connection fails.</exception>
     public static GreetdClient Connect(ICompositorEventLoop loop, string path)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -54,6 +78,12 @@ public sealed class GreetdClient : IDisposable
         return new GreetdClient(loop, socket);
     }
 
+    /// <summary>
+    /// Makes a client from a socket that is already connected, for example the client end of a <see cref="LoopbackGreetd"/>.
+    /// </summary>
+    /// <param name="loop">The loop that reads the socket and raises the events.</param>
+    /// <param name="socket">The connected stream socket. The client takes ownership and sets it to non-blocking.</param>
+    /// <returns>The client. The caller owns it.</returns>
     public static GreetdClient Adopt(ICompositorEventLoop loop, Socket socket)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -61,12 +91,28 @@ public sealed class GreetdClient : IDisposable
         return new GreetdClient(loop, socket);
     }
 
+    /// <summary>
+    /// Reads the greetd socket path from <see cref="SocketVariable"/>.
+    /// </summary>
+    /// <returns>The path, or <see langword="null"/> when the variable is not set or empty.</returns>
     public static string? SocketFromEnvironment()
         => Environment.GetEnvironmentVariable(SocketVariable) is { Length: > 0 } path ? path : null;
 
+    /// <summary>
+    /// Connects to the socket that <see cref="SocketVariable"/> names.
+    /// </summary>
+    /// <param name="loop">The loop that reads the socket and raises the events.</param>
+    /// <returns>A connected client, or <see langword="null"/> when the process does not run under greetd.</returns>
+    /// <exception cref="SocketException">The variable is set but the connection fails.</exception>
     public static GreetdClient? FromEnvironment(ICompositorEventLoop loop)
         => SocketFromEnvironment() is { } path ? Connect(loop, path) : null;
 
+    /// <summary>
+    /// Writes <paramref name="request"/> as one frame. A write failure closes the client and raises <see cref="Closed"/> instead of throwing.
+    /// </summary>
+    /// <param name="request">The request to send.</param>
+    /// <exception cref="ObjectDisposedException">The client is disposed.</exception>
+    /// <exception cref="InvalidOperationException">The connection is closed, or a response is outstanding.</exception>
     public void Send(GreetdRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -75,6 +121,12 @@ public sealed class GreetdClient : IDisposable
         Flush();
     }
 
+    /// <summary>
+    /// Sends a <c>post_auth_message_response</c> with an answer that never becomes a managed string. The frame buffer is cleared after the write.
+    /// </summary>
+    /// <param name="utf8Response">The answer as UTF-8 bytes. The caller keeps ownership and clears it.</param>
+    /// <exception cref="ObjectDisposedException">The client is disposed.</exception>
+    /// <exception cref="InvalidOperationException">The connection is closed, or a response is outstanding.</exception>
     public void SendAuthResponse(ReadOnlySpan<byte> utf8Response)
     {
         BeginSend();
@@ -82,6 +134,9 @@ public sealed class GreetdClient : IDisposable
         Flush();
     }
 
+    /// <summary>
+    /// Removes the fd source, closes the socket and clears the buffers. It does not raise <see cref="Closed"/>. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

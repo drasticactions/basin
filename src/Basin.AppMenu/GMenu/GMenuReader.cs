@@ -3,6 +3,10 @@ using static Basin.AppMenu.AppMenuLog;
 
 namespace Basin.AppMenu;
 
+/// <summary>
+/// Reads a GTK org.gtk.Menus menu bar and its org.gtk.Actions state into an <see cref="AppMenu"/>, and activates actions.
+/// Sections flatten into their parent with separators between them.
+/// </summary>
 public sealed class GMenuReader : IAppMenuSource
 {
     private const string MenusInterface = "org.gtk.Menus";
@@ -19,6 +23,14 @@ public sealed class GMenuReader : IAppMenuSource
     private bool _failed;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GMenuReader"/> class and starts the first read.
+    /// The menu bar path is used, or the app menu path when the menu bar path is empty.
+    /// </summary>
+    /// <param name="bus">The shared bus connection.</param>
+    /// <param name="address">A GMenu address.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="bus"/> or <paramref name="address"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="address"/> is not of kind <see cref="AppMenuAddressKind.GMenu"/>.</exception>
     public GMenuReader(AppMenuBus bus, AppMenuAddress address)
     {
         _bus = bus ?? throw new ArgumentNullException(nameof(bus));
@@ -31,20 +43,35 @@ public sealed class GMenuReader : IAppMenuSource
         _ = StartAsync();
     }
 
+    /// <inheritdoc/>
     public AppMenuAddressKind Kind => AppMenuAddressKind.GMenu;
 
+    /// <inheritdoc/>
     public AppMenu Menu { get; } = new();
 
+    /// <inheritdoc/>
     public bool IsReady { get; private set; }
 
+    /// <inheritdoc/>
     public event Action? Failed;
 
     private string MenuPath => _address.MenubarPath.Length > 0 ? _address.MenubarPath : _address.AppMenuPath;
 
+    /// <summary>
+    /// Does nothing. GMenu sends submenu content before it opens.
+    /// </summary>
+    /// <param name="item">The submenu item that opens.</param>
     public void AboutToShow(AppMenuItem item)
     {
     }
 
+    /// <summary>
+    /// Sends <c>Activate</c> for the item's action, with its target, to the path that the action prefix names. It does not wait for a reply.
+    /// An item with no action, an unknown prefix, or a call before the connection exists does nothing. The timestamp is not used.
+    /// </summary>
+    /// <param name="item">The item that the user chose.</param>
+    /// <param name="timestamp">The input event time in milliseconds.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="item"/> is <see langword="null"/>.</exception>
     public void Activate(AppMenuItem item, uint timestamp)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -74,6 +101,9 @@ public sealed class GMenuReader : IAppMenuSource
         _ = connection.TrySendMessage(writer.CreateMessage());
     }
 
+    /// <summary>
+    /// Stops watching the client's signals and sends <c>End</c> for the groups that the reader started. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

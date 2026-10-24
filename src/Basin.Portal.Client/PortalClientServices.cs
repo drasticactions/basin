@@ -4,6 +4,10 @@ using Wayland;
 
 namespace Basin.Portal.Client;
 
+/// <summary>
+/// Builds the capabilities that a portal running as a Wayland client gives to the portal modules, from the globals that the compositor offers.
+/// It owns every service that it creates.
+/// </summary>
 public sealed class PortalClientServices : IDisposable
 {
     private readonly ClientGlobals _globals;
@@ -11,6 +15,14 @@ public sealed class PortalClientServices : IDisposable
     private readonly ClientKeymap _keymap;
     private readonly List<IDisposable> _owned = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PortalClientServices"/> class and creates the toplevel list and the capture client when their globals are bound.
+    /// </summary>
+    /// <param name="globals">The bound globals. Bind them before this call.</param>
+    /// <param name="outputs">The outputs of the compositor.</param>
+    /// <param name="keymap">The keymap of the seat keyboard.</param>
+    /// <param name="display">The display connection.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public PortalClientServices(ClientGlobals globals, ClientOutputs outputs, ClientKeymap keymap, WlDisplay display)
     {
         ArgumentNullException.ThrowIfNull(globals);
@@ -33,10 +45,25 @@ public sealed class PortalClientServices : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the toplevel list, or <see langword="null"/> when the compositor has no foreign toplevel list.
+    /// </summary>
     public ForeignToplevelList? Toplevels { get; }
 
+    /// <summary>
+    /// Gets the capture client, or <see langword="null"/> when the compositor has no image copy capture or no shared memory.
+    /// </summary>
     public ImageCopyCaptureClient? Capture { get; }
 
+    /// <summary>
+    /// Registers the capabilities in a service table and removes each portal interface whose globals are missing from the pack.
+    /// Call it once, before the table freezes.
+    /// </summary>
+    /// <param name="services">The service table to fill.</param>
+    /// <param name="pack">The portal pack to narrow.</param>
+    /// <param name="screencast">A factory for the screencast publisher, or <see langword="null"/> to remove the ScreenCast portal.</param>
+    /// <returns>The pack without the portal interfaces that cannot work.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> or <paramref name="pack"/> is <see langword="null"/>.</exception>
     public ProtocolPack Register(
         BasinServices services,
         ProtocolPack pack,
@@ -105,6 +132,9 @@ public sealed class PortalClientServices : IDisposable
         return pack;
     }
 
+    /// <summary>
+    /// Disposes every owned service in the reverse order of creation.
+    /// </summary>
     public void Dispose()
     {
         for (var i = _owned.Count - 1; i >= 0; i--)

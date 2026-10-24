@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_gamma_control_manager_v1</c> global. It reads gamma ramps that clients send and applies them through <see cref="IOutputGamma"/>.
+/// </summary>
 public sealed class GammaControlManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorInvalidGamma = 1;
@@ -19,6 +25,12 @@ public sealed class GammaControlManager : IDisposable
     private readonly IOutputGamma? _gamma;
     private readonly Dictionary<IOutput, ZwlrGammaControlV1Resource> _controls = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GammaControlManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="gamma">The gamma implementation. With <see langword="null"/>, each gamma control fails at once.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public GammaControlManager(WlServerDisplay display, IOutputGamma? gamma)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -26,6 +38,9 @@ public sealed class GammaControlManager : IDisposable
         _global = display.CreateGlobal(ZwlrGammaControlManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

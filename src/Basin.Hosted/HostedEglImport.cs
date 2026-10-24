@@ -3,6 +3,9 @@ using static Basin.Hosted.HostedLog;
 
 namespace Basin.Hosted;
 
+/// <summary>
+/// Imports dmabufs as GL textures through the EGL display of a host toolkit. Each call must run with a GL context of that display current.
+/// </summary>
 public sealed unsafe class HostedEglImport
 {
     private const uint LinuxDmaBufExt = 0x3270;
@@ -46,8 +49,16 @@ public sealed unsafe class HostedEglImport
         RenderNodePath = QueryRenderNode();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the platform can import dmabufs through EGL. It is <see langword="true"/> only on Linux.
+    /// </summary>
     public static bool IsSupported { get; } = OperatingSystem.IsLinux();
 
+    /// <summary>
+    /// Loads the EGL and GL entry points and queries the dmabuf formats of a display.
+    /// </summary>
+    /// <param name="eglDisplayHandle">The native EGL display.</param>
+    /// <returns>The import, or <see langword="null"/> when the handle is zero, an entry point is missing, or the display reports no usable format.</returns>
     public static HostedEglImport? TryCreate(nint eglDisplayHandle)
     {
         if (eglDisplayHandle == 0)
@@ -68,10 +79,21 @@ public sealed unsafe class HostedEglImport
         }
     }
 
+    /// <summary>
+    /// Gets the formats and modifiers that the display can import. It is never empty.
+    /// </summary>
     public DrmFormatSet Formats { get; }
 
+    /// <summary>
+    /// Gets the render node of the EGL device. It is <see langword="null"/> when the driver does not report one.
+    /// </summary>
     public string? RenderNodePath { get; }
 
+    /// <summary>
+    /// Creates an EGL image from a dmabuf and binds it to a new GL texture.
+    /// </summary>
+    /// <param name="attributes">The dmabuf planes, format and modifier.</param>
+    /// <returns>The texture and the image, which the caller releases with <see cref="Destroy"/>. It is <see langword="null"/> when EGL or GL refuses the buffer.</returns>
     public (uint Texture, nint Image)? Import(in DmabufAttributes attributes)
     {
         Span<int> attribs = stackalloc int[7 + attributes.PlaneCount * 10];
@@ -133,6 +155,11 @@ public sealed unsafe class HostedEglImport
         return (texture, image);
     }
 
+    /// <summary>
+    /// Deletes a texture and destroys an image that <see cref="Import"/> created.
+    /// </summary>
+    /// <param name="texture">The GL texture name.</param>
+    /// <param name="image">The EGL image.</param>
     public void Destroy(uint texture, nint image)
     {
         _deleteTextures(1, &texture);

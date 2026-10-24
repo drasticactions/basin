@@ -8,12 +8,24 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Serves <c>org.freedesktop.impl.portal.RemoteDesktop</c>. It injects input through <see cref="IInputSink"/>, from <c>Notify*</c> calls or from an EIS connection, and can carry a screen cast.
+/// </summary>
 public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHandler, IRemoteDesktopProperties
 {
+    /// <summary>
+    /// The portal device type bit for the keyboard.
+    /// </summary>
     public const uint DeviceKeyboard = 1;
 
+    /// <summary>
+    /// The portal device type bit for the pointer.
+    /// </summary>
     public const uint DevicePointer = 2;
 
+    /// <summary>
+    /// The portal device type bit for the touchscreen.
+    /// </summary>
     public const uint DeviceTouchscreen = 4;
 
     private IPortalPrompts _prompts = null!;
@@ -24,16 +36,23 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
     private PortalScreenCastModule? _screenCast;
     private PortalOptions _options = new();
 
+    /// <inheritdoc/>
     public override string WireInterface => "org.freedesktop.impl.portal.RemoteDesktop";
 
+    /// <inheritdoc/>
     public override int Version => 2;
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Capabilities => [typeof(IInputSink), typeof(IActiveKeymap), typeof(IKeymapLookup), typeof(IAppInfoResolver)];
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Drivers => [typeof(IPortalPrompts)];
 
     internal override DBusHandler.DBusInterface Interface => DBusHandler.DBusInterface.OrgFreedesktopImplPortalRemoteDesktop;
 
+    /// <summary>
+    /// Gets the device type bits that the <see cref="IInputSink"/> supports. It is 0 when no sink is registered.
+    /// </summary>
     public uint AvailableDeviceTypes
     {
         get
@@ -66,6 +85,7 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
 
     uint IRemoteDesktopProperties.Version => (uint)Version;
 
+    /// <inheritdoc/>
     protected override void Bind(BasinServices services)
     {
         _prompts = services.Require<IPortalPrompts>();
@@ -81,6 +101,15 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
 
     ValueTask IRemoteDesktopHandler.HandleGetAllPropertiesAsync(IRemoteDesktopHandler.GetAllPropertiesContext context) => context.Handle(this);
 
+    /// <summary>
+    /// Creates a remote desktop session.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The session object path.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns><see cref="PortalResponse.Success"/> with the <c>session_id</c> result.</returns>
+    /// <exception cref="InvalidOperationException">The module is not installed.</exception>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
@@ -90,6 +119,14 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
         return ValueTask.FromResult((PortalResponse.Success, Results.With("session_id", VariantValue.String(session.Id))));
     }
 
+    /// <summary>
+    /// Records the device types, the persist mode and the restore data for a session that has not started.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The remote desktop session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">The <c>types</c>, <c>persist_mode</c> and <c>restore_data</c> options.</param>
+    /// <returns><see cref="PortalResponse.Success"/>, or <see cref="PortalResponse.Other"/> when the session does not exist or has started.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> SelectDevicesAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
@@ -121,6 +158,15 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
         return ValueTask.FromResult((PortalResponse.Success, Results.Empty));
     }
 
+    /// <summary>
+    /// Starts a session. Restore data that covers the request skips the device prompt. A selected screen cast starts its streams in the same call.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The remote desktop session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>modal</c> option.</param>
+    /// <returns>The granted <c>devices</c>, the clipboard state, any <c>streams</c> and the restore data, or a cancel or other response.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> StartAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {
@@ -203,66 +249,158 @@ public sealed class PortalRemoteDesktopModule : PortalModule, IRemoteDesktopHand
         }
     }
 
+    /// <summary>
+    /// Moves the pointer by a relative amount when the session has the pointer.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="dx">The horizontal motion in logical pixels.</param>
+    /// <param name="dy">The vertical motion in logical pixels.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyPointerMotionAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, double dx, double dy)
     {
         Injector(sessionHandle, InputDeviceCapability.Pointer)?.Motion(dx, dy);
         return default;
     }
 
+    /// <summary>
+    /// Moves the pointer to a position in a screen cast stream when the session has the pointer.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="stream">The PipeWire node id of the stream.</param>
+    /// <param name="x">The x position in the stream, in logical pixels.</param>
+    /// <param name="y">The y position in the stream, in logical pixels.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyPointerMotionAbsoluteAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint stream, double x, double y)
     {
         Injector(sessionHandle, InputDeviceCapability.Pointer)?.MotionAbsolute(stream, x, y);
         return default;
     }
 
+    /// <summary>
+    /// Presses or releases a pointer button when the session has the pointer.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="button">The evdev button code.</param>
+    /// <param name="state">1 to press, 0 to release.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyPointerButtonAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, int button, uint state)
     {
         Injector(sessionHandle, InputDeviceCapability.Pointer)?.Button(button, state != 0);
         return default;
     }
 
+    /// <summary>
+    /// Sends a smooth scroll when the session has the pointer.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">The <c>finish</c> option, which ends the scroll.</param>
+    /// <param name="dx">The horizontal scroll distance.</param>
+    /// <param name="dy">The vertical scroll distance.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyPointerAxisAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, double dx, double dy)
     {
         Injector(sessionHandle, InputDeviceCapability.Pointer)?.Axis(dx, dy, Vardict.Bool(options, "finish"));
         return default;
     }
 
+    /// <summary>
+    /// Sends wheel steps when the session has the pointer.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="axis">0 for vertical, 1 for horizontal.</param>
+    /// <param name="steps">The number of wheel steps, with the sign for the direction.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyPointerAxisDiscreteAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint axis, int steps)
     {
         Injector(sessionHandle, InputDeviceCapability.Pointer)?.AxisDiscrete(axis, steps);
         return default;
     }
 
+    /// <summary>
+    /// Presses or releases a key by evdev keycode when the session has the keyboard.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="keycode">The evdev keycode.</param>
+    /// <param name="state">1 to press, 0 to release.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyKeyboardKeycodeAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, int keycode, uint state)
     {
         Injector(sessionHandle, InputDeviceCapability.Keyboard)?.Keycode(keycode, state != 0);
         return default;
     }
 
+    /// <summary>
+    /// Presses or releases the key that types a keysym when the session has the keyboard. A keysym with no key in the keymap is ignored.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="keysym">The XKB keysym.</param>
+    /// <param name="state">1 to press, 0 to release.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyKeyboardKeysymAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, int keysym, uint state)
     {
         Injector(sessionHandle, InputDeviceCapability.Keyboard)?.Keysym(keysym, state != 0);
         return default;
     }
 
+    /// <summary>
+    /// Starts a touch point in a screen cast stream when the session has the touchscreen.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="stream">The PipeWire node id of the stream.</param>
+    /// <param name="slot">The touch slot.</param>
+    /// <param name="x">The x position in the stream, in logical pixels.</param>
+    /// <param name="y">The y position in the stream, in logical pixels.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyTouchDownAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint stream, uint slot, double x, double y)
     {
         Injector(sessionHandle, InputDeviceCapability.Touch)?.TouchDown(stream, slot, x, y);
         return default;
     }
 
+    /// <summary>
+    /// Moves a touch point in a screen cast stream when the session has the touchscreen.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="stream">The PipeWire node id of the stream.</param>
+    /// <param name="slot">The touch slot.</param>
+    /// <param name="x">The x position in the stream, in logical pixels.</param>
+    /// <param name="y">The y position in the stream, in logical pixels.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyTouchMotionAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint stream, uint slot, double x, double y)
     {
         Injector(sessionHandle, InputDeviceCapability.Touch)?.TouchMotion(stream, slot, x, y);
         return default;
     }
 
+    /// <summary>
+    /// Ends a touch point when the session has the touchscreen.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <param name="slot">The touch slot.</param>
+    /// <returns>A completed task.</returns>
     public ValueTask NotifyTouchUpAsync(ObjectPath sessionHandle, Dictionary<string, VariantValue> options, uint slot)
     {
         Injector(sessionHandle, InputDeviceCapability.Touch)?.TouchUp(slot);
         return default;
     }
 
+    /// <summary>
+    /// Creates an EIS client connection that injects the granted devices. The first call creates the receiver, with one region per stream or per output.
+    /// </summary>
+    /// <param name="sessionHandle">A started remote desktop session.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns>The client socket, which the caller owns.</returns>
+    /// <exception cref="DBusErrorReplyException">The session has not started, libeis is missing, or no input sink is registered.</exception>
     public ValueTask<SafeHandle> ConnectToEISAsync(ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is not RemoteDesktopSession session || !session.IsStarted)

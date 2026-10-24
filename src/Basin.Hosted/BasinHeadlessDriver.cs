@@ -4,6 +4,10 @@ using static Basin.Hosted.HostedLog;
 
 namespace Basin.Hosted;
 
+/// <summary>
+/// Runs a <see cref="BasinCompositorHost"/> on a thread of its own with no toolkit. It frames only while a view needs a repaint or a client waits for a frame.
+/// A frame draws no pixels unless a recording or a screenshot asks for them.
+/// </summary>
 [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
 public sealed class BasinHeadlessDriver : IDisposable
 {
@@ -22,6 +26,12 @@ public sealed class BasinHeadlessDriver : IDisposable
     private long _frames;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasinHeadlessDriver"/> class. Nothing runs until <see cref="Start"/>.
+    /// </summary>
+    /// <param name="create">The factory that builds the host. It runs on the driver thread, so the host captures that thread.</param>
+    /// <param name="interval">The shortest time between two frames. The default is 16 milliseconds.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="interval"/> is zero or negative.</exception>
     public BasinHeadlessDriver(Func<BasinCompositorHost> create, TimeSpan? interval = null)
     {
         ArgumentNullException.ThrowIfNull(create);
@@ -33,14 +43,32 @@ public sealed class BasinHeadlessDriver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the host that the factory built. Only the driver thread can use it.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The driver has not started.</exception>
     public BasinCompositorHost Host => _host ?? throw new InvalidOperationException("the driver has not started");
 
+    /// <summary>
+    /// Gets the count of frames that the driver completed. Any thread can read it.
+    /// </summary>
     public long Frames => Interlocked.Read(ref _frames);
 
+    /// <summary>
+    /// Gets a value indicating whether the calling thread is the driver thread.
+    /// </summary>
     public bool IsDriverThread => Thread.CurrentThread == _thread;
 
+    /// <summary>
+    /// Occurs on the driver thread after each frame that the host opened.
+    /// </summary>
     public event Action? FrameCompleted;
 
+    /// <summary>
+    /// Starts the driver thread and blocks until the factory returns. An exception from the factory comes back from this call.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The driver was started before.</exception>
+    /// <exception cref="ObjectDisposedException">The driver is disposed.</exception>
     public void Start()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -54,6 +82,10 @@ public sealed class BasinHeadlessDriver : IDisposable
         _started.Task.GetAwaiter().GetResult();
     }
 
+    /// <summary>
+    /// Queues work for the driver thread and wakes it. Any thread can call it. After <see cref="Stop"/> begins, the work is dropped.
+    /// </summary>
+    /// <param name="action">The work. An exception from it is logged and does not stop the driver.</param>
     public void Post(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
@@ -66,6 +98,12 @@ public sealed class BasinHeadlessDriver : IDisposable
         Wake();
     }
 
+    /// <summary>
+    /// Runs work on the driver thread and returns its result. Any thread can call it.
+    /// </summary>
+    /// <typeparam name="T">The type of the result.</typeparam>
+    /// <param name="work">The work to run.</param>
+    /// <returns>A task that completes with the result or the exception of <paramref name="work"/>. It is canceled when the driver is stopping.</returns>
     public Task<T> InvokeAsync<T>(Func<T> work)
     {
         ArgumentNullException.ThrowIfNull(work);
@@ -89,8 +127,16 @@ public sealed class BasinHeadlessDriver : IDisposable
         return done.Task;
     }
 
+    /// <summary>
+    /// Asks for one frame at the next interval. Any thread can call it.
+    /// </summary>
     public void RequestFrame() => Post(() => _frameWanted = true);
 
+    /// <summary>
+    /// Stops the loop, runs the queued work and <paramref name="beforeDispose"/> on the driver thread, then disposes the host there.
+    /// It waits for the thread unless the driver thread calls it. A call before <see cref="Start"/> or a second call does nothing.
+    /// </summary>
+    /// <param name="beforeDispose">The teardown that must run on the driver thread before the host is disposed, or <see langword="null"/>.</param>
     public void Stop(Action? beforeDispose = null)
     {
         if (_thread is null || _stopping)
@@ -107,6 +153,9 @@ public sealed class BasinHeadlessDriver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Calls <see cref="Stop"/> and marks the driver disposed.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

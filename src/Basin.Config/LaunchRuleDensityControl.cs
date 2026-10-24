@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Moves an X11 application to another X server by writing a <c>[[launch]]</c> rule and relaunching the process when it exits.
+/// </summary>
 public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
 {
     private readonly Func<IToplevelModel?> _model;
@@ -13,6 +16,15 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
     private readonly Dictionary<long, Pending> _pending = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LaunchRuleDensityControl"/> class. It subscribes to process exits on <paramref name="tracker"/> until disposal.
+    /// </summary>
+    /// <param name="model">Gives the toplevel model, or <see langword="null"/> when there is none yet.</param>
+    /// <param name="tracker">The tracker that started the processes and relaunches them.</param>
+    /// <param name="loop">The loop for the grace timers.</param>
+    /// <param name="configPath">Gives the path of the configuration file, or <see langword="null"/> when there is none.</param>
+    /// <param name="log">The logger for relaunch messages.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="model"/>, <paramref name="tracker"/>, <paramref name="loop"/> or <paramref name="configPath"/> is <see langword="null"/>.</exception>
     public LaunchRuleDensityControl(
         Func<IToplevelModel?> model, ProcessTracker tracker, ICompositorEventLoop loop, Func<string?> configPath, BasinLogger log)
     {
@@ -28,12 +40,31 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         _tracker.Exited += OnExited;
     }
 
+    /// <summary>
+    /// Gets or sets how long the process can take to exit after its windows are asked to close. The default is 5 seconds.
+    /// </summary>
     public TimeSpan Grace { get; set; } = TimeSpan.FromSeconds(5);
 
+    /// <summary>
+    /// Gets or sets the function that finds a desktop entry ID for an app ID, for a process that the compositor did not start.
+    /// </summary>
     public Func<string, string?>? DesktopIdForAppId { get; set; }
 
+    /// <summary>
+    /// Occurs after a rule is written, with the rules read back from the file.
+    /// </summary>
     public event Action<LaunchRules>? RulesWritten;
 
+    /// <summary>
+    /// Writes a rule for the window's application. If the compositor started the process, it closes the process's X11 windows and relaunches it on exit.
+    /// The process is never killed. <paramref name="completed"/> reports the outcome, now or after the exit or the grace time.
+    /// </summary>
+    /// <param name="toplevelId">The ID of the X11 toplevel.</param>
+    /// <param name="density">The X server density for the rule.</param>
+    /// <param name="completed">Receives the outcome exactly once when the method returns <see langword="true"/>.</param>
+    /// <param name="error">The reason when the method returns <see langword="false"/>, else <see langword="null"/>.</param>
+    /// <returns><see langword="false"/> when the window is unknown or not X11, there is no configuration file, nothing names the program, or the write fails.</returns>
+    /// <exception cref="ObjectDisposedException">The instance is disposed.</exception>
     public bool TrySet(ulong toplevelId, X11Density density, Action<X11DensityResult> completed, out string? error)
     {
         ArgumentNullException.ThrowIfNull(completed);
@@ -110,6 +141,9 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Stops waiting for exits and completes each pending request with <see cref="X11DensityOutcome.StillRunning"/>.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -128,6 +162,17 @@ public sealed class LaunchRuleDensityControl : IX11DensityControl, IDisposable
         _pending.Clear();
     }
 
+    /// <summary>
+    /// Writes or changes a <c>[[launch]]</c> rule in a file and keeps every comment and column. The rule is keyed on the desktop ID when there is one, else on the program.
+    /// A row with the same key and without the other key is changed. Otherwise a new row is added.
+    /// </summary>
+    /// <param name="path">The configuration file. It is created when it does not exist.</param>
+    /// <param name="desktopId">The desktop entry ID, or <see langword="null"/>.</param>
+    /// <param name="exec">The program name. It must not be <see langword="null"/> when <paramref name="desktopId"/> is <see langword="null"/>.</param>
+    /// <param name="density">The X server density for the rule.</param>
+    /// <returns>A short text form of the rule, for example <c>exec=xfig x11=low-density</c>.</returns>
+    /// <exception cref="InvalidOperationException">The file does not parse after the edit.</exception>
+    /// <exception cref="IOException">The file cannot be read or written.</exception>
     public static string Write(string path, string? desktopId, string? exec, X11Density density)
     {
         ArgumentNullException.ThrowIfNull(path);

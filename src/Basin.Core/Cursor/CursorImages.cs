@@ -4,6 +4,9 @@ using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
+/// <summary>
+/// Loads theme and painted cursors into cursor plane buffers, one cached variant per scale and output color description. It must be used from one thread.
+/// </summary>
 public sealed class CursorImages : IDisposable
 {
     private readonly IAllocator _allocator;
@@ -16,6 +19,15 @@ public sealed class CursorImages : IDisposable
     private Variant _current;
     private IBuffer? _clientImage;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CursorImages"/> class.
+    /// </summary>
+    /// <param name="allocator">The allocator for the cursor buffers.</param>
+    /// <param name="bufferWidth">The width of the cursor plane buffer.</param>
+    /// <param name="bufferHeight">The height of the cursor plane buffer.</param>
+    /// <param name="themeName">The Xcursor theme name, or <see langword="null"/> for the default theme.</param>
+    /// <param name="logicalSize">The cursor size in logical pixels.</param>
+    /// <param name="scale">The output scale of the first variant.</param>
     public CursorImages(
         IAllocator allocator,
         int bufferWidth,
@@ -46,18 +58,44 @@ public sealed class CursorImages : IDisposable
         public Dictionary<string, CursorImage?> Cache { get; } = [];
     }
 
+    /// <summary>
+    /// Gets or sets the service that builds the color conversion for a variant with an output description. Variants that exist already do not change.
+    /// </summary>
     public IColorProfileService? ColorProfiles { get; set; }
 
+    /// <summary>
+    /// Gets the theme name from the constructor, or <see langword="null"/> for the default theme.
+    /// </summary>
     public string? ThemeName { get; }
 
+    /// <summary>
+    /// Gets the nominal size in pixels of the current variant.
+    /// </summary>
     public int Size => _current.Size;
 
+    /// <summary>
+    /// Gets a value indicating whether the current variant found a theme on disk.
+    /// </summary>
     public bool HasTheme => _current.Theme is not null;
 
+    /// <summary>
+    /// Gets the number of variants that were loaded.
+    /// </summary>
     public int VariantCount => _variants.Count;
 
+    /// <summary>
+    /// Calculates the nominal size in pixels for an output scale.
+    /// </summary>
+    /// <param name="scale">The output scale. It is snapped first.</param>
+    /// <returns>The size, at least 1.</returns>
     public int SizeForScale(double scale) => Math.Max(1, (int)(_logicalSize * OutputScaling.Snap(scale)));
 
+    /// <summary>
+    /// Makes a variant current, and calls <paramref name="reacquire"/> when the variant changed.
+    /// </summary>
+    /// <param name="key">The variant to use.</param>
+    /// <param name="reacquire">The callback that reloads the visible cursor from the new variant.</param>
+    /// <returns><see langword="true"/> when the current variant changed.</returns>
     public bool Use(in CursorKey key, Action reacquire)
     {
         ArgumentNullException.ThrowIfNull(reacquire);
@@ -73,9 +111,20 @@ public sealed class CursorImages : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Makes the variant for a new scale current, with the same output description.
+    /// </summary>
+    /// <param name="scale">The new output scale.</param>
+    /// <param name="reacquire">The callback that reloads the visible cursor from the new variant.</param>
+    /// <returns><see langword="true"/> when the current variant changed.</returns>
     public bool ReloadForScale(double scale, Action reacquire) =>
         Use(_current.Key with { Scale = scale }, reacquire);
 
+    /// <summary>
+    /// Adds a cursor that code paints instead of a theme file. It replaces a theme cursor with the same name and clears the cached images of that name.
+    /// </summary>
+    /// <param name="name">The cursor name.</param>
+    /// <param name="paint">The function that paints the cursor for a scale, or gives <see langword="null"/> for no cursor.</param>
     public void Define(string name, Func<double, XcursorImage?> paint)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -91,8 +140,19 @@ public sealed class CursorImages : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a cursor from the current variant.
+    /// </summary>
+    /// <param name="name">The cursor name. Legacy X11 names fall back through <see cref="CursorAliases"/>.</param>
+    /// <returns>The image, or <see langword="null"/> when no theme or painter has the cursor or no buffer is available.</returns>
     public CursorImage? Named(string name) => Named(name, _current.Key);
 
+    /// <summary>
+    /// Gets a cursor from a variant, and makes that variant current without a reacquire. The image stays owned by this object and is cached.
+    /// </summary>
+    /// <param name="name">The cursor name. Legacy X11 names fall back through <see cref="CursorAliases"/>.</param>
+    /// <param name="key">The variant to load from.</param>
+    /// <returns>The image, or <see langword="null"/> when no theme or painter has the cursor or no buffer is available.</returns>
     public CursorImage? Named(string name, in CursorKey key)
     {
         _thread.Assert();
@@ -205,6 +265,14 @@ public sealed class CursorImages : IDisposable
         return created;
     }
 
+    /// <summary>
+    /// Copies a client cursor surface into the one shared client cursor buffer. Each call overwrites the image from the previous call.
+    /// </summary>
+    /// <param name="source">The client buffer. It must have a CPU mapping and a stride of 4 bytes per pixel.</param>
+    /// <param name="hotspotX">The horizontal hotspot in source pixels.</param>
+    /// <param name="hotspotY">The vertical hotspot in source pixels.</param>
+    /// <param name="scale">The factor from source pixels to output pixels.</param>
+    /// <returns>The image, or <see langword="null"/> when the buffer cannot be read or no cursor buffer is available.</returns>
     public CursorImage? FromSurface(IBuffer source, int hotspotX, int hotspotY, double scale = 1.0)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -249,6 +317,9 @@ public sealed class CursorImages : IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys all cached cursor buffers and the client cursor buffer.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

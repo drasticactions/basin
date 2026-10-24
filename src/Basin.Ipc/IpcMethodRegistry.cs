@@ -3,6 +3,9 @@ using static Basin.Ipc.IpcLog;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// Maps method names to handlers, and holds the line forms and the metadata of the methods. It is frozen when the server starts.
+/// </summary>
 public sealed class IpcMethodRegistry
 {
     private readonly Dictionary<string, IpcHandler> _methods = new(StringComparer.Ordinal);
@@ -13,10 +16,19 @@ public sealed class IpcMethodRegistry
     private readonly List<string> _omittedGroups = [];
     private string[]? _sorted;
 
+    /// <summary>
+    /// Gets a value indicating whether the server started, after which no method or line form can be added.
+    /// </summary>
     public bool IsFrozen { get; private set; }
 
+    /// <summary>
+    /// Gets the number of registered methods, library methods included.
+    /// </summary>
     public int Count => _methods.Count;
 
+    /// <summary>
+    /// Gets the registered method names in ordinal order.
+    /// </summary>
     public IReadOnlyList<string> Names => SortedNames;
 
     internal string[] SortedNames => _sorted ??= [.. _methods.Keys.Order(StringComparer.Ordinal)];
@@ -25,6 +37,16 @@ public sealed class IpcMethodRegistry
 
     internal IReadOnlyList<IpcLineForm> Lines => _lines;
 
+    /// <summary>
+    /// Registers a consumer method, and optionally its line form and its metadata.
+    /// </summary>
+    /// <param name="name">The method name, <c>namespace/verb</c> in <c>[a-z0-9-]</c>, outside the library namespaces.</param>
+    /// <param name="handler">The handler.</param>
+    /// <param name="line">The line form pattern for the line front, or <see langword="null"/> for none.</param>
+    /// <param name="lineReply">The formatter that prints the reply on the line front, or <see langword="null"/> for the default.</param>
+    /// <param name="info">The metadata, or <see langword="null"/>. Its schema must parse as an object with <c>"type": "object"</c>.</param>
+    /// <exception cref="ArgumentException">The name is not valid or is in a library namespace, or the schema is not valid.</exception>
+    /// <exception cref="InvalidOperationException">The name is already registered, or the server started.</exception>
     public void Register(
         string name, IpcHandler handler, string? line = null, IpcLineFormatter? lineReply = null, IpcMethodInfo? info = null)
     {
@@ -41,6 +63,14 @@ public sealed class IpcMethodRegistry
         }
     }
 
+    /// <summary>
+    /// Adds a line form for a method. A method can have several line forms, and the line front tries them in order.
+    /// </summary>
+    /// <param name="method">The method name. It does not need to be registered yet.</param>
+    /// <param name="pattern">The pattern, for example <c>move {x:number} {y:number}</c>.</param>
+    /// <param name="reply">The formatter that prints the reply, or <see langword="null"/> for the default.</param>
+    /// <exception cref="ArgumentException">The method name is not valid.</exception>
+    /// <exception cref="InvalidOperationException">The server started.</exception>
     public void AddLine(string method, string pattern, IpcLineFormatter? reply = null)
     {
         ArgumentNullException.ThrowIfNull(method);
@@ -53,6 +83,11 @@ public sealed class IpcMethodRegistry
         _lines.Add(new IpcLineForm(method, IpcLinePattern.Parse(pattern), reply));
     }
 
+    /// <summary>
+    /// Tells whether a method is registered.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <returns><see langword="true"/> when the method is in the table.</returns>
     public bool Contains(string name) => _methods.ContainsKey(name);
 
     internal bool HasLine(string method)
@@ -68,6 +103,12 @@ public sealed class IpcMethodRegistry
         return false;
     }
 
+    /// <summary>
+    /// Finds the metadata of a method. A library method gets its metadata on the first request.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <param name="info">The metadata with its schema compacted, when the method returns <see langword="true"/>.</param>
+    /// <returns><see langword="false"/> when the method has no metadata or is not registered.</returns>
     public bool TryGetInfo(string name, out IpcMethodInfo info)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -110,6 +151,11 @@ public sealed class IpcMethodRegistry
         return bytes;
     }
 
+    /// <summary>
+    /// Finds the pattern of the first line form of a method.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <returns>The pattern text, or <see langword="null"/> when the method has no line form.</returns>
     public string? LineOf(string name)
     {
         foreach (var line in _lines)
@@ -123,6 +169,13 @@ public sealed class IpcMethodRegistry
         return null;
     }
 
+    /// <summary>
+    /// Runs a handler with no interceptor. An exception from the handler becomes an <c>internal</c> error, and so does a result left unfinished.
+    /// </summary>
+    /// <param name="name">The method name.</param>
+    /// <param name="parameters">The raw JSON of the params.</param>
+    /// <param name="reply">The reply that the handler fills.</param>
+    /// <returns><see langword="false"/> when the method is not registered. The reply is then unchanged.</returns>
     public bool TryInvoke(string name, ReadOnlySpan<byte> parameters, IpcReply reply)
     {
         ArgumentNullException.ThrowIfNull(reply);
@@ -173,6 +226,11 @@ public sealed class IpcMethodRegistry
         }
     }
 
+        /// <summary>
+        /// Tells whether <see cref="IpcServer.Omit"/> left a library method out, by its name or its group.
+        /// </summary>
+        /// <param name="name">The method name.</param>
+        /// <returns><see langword="true"/> when the method or its group is omitted.</returns>
         public bool IsOmitted(string name)
     {
         ArgumentNullException.ThrowIfNull(name);

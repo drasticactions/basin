@@ -4,6 +4,10 @@ using SkiaSharp;
 
 namespace Basin.Portal.Prompts.Skia;
 
+/// <summary>
+/// Lets the user bind a key chord to each global shortcut that an application asks for.
+/// A click on a row starts capture, and the next non-modifier key with the held modifiers becomes the trigger.
+/// </summary>
 public sealed class ShortcutPromptView : SkiaPromptView
 {
     private readonly List<Row> _rows = [];
@@ -11,6 +15,13 @@ public sealed class ShortcutPromptView : SkiaPromptView
     private int _hotRow = -1;
     private int _capturing = -1;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShortcutPromptView"/> class.
+    /// Each row starts with its current trigger, or with the preferred trigger when no other binding holds it.
+    /// </summary>
+    /// <param name="theme">The theme to draw with.</param>
+    /// <param name="prompt">The request that lists the shortcuts.</param>
+    /// <param name="keymap">The keymap that turns captured keycodes into keysyms, or <see langword="null"/>. Without it, capture binds nothing.</param>
     public ShortcutPromptView(SkiaPromptTheme theme, in ShortcutPrompt prompt, IKeymapLookup? keymap)
         : base(theme, "Bind shortcuts", SkiaPortalPrompts.AppLine(prompt.AppId, prompt.DisplayName), prompt.IconPath)
     {
@@ -27,13 +38,28 @@ public sealed class ShortcutPromptView : SkiaPromptView
         AddButton("Bind", PromptResponse.Accepted, primary: true);
     }
 
+    /// <summary>
+    /// Gets a new list with the trigger of each row that has one. Rows without a trigger are left out.
+    /// </summary>
     public IReadOnlyList<ShortcutBinding> Bindings =>
         _rows.Where(r => !string.IsNullOrEmpty(r.Trigger)).Select(r => new ShortcutBinding(r.Id, r.Trigger)).ToList();
 
+    /// <summary>
+    /// Gets a value indicating whether a row waits for a chord.
+    /// </summary>
     public bool IsCapturing => _capturing >= 0;
 
+    /// <summary>
+    /// Gets the height of the dialog in logical pixels, from the number of rows and a line of help text.
+    /// </summary>
     public override int Height => BodyTop + (Math.Max(1, _rows.Count) * RowHeight) + 28 + ButtonHeight + Padding + 12;
 
+    /// <summary>
+    /// Paints each shortcut with its trigger, and the help line under the rows.
+    /// </summary>
+    /// <param name="canvas">The canvas to draw on.</param>
+    /// <param name="width">The surface width in logical pixels.</param>
+    /// <param name="height">The surface height in logical pixels.</param>
     protected override void PaintBody(SKCanvas canvas, int width, int height)
     {
         var y = BodyTop;
@@ -71,6 +97,12 @@ public sealed class ShortcutPromptView : SkiaPromptView
         return row < _rows.Count ? row : -1;
     }
 
+    /// <summary>
+    /// Highlights the row under the pointer.
+    /// </summary>
+    /// <param name="x">The horizontal position in surface coordinates.</param>
+    /// <param name="y">The vertical position in surface coordinates.</param>
+    /// <returns><see langword="true"/> when the highlighted row changed.</returns>
     protected override bool BodyPointerMove(double x, double y)
     {
         var row = RowAt(x, y);
@@ -79,6 +111,12 @@ public sealed class ShortcutPromptView : SkiaPromptView
         return changed;
     }
 
+    /// <summary>
+    /// Starts capture on the row under the pointer, or stops it on a second click or a click outside the rows.
+    /// </summary>
+    /// <param name="x">The horizontal position in surface coordinates.</param>
+    /// <param name="y">The vertical position in surface coordinates.</param>
+    /// <returns><see langword="true"/> when the capture state changed.</returns>
     protected override bool BodyPointerRelease(double x, double y)
     {
         var row = RowAt(x, y);
@@ -93,6 +131,13 @@ public sealed class ShortcutPromptView : SkiaPromptView
         return true;
     }
 
+    /// <summary>
+    /// Sets the trigger of the capturing row from a key and the held modifiers. Escape stops capture and Backspace clears the trigger.
+    /// Outside capture, the base keys apply.
+    /// </summary>
+    /// <param name="key">The evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
+    /// <returns><see langword="true"/> when the key had an effect. A modifier key alone has none.</returns>
     public override bool Key(uint key, bool pressed)
     {
         if (_capturing < 0 || !pressed)

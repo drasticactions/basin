@@ -2,10 +2,23 @@ using Tmds.DBus.Protocol;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Encodes and decodes the screen cast part of the restore data that the frontend keeps between sessions.
+/// </summary>
 public static class RestoreData
 {
+    /// <summary>
+    /// The version of the restore data format. Data with another version is ignored.
+    /// </summary>
     public const uint Version = 1;
 
+    /// <summary>
+    /// Encodes the sources of the streams: the output name and size for a monitor, the app id and title for a window.
+    /// </summary>
+    /// <param name="vendor">The vendor name to write.</param>
+    /// <param name="streams">The published streams.</param>
+    /// <returns>The <c>(suv)</c> restore data.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="vendor"/> or <paramref name="streams"/> is <see langword="null"/>.</exception>
     public static VariantValue Encode(string vendor, IReadOnlyList<ScreenCastStream> streams)
     {
         ArgumentNullException.ThrowIfNull(vendor);
@@ -34,6 +47,14 @@ public static class RestoreData
         return Results.Restore(vendor, Version, Results.Dict(data));
     }
 
+    /// <summary>
+    /// Decodes the sources from restore data. The decoded sources name outputs and windows but are not resolved to live objects.
+    /// </summary>
+    /// <param name="vendor">The vendor name in the data.</param>
+    /// <param name="expectedVendor">The vendor name that this backend writes.</param>
+    /// <param name="version">The version in the data.</param>
+    /// <param name="data">The vendor data.</param>
+    /// <returns>The sources, or <see langword="null"/> when the vendor or version differs, the data is malformed, or the list is empty.</returns>
     public static IReadOnlyList<ScreenCastSource>? Decode(string vendor, string expectedVendor, uint version, VariantValue data)
     {
         if (!string.Equals(vendor, expectedVendor, StringComparison.Ordinal) || version != Version ||

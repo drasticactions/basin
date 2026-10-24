@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_alpha_modifier_v1</c> global. It applies the committed alpha factor of each surface through <see cref="ISurfaceAppearance"/>.
+/// </summary>
 public sealed class AlphaModifierManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorAlreadyConstructed = 0;
@@ -18,6 +24,13 @@ public sealed class AlphaModifierManager : IDisposable
     private readonly ISurfaceAppearance _appearance;
     private readonly HashSet<Surface> _claimed = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AlphaModifierManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces.</param>
+    /// <param name="appearance">The appearance store that receives the opacity.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public AlphaModifierManager(WlServerDisplay display, CompositorGlobal compositor, ISurfaceAppearance appearance)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -28,12 +41,26 @@ public sealed class AlphaModifierManager : IDisposable
         _global = display.CreateGlobal(WpAlphaModifierV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a commit applies a new alpha factor, and with 1 when the client removes it. The factor goes from 0 to 1.
+    /// </summary>
     public event Action<Surface, double>? AlphaChanged;
 
+    /// <summary>
+    /// Gets the appearance store that receives the opacity.
+    /// </summary>
     public ISurfaceAppearance Appearance => _appearance;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Gets the opacity of a surface from the appearance store.
+    /// </summary>
+    /// <param name="surface">The surface to look up.</param>
+    /// <returns>The opacity from 0 to 1.</returns>
     public double AlphaOf(Surface surface) => _appearance.OpacityOf(surface);
 
     private void OnBind(WlClient client, uint version, uint id)

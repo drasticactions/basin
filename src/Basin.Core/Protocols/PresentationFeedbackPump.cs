@@ -2,6 +2,9 @@ using Basin.Capabilities;
 
 namespace Basin;
 
+/// <summary>
+/// Drives <see cref="PresentationTimeGlobal"/> from output commits, frames and presentation events, for each output in a layout. It stops when the consumer calls the presentation methods itself.
+/// </summary>
 public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
 {
     private readonly PresentationTimeGlobal _presentation;
@@ -16,6 +19,11 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
     private bool _consumerEndsFrames;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PresentationFeedbackPump"/> class. It follows the outputs that join and leave the layout.
+    /// </summary>
+    /// <param name="presentation">The global to drive.</param>
+    /// <param name="layout">The layout whose outputs to watch.</param>
     public PresentationFeedbackPump(PresentationTimeGlobal presentation, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(presentation);
@@ -26,10 +34,20 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
         Rehook();
     }
 
+    /// <summary>
+    /// Does nothing. Sampling happens on the output commit instead.
+    /// </summary>
+    /// <param name="output">The output that the frame is for.</param>
+    /// <param name="predictedVblankNanos">The predicted vblank. It is not used.</param>
     public void BeginFrame(IOutput output, long predictedVblankNanos)
     {
     }
 
+    /// <summary>
+    /// Sends feedback for the main surfaces of an output when a frame clock reports the presentation. After the first call, output frame events no longer send feedback.
+    /// </summary>
+    /// <param name="output">The output that presented the frame.</param>
+    /// <param name="presentedNanos">The presentation time on the monotonic clock in nanoseconds, or 0 or less to use the current time.</param>
     public void EndFrame(IOutput output, long presentedNanos)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -59,6 +77,9 @@ public sealed class PresentationFeedbackPump : IDisposable, IFrameSink
             output, (ulong)presentedNanos, refreshNs, present.Sequence, PresentedFlags.Vsync | PresentedFlags.HwClock);
     }
 
+    /// <summary>
+    /// Removes the handlers from all outputs and from the layout.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

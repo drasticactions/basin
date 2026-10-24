@@ -2,12 +2,24 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The mesh source for the walls or the shelf floor of a step map, flat shaded or textured.
+/// </summary>
 public sealed class CanvasStepSurfaceSource : IMeshSource
 {
+    /// <summary>
+    /// The number of uniform rows across a textured wall, in addition to the rows at tile boundaries.
+    /// </summary>
     public const int ForeshortenRows = 8;
 
+    /// <summary>
+    /// The least <see cref="TextureScale"/>. It bounds the vertex count of a textured surface.
+    /// </summary>
     public const double MinTextureScale = 0.25;
 
+    /// <summary>
+    /// The greatest <see cref="TextureScale"/>.
+    /// </summary>
     public const double MaxTextureScale = 8.0;
 
     private const double DepthShade = 0.35;
@@ -26,45 +38,81 @@ public sealed class CanvasStepSurfaceSource : IMeshSource
     private int _textureWidth;
     private int _textureHeight;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CanvasStepSurfaceSource"/> class.
+    /// </summary>
+    /// <param name="surface">The part of the step that the source draws.</param>
     public CanvasStepSurfaceSource(CanvasStepSurface surface)
     {
         Surface = surface;
     }
 
+    /// <summary>
+    /// Gets the part of the step that the source draws.
+    /// </summary>
     public CanvasStepSurface Surface { get; }
 
+    /// <summary>
+    /// Gets or sets the step map to draw. With no map or an identity map the source writes nothing.
+    /// </summary>
     public CanvasStepMap? Map { get; set; }
 
+    /// <summary>
+    /// Gets or sets the width of the texture in texels. Zero means no texture. The setter keeps it at 0 or above.
+    /// </summary>
     public int TextureWidth
     {
         get => _textureWidth;
         set => _textureWidth = Math.Max(0, value);
     }
 
+    /// <summary>
+    /// Gets or sets the height of the texture in texels. Zero means no texture. The setter keeps it at 0 or above.
+    /// </summary>
     public int TextureHeight
     {
         get => _textureHeight;
         set => _textureHeight = Math.Max(0, value);
     }
 
+    /// <summary>
+    /// Gets or sets the canvas pixels for each texel. The setter clamps it between the minimum and the maximum and reads a value that is not finite as 1.
+    /// </summary>
     public double TextureScale
     {
         get => _textureScale;
         set => _textureScale = double.IsFinite(value) ? Math.Clamp(value, MinTextureScale, MaxTextureScale) : 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets the base color of the walls before the light from the top left.
+    /// </summary>
     public RenderColor WallColor { get; set; } = new(0x26 / 255f, 0x2a / 255f, 0x3a / 255f, 1f);
 
+    /// <summary>
+    /// Gets or sets how much lighter the top wall and how much darker the bottom wall draw, from 0 to 1. The setter clamps the value.
+    /// </summary>
     public double WallShade
     {
         get => _wallShade;
         set => _wallShade = Math.Clamp(value, 0.0, 1.0);
     }
 
+    /// <summary>
+    /// Gets or sets the floor color at the base line. The floor darkens toward the screen edge.
+    /// </summary>
     public RenderColor FloorColor { get; set; } = new(0x3a / 255f, 0x3d / 255f, 0x44 / 255f, 1f);
 
+    /// <summary>
+    /// Gets a value indicating whether both texture sizes are positive. Without a texture the floor surface writes nothing.
+    /// </summary>
     public bool Textured => _textureWidth > 0 && _textureHeight > 0;
 
+    /// <summary>
+    /// Returns the lit color of a wall at the desktop edge.
+    /// </summary>
+    /// <param name="side">One wall side.</param>
+    /// <returns>The color, lightest for the top and darkest for the bottom. Any other value gives <see cref="WallColor"/>.</returns>
     public RenderColor WallColorOf(CanvasStepSides side) => side switch
     {
         CanvasStepSides.Top => Lighten(WallColor, _wallShade),
@@ -74,28 +122,56 @@ public sealed class CanvasStepSurfaceSource : IMeshSource
         _ => WallColor,
     };
 
+    /// <summary>
+    /// Returns the color of a wall at its base line, which is darker than at the desktop edge.
+    /// </summary>
+    /// <param name="side">One wall side.</param>
+    /// <returns>The color at the base line.</returns>
     public RenderColor BaseColorOf(CanvasStepSides side) => Darken(WallColorOf(side), DepthShade);
 
+    /// <summary>
+    /// Maps a screen fraction across a wall to the material fraction, through a pinhole projection between the two planes.
+    /// </summary>
+    /// <param name="t">The screen fraction, 0 at the desktop edge and 1 at the base line.</param>
+    /// <param name="zoom">The scale of the desktop plane.</param>
+    /// <param name="shelfScale">The scale of the shelf plane.</param>
+    /// <returns>The material fraction. It equals <paramref name="t"/> when the projection is degenerate.</returns>
     public static double Foreshorten(double t, double zoom, double shelfScale)
     {
         var denominator = shelfScale + (t * (zoom - shelfScale));
         return denominator <= 0 ? t : t * zoom / denominator;
     }
 
+    /// <summary>
+    /// Maps a material fraction across a wall back to the screen fraction. It is the inverse of <see cref="Foreshorten"/>.
+    /// </summary>
+    /// <param name="a">The material fraction.</param>
+    /// <param name="zoom">The scale of the desktop plane.</param>
+    /// <param name="shelfScale">The scale of the shelf plane.</param>
+    /// <returns>The screen fraction. It equals <paramref name="a"/> when the projection is degenerate.</returns>
     public static double Unforeshorten(double a, double zoom, double shelfScale)
     {
         var denominator = zoom - (a * (zoom - shelfScale));
         return denominator <= 0 ? a : a * shelfScale / denominator;
     }
 
+    /// <summary>
+    /// Returns the depth of a wall in canvas pixels, so that a texel at the middle of the wall is about square.
+    /// </summary>
+    /// <param name="width">The screen width of the wall.</param>
+    /// <param name="zoom">The scale of the desktop plane.</param>
+    /// <param name="shelfScale">The scale of the shelf plane.</param>
+    /// <returns>The width divided by the pinhole scale at the middle of the wall.</returns>
     public static double MaterialDepth(double width, double zoom, double shelfScale)
     {
         var middle = 2.0 * zoom * shelfScale / (zoom + shelfScale);
         return middle > 0 ? width / middle : width;
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds) => Walk(bounds, [], write: false);
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into) => _ = Walk(bounds, into, write: true);
 
     private int Walk(in Box bounds, Span<MeshVertex> into, bool write)
@@ -134,6 +210,15 @@ public sealed class CanvasStepSurfaceSource : IMeshSource
         return count;
     }
 
+    /// <summary>
+    /// Returns the four screen corners of a wall.
+    /// </summary>
+    /// <param name="map">The step map.</param>
+    /// <param name="side">One wall side. Any other value gives the bottom wall.</param>
+    /// <param name="inner0">The first corner on the desktop edge.</param>
+    /// <param name="inner1">The second corner on the desktop edge.</param>
+    /// <param name="outer0">The first corner on the base line.</param>
+    /// <param name="outer1">The second corner on the base line.</param>
     public static void Corners(
         CanvasStepMap map, CanvasStepSides side,
         out (double X, double Y) inner0, out (double X, double Y) inner1, out (double X, double Y) outer0, out (double X, double Y) outer1)

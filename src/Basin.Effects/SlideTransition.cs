@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Slides one workspace out and another in, side by side, through a translation on each workspace tree. It can run on a timeline or follow a gesture and then settle.
+/// </summary>
 public sealed class SlideTransition
 {
     private const string Name = "workspace-slide";
@@ -21,20 +24,44 @@ public sealed class SlideTransition
     private SpringHandoff _spring;
     private bool _springing;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SlideTransition"/> class.
+    /// </summary>
+    /// <param name="durationNanos">The length of a timed slide or a settle, in nanoseconds.</param>
     public SlideTransition(long durationNanos = 200_000_000)
     {
         _nanos = durationNanos;
         _timeline.Easing = EasingCurve.CubicBezier(0, 0, 0.2, 1);
     }
 
+    /// <summary>
+    /// Gets or sets the stiffness of the critically damped spring that <see cref="Settle(bool, double)"/> uses. The default is 800.
+    /// </summary>
     public double SpringStiffness { get; set; } = 800;
 
+    /// <summary>
+    /// Gets a value indicating whether a slide is in progress, timed or interactive.
+    /// </summary>
     public bool IsActive => _outgoing is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether a gesture drives the slide through <see cref="Progress"/>.
+    /// </summary>
     public bool IsInteractive => _interactive;
 
+    /// <summary>
+    /// Gets a value indicating whether a slide is in progress and <see cref="Step"/> drives it.
+    /// </summary>
     public bool IsAnimating => IsActive && !_interactive;
 
+    /// <summary>
+    /// Starts a timed slide. A workspace that is already part of a slide starts from its current offset.
+    /// </summary>
+    /// <param name="outgoing">The transform stack of the workspace that leaves.</param>
+    /// <param name="incoming">The transform stack of the workspace that arrives.</param>
+    /// <param name="area">The output area. Its width is the travel.</param>
+    /// <param name="direction">Zero or more moves the outgoing workspace to the left, and a negative value moves it to the right.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="outgoing"/> or <paramref name="incoming"/> is <see langword="null"/>.</exception>
     public void Begin(TransformStack outgoing, TransformStack incoming, in Box area, int direction)
     {
         ArgumentNullException.ThrowIfNull(outgoing);
@@ -61,6 +88,14 @@ public sealed class SlideTransition
         _timeline.Start(_nanos);
     }
 
+    /// <summary>
+    /// Starts a slide that a gesture drives through <see cref="Progress"/>. It does not move until the progress changes.
+    /// </summary>
+    /// <param name="outgoing">The transform stack of the workspace that leaves.</param>
+    /// <param name="incoming">The transform stack of the workspace that arrives, or <see langword="null"/> at the last workspace. Without it, a settle always returns.</param>
+    /// <param name="area">The output area. Its width is the travel.</param>
+    /// <param name="direction">Zero or more moves the outgoing workspace to the left, and a negative value moves it to the right.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="outgoing"/> is <see langword="null"/>.</exception>
     public void BeginInteractive(TransformStack outgoing, TransformStack? incoming, in Box area, int direction)
     {
         ArgumentNullException.ThrowIfNull(outgoing);
@@ -84,6 +119,9 @@ public sealed class SlideTransition
         Apply();
     }
 
+    /// <summary>
+    /// Gets or sets the fraction of the travel that the outgoing workspace covered, where 1 is a full switch. Only an interactive slide accepts a new value.
+    /// </summary>
     public double Progress
     {
         get => _width <= 0 ? 0 : -_outApplied / (_side * _width);
@@ -102,6 +140,10 @@ public sealed class SlideTransition
         }
     }
 
+    /// <summary>
+    /// Ends a gesture and runs the slide on the timeline to the end or back to the start. It does nothing when the slide is not interactive.
+    /// </summary>
+    /// <param name="commit"><see langword="true"/> to finish the switch. It counts as <see langword="false"/> when there is no incoming workspace.</param>
     public void Settle(bool commit)
     {
         if (!_interactive)
@@ -119,6 +161,11 @@ public sealed class SlideTransition
         _timeline.Start(_nanos);
     }
 
+    /// <summary>
+    /// Ends a gesture and hands the slide to a critically damped spring that starts at the gesture velocity. It does nothing when the slide is not interactive.
+    /// </summary>
+    /// <param name="commit"><see langword="true"/> to finish the switch. It counts as <see langword="false"/> when there is no incoming workspace.</param>
+    /// <param name="velocity">The gesture velocity, in travel fractions per second.</param>
     public void Settle(bool commit, double velocity)
     {
         if (!_interactive)
@@ -134,6 +181,11 @@ public sealed class SlideTransition
         _springing = true;
     }
 
+    /// <summary>
+    /// Applies the offsets for a tick. At the end it removes both translation nodes. A destroyed node ends the slide at once.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the timeline or the spring runs. It is <see langword="false"/> during a gesture.</returns>
     public bool Step(in FrameTick tick)
     {
         if (_outgoing is null || _interactive)

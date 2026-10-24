@@ -1,13 +1,28 @@
 namespace Basin.UI.ImGui;
 
+/// <summary>
+/// The shaders of the Dear ImGui Vulkan backend, which the Vulkan renderer of the ImGui host compiles. The constants name the source of the shaders.
+/// </summary>
 public static class ImGuiVulkanShaders
 {
+    /// <summary>
+    /// The Dear ImGui release that the shaders come from.
+    /// </summary>
     public const string SourceVersion = "Dear ImGui 1.92.2b";
 
+    /// <summary>
+    /// The file in the Dear ImGui tree that holds the original shaders.
+    /// </summary>
     public const string SourceFile = "backends/imgui_impl_vulkan.cpp";
 
+    /// <summary>
+    /// The license of the original shaders.
+    /// </summary>
     public const string SourceLicense = "MIT";
 
+    /// <summary>
+    /// Gets the SPIR-V words of the vertex shader. It scales and translates the position through push constants and passes the UV and the color on.
+    /// </summary>
     public static ReadOnlySpan<uint> Vertex =>
     [
         0x07230203, 0x00010000, 0x00080001, 0x0000002e, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,
@@ -53,6 +68,9 @@ public static class ImGuiVulkanShaders
         0x0000002d, 0x0000002c, 0x000100fd, 0x00010038,
     ];
 
+    /// <summary>
+    /// Gets the SPIR-V words of the fragment shader. It multiplies the vertex color by the texture sample.
+    /// </summary>
     public static ReadOnlySpan<uint> Fragment =>
     [
         0x07230203, 0x00010000, 0x00080001, 0x0000001e, 0x00000000, 0x00020011, 0x00000001, 0x0006000b,

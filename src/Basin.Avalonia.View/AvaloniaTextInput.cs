@@ -7,6 +7,10 @@ using Basin.Capabilities;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// An <see cref="ITextInputMethod"/> that uses the host platform input method through Avalonia.
+/// Preedit and commit text from the host IME reach the compositor through the post callback.
+/// </summary>
 public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
 {
     private readonly Action<Action> _post;
@@ -26,6 +30,10 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
     private bool _clientActive;
     private bool _shown;
 
+    /// <summary>
+    /// Makes a single view the host control that receives IME focus. Host text input on that view commits to the active text input.
+    /// </summary>
+    /// <param name="view">The view that shows the compositor.</param>
     public void AttachView(BasinToplevelView view)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -47,6 +55,10 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         };
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AvaloniaTextInput"/> class.
+    /// </summary>
+    /// <param name="postToCompositor">Runs work on the compositor thread. The events are raised from that work.</param>
     public AvaloniaTextInput(Action<Action> postToCompositor)
     {
         ArgumentNullException.ThrowIfNull(postToCompositor);
@@ -54,14 +66,25 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         Client = new ImeClient(this);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether an input method can serve text input now. It is always <see langword="true"/>.
+    /// </summary>
     public bool IsAvailable => true;
 
+    /// <summary>
+    /// Gets a value indicating whether the input method grabs the keyboard. It is always <see langword="false"/>, because the host IME sees keys first.
+    /// </summary>
     public bool HasKeyboardGrab => false;
 
+    /// <inheritdoc/>
     public event Action<PreeditString>? Preedit;
 
+    /// <inheritdoc/>
     public event Action<string>? CommitString;
 
+    /// <summary>
+    /// Occurs when the input method asks to delete text. This implementation never raises it.
+    /// </summary>
     public event Action<uint, uint>? DeleteSurroundingText
     {
         add
@@ -73,8 +96,12 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public event Action? Done;
 
+    /// <summary>
+    /// Occurs when <see cref="IsAvailable"/> changes. This implementation never raises it.
+    /// </summary>
     public event Action? AvailabilityChanged
     {
         add
@@ -92,6 +119,7 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
 
     internal Func<int, BasinToplevelView?>? UiWindowResolver { get; set; }
 
+    /// <inheritdoc/>
     public void Activate(Surface surface)
     {
         _active = surface;
@@ -119,6 +147,7 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         });
     }
 
+    /// <inheritdoc/>
     public void Deactivate(Surface surface)
     {
         if (!ReferenceEquals(_active, surface))
@@ -150,6 +179,11 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         });
     }
 
+    /// <summary>
+    /// Offers or withdraws IME focus on the attached view, so that the host shows or hides its soft keyboard.
+    /// It does nothing without an attached view.
+    /// </summary>
+    /// <param name="show"><see langword="true"/> to show the keyboard.</param>
     public void ShowSoftKeyboard(bool show)
     {
         if (_view is not { } view)
@@ -177,6 +211,7 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
             RoutedEvent = InputMethod.TextInputMethodClientRequeryRequestedEvent,
         });
 
+    /// <inheritdoc/>
     public void SurroundingText(string text, uint cursor, uint anchor)
     {
         _surrounding = text;
@@ -184,12 +219,22 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         _surroundingAnchor = anchor;
     }
 
+    /// <summary>
+    /// Receives the content type. This implementation ignores it.
+    /// </summary>
+    /// <param name="hint">The <c>zwp_text_input_v3.content_hint</c> bits.</param>
+    /// <param name="purpose">The <c>zwp_text_input_v3.content_purpose</c> value.</param>
     public void ContentType(uint hint, uint purpose)
     {
     }
 
+    /// <inheritdoc/>
     public void CursorRectangle(in Box rect) => _cursorRect = rect;
 
+    /// <summary>
+    /// Sends the last cursor area and surrounding text to the host IME on the UI thread.
+    /// </summary>
+    /// <param name="serial">The number of commits that the text input made. It is not used.</param>
     public void Commit(uint serial)
     {
         var rect = _cursorRect;
@@ -199,10 +244,23 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         Dispatcher.UIThread.Post(() => Client.UpdateContext(rect, surrounding, cursor, anchor));
     }
 
+    /// <summary>
+    /// Receives a key for a keyboard grab. This implementation has no grab and ignores it.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="keycode">The evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
     public void ForwardKey(uint timeMs, uint keycode, bool pressed)
     {
     }
 
+    /// <summary>
+    /// Receives the modifier state for a keyboard grab. This implementation has no grab and ignores it.
+    /// </summary>
+    /// <param name="depressed">The mask of modifiers that are held down.</param>
+    /// <param name="latched">The mask of latched modifiers.</param>
+    /// <param name="locked">The mask of locked modifiers.</param>
+    /// <param name="group">The effective layout index.</param>
     public void ForwardModifiers(uint depressed, uint latched, uint locked, uint group)
     {
     }
@@ -247,6 +305,9 @@ public sealed class AvaloniaTextInput : ITextInputMethod, IDisposable
         });
     }
 
+    /// <summary>
+    /// Stops delivery of host IME text to the compositor. Work that is already posted then does nothing.
+    /// </summary>
     public void Dispose() => _disposed = true;
 
     internal sealed class ImeClient : TextInputMethodClient

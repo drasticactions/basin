@@ -1,7 +1,14 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Evaluates <see cref="GridGlowShader"/> on the CPU in doubles. Tests hold the shader rows and the warp inverse to it.
+/// </summary>
 public sealed class GridGlowField : GridGlowTwin
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GridGlowField"/> class.
+    /// </summary>
+    /// <param name="uniforms">The values that <see cref="GridGlowShader.Pack"/> wrote.</param>
     public GridGlowField(ReadOnlySpan<PixelShaderUniformValue> uniforms)
         : base(uniforms, GridGlowShader.UniformCount, 8, 18)
     {
@@ -333,6 +340,12 @@ public sealed class GridGlowField : GridGlowTwin
 
     private bool Flag(int bit) => ((int)S(6).W & bit) != 0;
 
+    /// <summary>
+    /// Inverts the canvas warp at a point, as the shader does, with Newton steps on the zone curve and a search in a corner.
+    /// </summary>
+    /// <param name="px">The horizontal position, with the view zoom already removed.</param>
+    /// <param name="py">The vertical position, with the view zoom already removed.</param>
+    /// <returns>The canvas point. It is the input point when the map is separable.</returns>
     public (double X, double Y) Unwarp(double px, double py)
     {
         V sa = W0a, sb = W0b, ea = W2a, eb = W2b;
@@ -415,6 +428,7 @@ public sealed class GridGlowField : GridGlowTwin
         return Corner(sa, sb, sd, ea, eb, ed, px, py);
     }
 
+    /// <inheritdoc/>
     public override (double R, double G, double B) At(double px, double py)
     {
         var wx = S(0).Y + ((px - S(0).Y) / S(0).X);

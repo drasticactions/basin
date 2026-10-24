@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Shell.Weston;
 
+/// <summary>
+/// The <c>weston_desktop_shell</c> global. It forwards the requests of one bound shell client to <see cref="IShellRoles"/> and sends <see cref="IShellClient"/> events back to it.
+/// </summary>
 public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
 {
+    /// <summary>
+    /// The version of <c>weston_desktop_shell</c> that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorInvalidArgument = 0;
@@ -16,6 +22,13 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
     private readonly Func<int, bool>? _isPrivileged;
     private WestonDesktopShellResource? _bound;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WestonDesktopShellGlobal"/> class. It creates the global on <paramref name="display"/> at once.
+    /// </summary>
+    /// <param name="display">The display that advertises the global.</param>
+    /// <param name="compositor">The compositor global that resolves the client's surfaces.</param>
+    /// <param name="roles">The shell policy that receives the requests.</param>
+    /// <param name="isPrivileged">The test that gets a client process ID and returns <see langword="true"/> when that client can bind. With <see langword="null"/>, any client can bind. A refused bind gets a protocol error.</param>
     public WestonDesktopShellGlobal(
         WlServerDisplay display,
         CompositorGlobal compositor,
@@ -31,8 +44,12 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         _global = display.CreateGlobal(WestonDesktopShell.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a shell client is bound now. Only one client can bind at a time, and a second bind gets a protocol error.
+    /// </summary>
     public bool HasClient => _bound is { IsDestroyed: false };
 
+    /// <inheritdoc/>
     public void Configure(Surface surface, uint edges, int width, int height)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -42,6 +59,7 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void PrepareLockSurface()
     {
         if (_bound is { IsDestroyed: false } shell)
@@ -50,6 +68,7 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void GrabCursor(ShellGrabCursor cursor)
     {
         if (_bound is { IsDestroyed: false } shell)
@@ -58,6 +77,9 @@ public sealed class WestonDesktopShellGlobal : IShellClient, IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys the global. Clients that are bound keep their resources until they disconnect.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

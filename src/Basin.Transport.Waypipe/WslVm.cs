@@ -5,13 +5,25 @@ using System.Text;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// Queries the WSL2 VM through wsl.exe. Each call starts a process.
+/// </summary>
 [SupportedOSPlatform("windows")]
 public static class WslVm
 {
     private const string Executable = "wsl.exe";
 
+    /// <summary>
+    /// Gets or sets the longest time that one wsl.exe call can take before it is killed. The default is 30 seconds.
+    /// </summary>
     public static TimeSpan Timeout { get; set; } = TimeSpan.FromSeconds(30);
 
+    /// <summary>
+    /// Gets the VM id of the WSL2 VM through "wslinfo --vm-id". This call starts the VM when it is stopped.
+    /// </summary>
+    /// <param name="cancellation">Cancels the query and kills wsl.exe.</param>
+    /// <returns>A task that completes with the VM id.</returns>
+    /// <exception cref="WslVmException">WSL is not installed, is older than 2.6.1, has no default distribution, timed out, or printed no VM id.</exception>
     public static async Task<Guid> QueryIdAsync(CancellationToken cancellation = default)
     {
         var (exit, output, error) = await RunAsync(["--", "wslinfo", "--vm-id"], cancellation).ConfigureAwait(false);
@@ -41,6 +53,12 @@ public static class WslVm
             : $"`wsl.exe -- wslinfo --vm-id` exited {exit}: {said}");
     }
 
+    /// <summary>
+    /// Tells whether a WSL distribution runs, without a start of the VM.
+    /// </summary>
+    /// <param name="cancellation">Cancels the query and kills wsl.exe.</param>
+    /// <returns>A task that completes with <see langword="true"/> when wsl.exe lists a running distribution, and <see langword="false"/> when it lists none or fails.</returns>
+    /// <exception cref="WslVmException">WSL is not installed or the call timed out.</exception>
     public static async Task<bool> IsRunningAsync(CancellationToken cancellation = default)
     {
         var (exit, output, _) = await RunAsync(["--list", "--running", "--quiet"], cancellation).ConfigureAwait(false);

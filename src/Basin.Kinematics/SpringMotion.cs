@@ -1,5 +1,8 @@
 namespace Basin.Kinematics;
 
+/// <summary>
+/// Moves one value toward an anchor as a mass-spring-damper. It integrates with RK4 at a fixed hundredth of a second and interpolates between the samples.
+/// </summary>
 public struct SpringMotion
 {
     private const double Timestep = 1.0 / 100.0;
@@ -10,6 +13,11 @@ public struct SpringMotion
     private double _nextVelocity;
     private double _t;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SpringMotion"/> struct at position 0 with an <see cref="Epsilon"/> of 1. The expression <c>new SpringMotion()</c> does not call this constructor.
+    /// </summary>
+    /// <param name="springConstant">The spring constant. Infinity makes the value jump to the anchor.</param>
+    /// <param name="dampingRatio">The damping ratio. 1 is critical damping.</param>
     public SpringMotion(double springConstant = 200.0, double dampingRatio = 1.1)
     {
         SpringConstant = springConstant;
@@ -18,20 +26,45 @@ public struct SpringMotion
         _t = 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets the spring constant. Infinity makes the next <see cref="Advance"/> jump to <see cref="Anchor"/>.
+    /// </summary>
     public double SpringConstant { get; set; }
 
+    /// <summary>
+    /// Gets or sets the damping ratio. 1 is critical damping.
+    /// </summary>
     public double DampingRatio { get; set; }
 
+    /// <summary>
+    /// Gets or sets the distance from the anchor and the speed below which the motion counts as settled.
+    /// </summary>
     public double Epsilon { get; set; }
 
+    /// <summary>
+    /// Gets or sets the position that the spring pulls toward.
+    /// </summary>
     public double Anchor { get; set; }
 
+    /// <summary>
+    /// Gets the position, interpolated between the last two integration samples.
+    /// </summary>
     public readonly double Position => Lerp(_previousPosition, _nextPosition, _t);
 
+    /// <summary>
+    /// Gets the velocity in units per second, interpolated between the last two integration samples.
+    /// </summary>
     public readonly double Velocity => Lerp(_previousVelocity, _nextVelocity, _t);
 
+    /// <summary>
+    /// Gets a value indicating whether the distance from the anchor or the speed is more than <see cref="Epsilon"/>.
+    /// </summary>
     public readonly bool IsMoving => Math.Abs(Position - Anchor) > Epsilon || Math.Abs(Velocity) > Epsilon;
 
+    /// <summary>
+    /// Sets the position at once and keeps the current velocity.
+    /// </summary>
+    /// <param name="position">The new position.</param>
     public void SetPosition(double position)
     {
         var velocity = Velocity;
@@ -40,6 +73,10 @@ public struct SpringMotion
         _t = 1.0;
     }
 
+    /// <summary>
+    /// Sets the velocity at once and keeps the current position.
+    /// </summary>
+    /// <param name="velocity">The new velocity, in units per second.</param>
     public void SetVelocity(double velocity)
     {
         var position = Position;
@@ -48,6 +85,10 @@ public struct SpringMotion
         _t = 1.0;
     }
 
+    /// <summary>
+    /// Advances the motion by an elapsed time. A motion that is settled does not change.
+    /// </summary>
+    /// <param name="millis">The elapsed time in milliseconds.</param>
     public void Advance(double millis)
     {
         if (!IsMoving)

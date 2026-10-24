@@ -3,6 +3,9 @@ using static Basin.Video.WebCodecs.WebCodecsLog;
 
 namespace Basin.Video.WebCodecs;
 
+/// <summary>
+/// Decodes video through the browser's WebCodecs <c>VideoDecoder</c>. Its sessions are asynchronous and implement <see cref="IAsyncVideoDecodeSession"/>.
+/// </summary>
 public sealed class WebCodecsVideoDecoder : IVideoDecoder
 {
     private readonly bool _h264;
@@ -16,8 +19,15 @@ public sealed class WebCodecsVideoDecoder : IVideoDecoder
         _av1 = av1;
     }
 
+    /// <summary>
+    /// Gets the reason that the last <see cref="TryCreateAsync"/> returned <see langword="null"/>, or <see langword="null"/> after a success.
+    /// </summary>
     public static string? WhyNot { get; private set; }
 
+    /// <summary>
+    /// Imports the WebCodecs module and asks the browser once which codecs it decodes. <see cref="Supports"/> answers from that probe.
+    /// </summary>
+    /// <returns>The decoder, or <see langword="null"/> outside a browser, when the module does not import, or without <c>VideoDecoder</c>. <see cref="WhyNot"/> holds the reason.</returns>
     public static async Task<WebCodecsVideoDecoder?> TryCreateAsync()
     {
         if (!OperatingSystem.IsBrowser())
@@ -50,6 +60,9 @@ public sealed class WebCodecsVideoDecoder : IVideoDecoder
         return new WebCodecsVideoDecoder(h264, vp9, av1);
     }
 
+    /// <summary>Returns the answer that the browser gave for <paramref name="codec"/> when the decoder was created.</summary>
+    /// <param name="codec">The codec to check.</param>
+    /// <returns><see langword="true"/> when the browser accepts the codec configuration.</returns>
     public bool Supports(VideoCodec codec) => codec switch
     {
         VideoCodec.H264 => _h264,
@@ -58,6 +71,13 @@ public sealed class WebCodecsVideoDecoder : IVideoDecoder
         _ => false,
     };
 
+    /// <summary>Opens an asynchronous session that decodes one stream into buffers of one size and format.</summary>
+    /// <param name="codec">The codec of the stream.</param>
+    /// <param name="width">The destination width in pixels. Larger decoded frames are cropped.</param>
+    /// <param name="height">The destination height in pixels. Larger decoded frames are cropped.</param>
+    /// <param name="format">The destination pixel format.</param>
+    /// <returns>The session, which also implements <see cref="IAsyncVideoDecodeSession"/>. The caller disposes it.</returns>
+    /// <exception cref="NotSupportedException"><see cref="Supports"/> returns <see langword="false"/> for <paramref name="codec"/>, or the session cannot write <paramref name="format"/>.</exception>
     public IVideoDecodeSession Open(VideoCodec codec, int width, int height, DrmFormat format)
     {
         if (!Supports(codec))

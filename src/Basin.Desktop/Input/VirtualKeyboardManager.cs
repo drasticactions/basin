@@ -7,8 +7,14 @@ using Xkb;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_virtual_keyboard_manager_v1</c> global. Each virtual keyboard becomes an injected keyboard on the input sink of its seat, or of the default sink.
+/// </summary>
 public sealed class VirtualKeyboardManager : IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const int MaxKeymapBytes = 8 * 1024 * 1024;
@@ -16,6 +22,11 @@ public sealed class VirtualKeyboardManager : IDisposable
     private readonly WlGlobal _global;
     private readonly IInputSink? _sink;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VirtualKeyboardManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="sink">The default sink. When it is <see langword="null"/>, a keyboard with no seat has no effect.</param>
     public VirtualKeyboardManager(WlServerDisplay display, IInputSink? sink)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -23,8 +34,14 @@ public sealed class VirtualKeyboardManager : IDisposable
         _global = display.CreateGlobal(ZwpVirtualKeyboardManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a client sends a keymap. The arguments are the keymap fd and its size in bytes. The handler owns the fd and must close it. Without a handler, the manager closes it.
+    /// </summary>
     public event Action<ClientFd, uint>? KeymapSubmitted;
 
+    /// <summary>
+    /// Removes the global.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

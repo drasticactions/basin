@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Hypr;
 
+/// <summary>
+/// Advertises <c>hyprland_surface_manager_v1</c>. Opacity and visible-region requests are double-buffered and go to <see cref="ISurfaceAppearance"/> on the next surface commit.
+/// </summary>
 public sealed class HyprlandSurfaceManager : IDisposable
 {
+    /// <summary>
+    /// The highest protocol version that the global advertises.
+    /// </summary>
     public const int Version = 2;
 
     private readonly WlGlobal _global;
@@ -15,6 +21,13 @@ public sealed class HyprlandSurfaceManager : IDisposable
     private readonly ISurfaceAppearance _appearance;
     private readonly HashSet<Surface> _claimed = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HyprlandSurfaceManager"/> class.
+    /// </summary>
+    /// <param name="display">The display that hosts the global.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces and regions.</param>
+    /// <param name="appearance">The store that receives the committed opacity and visible region.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public HyprlandSurfaceManager(WlServerDisplay display, CompositorGlobal compositor, ISurfaceAppearance appearance)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -25,10 +38,21 @@ public sealed class HyprlandSurfaceManager : IDisposable
         _global = display.CreateGlobal(HyprlandSurfaceManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets the store that receives the committed opacity and visible region.
+    /// </summary>
     public ISurfaceAppearance Appearance => _appearance;
 
+    /// <summary>
+    /// Tells whether a <c>hyprland_surface_v1</c> object exists for a surface. A surface can have only one.
+    /// </summary>
+    /// <param name="surface">The surface to check.</param>
+    /// <returns><see langword="true"/> when a live object holds the surface.</returns>
     public bool IsClaimed(Surface surface) => _claimed.Contains(surface);
 
+    /// <summary>
+    /// Destroys the global. Existing surface objects keep working.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

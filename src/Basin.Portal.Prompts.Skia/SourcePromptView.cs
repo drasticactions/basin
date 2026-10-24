@@ -3,6 +3,10 @@ using SkiaSharp;
 
 namespace Basin.Portal.Prompts.Skia;
 
+/// <summary>
+/// Asks the user which outputs or windows to share. It shows up to 8 rows at a time and scrolls the rest.
+/// The first row starts selected.
+/// </summary>
 public sealed class SourcePromptView : SkiaPromptView
 {
     private const int MaxRows = 8;
@@ -13,6 +17,11 @@ public sealed class SourcePromptView : SkiaPromptView
     private int _hotRow = -1;
     private int _scroll;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SourcePromptView"/> class with a row for each output and window of the requested kinds.
+    /// </summary>
+    /// <param name="theme">The theme to draw with.</param>
+    /// <param name="prompt">The request that lists the sources and the kinds.</param>
     public SourcePromptView(SkiaPromptTheme theme, in SourcePrompt prompt)
         : base(theme, "Share your screen?", SkiaPortalPrompts.AppLine(prompt.AppId, prompt.DisplayName), prompt.IconPath)
     {
@@ -44,18 +53,40 @@ public sealed class SourcePromptView : SkiaPromptView
         AddButton("Share", PromptResponse.Accepted, primary: true);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the user asked to remember the choice.
+    /// </summary>
     public bool Persist { get; private set; }
 
+    /// <summary>
+    /// Gets a new list of the selected sources, in row order.
+    /// </summary>
     public IReadOnlyList<SelectedSource> Selection => _rows.Where(r => r.Selected).Select(r => r.Source).ToList();
 
+    /// <summary>
+    /// Gets the number of source rows.
+    /// </summary>
     public int RowCount => _rows.Count;
 
     private int VisibleRows => Math.Min(_rows.Count, MaxRows);
 
+    /// <summary>
+    /// Gets the height of the dialog in logical pixels, from the visible rows and the persist row.
+    /// </summary>
     public override int Height => BodyTop + (Math.Max(1, VisibleRows) * RowHeight) + (_offerPersist ? RowHeight : 0) + 16 + ButtonHeight + Padding + 12;
 
+    /// <summary>
+    /// Allows the Share button only when a source is selected.
+    /// </summary>
+    /// <returns><see langword="true"/> when a row is selected.</returns>
     protected override bool CanAccept() => _rows.Any(r => r.Selected);
 
+    /// <summary>
+    /// Paints the visible source rows and the persist row.
+    /// </summary>
+    /// <param name="canvas">The canvas to draw on.</param>
+    /// <param name="width">The surface width in logical pixels.</param>
+    /// <param name="height">The surface height in logical pixels.</param>
     protected override void PaintBody(SKCanvas canvas, int width, int height)
     {
         var y = BodyTop;
@@ -118,6 +149,12 @@ public sealed class SourcePromptView : SkiaPromptView
         return _offerPersist && slot == VisibleRows ? PersistRowIndex : -1;
     }
 
+    /// <summary>
+    /// Highlights the row under the pointer.
+    /// </summary>
+    /// <param name="x">The horizontal position in surface coordinates.</param>
+    /// <param name="y">The vertical position in surface coordinates.</param>
+    /// <returns><see langword="true"/> when the highlighted row changed.</returns>
     protected override bool BodyPointerMove(double x, double y)
     {
         var row = RowAt(x, y);
@@ -126,6 +163,12 @@ public sealed class SourcePromptView : SkiaPromptView
         return changed;
     }
 
+    /// <summary>
+    /// Selects or toggles the row under the pointer. With a single selection, the row replaces the selection.
+    /// </summary>
+    /// <param name="x">The horizontal position in surface coordinates.</param>
+    /// <param name="y">The vertical position in surface coordinates.</param>
+    /// <returns><see langword="true"/> when a row changed.</returns>
     protected override bool BodyPointerRelease(double x, double y)
     {
         var row = RowAt(x, y);
@@ -138,6 +181,12 @@ public sealed class SourcePromptView : SkiaPromptView
         return true;
     }
 
+    /// <summary>
+    /// Scrolls the rows by one row in the direction of the vertical value.
+    /// </summary>
+    /// <param name="dx">The horizontal scroll value. It is ignored.</param>
+    /// <param name="dy">The vertical scroll value.</param>
+    /// <returns><see langword="true"/> when the rows scrolled.</returns>
     public override bool PointerAxis(double dx, double dy)
     {
         var next = Math.Clamp(_scroll + (dy > 0 ? 1 : dy < 0 ? -1 : 0), 0, Math.Max(0, _rows.Count - MaxRows));
@@ -172,6 +221,11 @@ public sealed class SourcePromptView : SkiaPromptView
         _rows[index].Selected = true;
     }
 
+    /// <summary>
+    /// Toggles the highlighted row on Space. The Up and Down keys move the selection and keep it visible.
+    /// </summary>
+    /// <param name="key">The evdev keycode.</param>
+    /// <returns><see langword="true"/> when the key had an effect.</returns>
     protected override bool BodyKey(uint key)
     {
         switch (key)

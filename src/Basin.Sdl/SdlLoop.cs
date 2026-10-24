@@ -6,8 +6,15 @@ using static Basin.Sdl.SdlLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Owns SDL initialization and the event pump of an SDL host. The thread that constructs it is the SDL main thread and the compositor thread.
+/// Only <see cref="Wake"/> and <see cref="Post"/> are safe from another thread.
+/// </summary>
 public sealed class SdlLoop : IDisposable
 {
+    /// <summary>
+    /// The longest idle wait in milliseconds when the host has no loop descriptor to watch.
+    /// </summary>
     public const int UnwatchedPollMs = 16;
 
     private readonly ThreadAffinity _thread;
@@ -22,6 +29,12 @@ public sealed class SdlLoop : IDisposable
     private long _wakeAt = long.MaxValue;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlLoop"/> class. It sets the input hints, initializes SDL video and events, and captures the thread.
+    /// The consumer must construct the compositor host after the loop, on the same thread.
+    /// </summary>
+    /// <param name="options">The application name and the video driver, or <see langword="null"/> for the defaults.</param>
+    /// <exception cref="InvalidOperationException">SDL cannot initialize or register the wake event.</exception>
     public SdlLoop(SdlLoopOptions? options = null)
     {
         options ??= new SdlLoopOptions();
@@ -73,18 +86,41 @@ public sealed class SdlLoop : IDisposable
         (SDL.Hints.QuitOnLastWindowClose, "0"),
     ];
 
+    /// <summary>
+    /// Gets the SDL user event type that <see cref="Wake"/> pushes. The loop consumes these events and no sink sees them.
+    /// </summary>
     public uint WakeEventType { get; }
 
+    /// <summary>
+    /// Gets the name of the SDL video driver in use, for example "wayland", "x11" or "offscreen".
+    /// </summary>
     public string VideoDriver { get; }
 
+    /// <summary>
+    /// Gets the affinity of the SDL main thread.
+    /// </summary>
     public ThreadAffinity Affinity => _thread;
 
+    /// <summary>
+    /// Gets a value indicating whether SDL sent a quit event or the consumer called <see cref="RequestQuit"/>.
+    /// </summary>
     public bool QuitRequested { get; private set; }
 
+    /// <summary>
+    /// Gets the number of wake events that the loop consumed. Coalesced wakes count once.
+    /// </summary>
     public long Wakes { get; private set; }
 
+    /// <summary>
+    /// Sets <see cref="QuitRequested"/>. It does not wake the loop.
+    /// </summary>
     public void RequestQuit() => QuitRequested = true;
 
+    /// <summary>
+    /// Wakes the loop whenever the host has work: when its loop descriptor is ready or its session asks for a wakeup.
+    /// </summary>
+    /// <param name="host">The host to serve.</param>
+    /// <exception cref="InvalidOperationException">The loop already serves a host.</exception>
     public void Attach(BasinCompositorHost host)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -99,6 +135,9 @@ public sealed class SdlLoop : IDisposable
         host.Session.WakeupRequested += _onWake;
     }
 
+    /// <summary>
+    /// Stops the wakes from the attached host. Without a host it does nothing.
+    /// </summary>
     public void Detach()
     {
         _thread.Assert();
@@ -112,6 +151,10 @@ public sealed class SdlLoop : IDisposable
         _host = null;
     }
 
+    /// <summary>
+    /// Adds a sink that receives every SDL event the loop drains, after the sinks that were added before it.
+    /// </summary>
+    /// <param name="sink">The sink to add.</param>
     public void AddSink(ISdlEventSink sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -119,12 +162,20 @@ public sealed class SdlLoop : IDisposable
         _sinks.Add(sink);
     }
 
+    /// <summary>
+    /// Removes a sink. A sink that is not present is ignored.
+    /// </summary>
+    /// <param name="sink">The sink to remove.</param>
     public void RemoveSink(ISdlEventSink sink)
     {
         _thread.Assert();
         _sinks.Remove(sink);
     }
 
+    /// <summary>
+    /// Pushes one wake event, so that a blocked <see cref="Pump"/> returns. It is safe from any thread.
+    /// A wake that is still pending makes the call do nothing.
+    /// </summary>
     public void Wake()
     {
         if (Interlocked.Exchange(ref _wakePending, 1) == 1)
@@ -140,6 +191,11 @@ public sealed class SdlLoop : IDisposable
         }
     }
 
+    /// <summary>
+    /// Queues an action to run on the SDL main thread and wakes the loop. It is safe from any thread.
+    /// The loop runs the queue after it drains the SDL events, and logs an exception that an action raises.
+    /// </summary>
+    /// <param name="action">The action to run.</param>
     public void Post(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
@@ -147,6 +203,10 @@ public sealed class SdlLoop : IDisposable
         Wake();
     }
 
+    /// <summary>
+    /// Occurs on Windows only, when an exposed event reaches the event watch on the main thread.
+    /// This lets a window repaint while the Win32 modal loop of a move or resize blocks <see cref="Pump"/>. The argument is the window id.
+    /// </summary>
     public event Action<uint>? WindowExposedInWatch;
 
     private bool OnWatch(nint userdata, ref SDL.Event e)
@@ -166,8 +226,15 @@ public sealed class SdlLoop : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Records that work is pending, so that <see cref="IdleTimeout"/> returns 0 until <see cref="TakeActivity"/> clears it.
+    /// </summary>
     public void MarkActivity() => _activity = true;
 
+    /// <summary>
+    /// Reads and clears the activity flag. A wake, a quit, a posted action and an event that a sink took set the flag.
+    /// </summary>
+    /// <returns><see langword="true"/> when there was activity since the last call.</returns>
     public bool TakeActivity()
     {
         var activity = _activity;
@@ -175,6 +242,10 @@ public sealed class SdlLoop : IDisposable
         return activity;
     }
 
+    /// <summary>
+    /// Asks the loop to end its idle wait after a delay, and to mark activity then. An earlier request wins.
+    /// </summary>
+    /// <param name="delayMs">The delay in milliseconds. A negative value counts as 0.</param>
     public void WakeAfter(int delayMs)
     {
         _thread.Assert();
@@ -203,8 +274,15 @@ public sealed class SdlLoop : IDisposable
         return 0;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether activity, a posted action or a wake is pending.
+    /// </summary>
     public bool HasPendingWork => _activity || !_posted.IsEmpty || Volatile.Read(ref _wakePending) == 1;
 
+    /// <summary>
+    /// Computes how long the next <see cref="Pump"/> can wait.
+    /// </summary>
+    /// <returns>0 when work is pending, -1 to wait with no limit, else the wait in milliseconds. It is at most <see cref="UnwatchedPollMs"/> when the host has no descriptor to watch.</returns>
     public int IdleTimeout()
     {
         _thread.Assert();
@@ -224,6 +302,12 @@ public sealed class SdlLoop : IDisposable
         return timed < 0 ? unwatched : Math.Min(unwatched, timed);
     }
 
+    /// <summary>
+    /// Waits for an SDL event, drains every pending event to the sinks, and then runs the posted actions.
+    /// </summary>
+    /// <param name="timeoutMs">The longest wait in milliseconds, 0 to poll, or -1 to wait with no limit.</param>
+    /// <returns><see langword="true"/> when at least one SDL event arrived.</returns>
+    /// <exception cref="ObjectDisposedException">The loop is disposed.</exception>
     public bool Pump(int timeoutMs)
     {
         _thread.Assert();
@@ -294,6 +378,9 @@ public sealed class SdlLoop : IDisposable
         }
     }
 
+    /// <summary>
+    /// Detaches the host, runs the posted actions that remain, drops the sinks and quits SDL. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

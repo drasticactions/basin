@@ -6,6 +6,9 @@ using Wayland.Server;
 
 namespace Basin.Shell.Nested;
 
+/// <content>
+/// The input routing, grabs, keys, switcher and consumer popups of the shell.
+/// </content>
 public sealed partial class NestedShell
 {
     private enum GrabMode
@@ -52,8 +55,16 @@ public sealed partial class NestedShell
     private ManagedWindow? _autoRaiseCandidate;
     private long _autoRaiseAt;
 
+    /// <summary>
+    /// Gets the pointer position in logical layout coordinates.
+    /// </summary>
     public (double X, double Y) PointerPosition => (_cursorX, _cursorY);
 
+    /// <summary>
+    /// Routes one input event of the host view to a grab, a frame, a consumer UI surface, the key table or the seat.
+    /// It does nothing after the shell is disposed.
+    /// </summary>
+    /// <param name="input">The event, with positions in logical layout coordinates.</param>
     public void HandleInput(in BasinViewInput input)
     {
         if (_disposed)
@@ -118,6 +129,10 @@ public sealed partial class NestedShell
         }
     }
 
+    /// <summary>
+    /// Runs the timed work of the shell: the long-press of a touch and the auto-raise. The host must call it often, for example once per frame.
+    /// </summary>
+    /// <param name="nowMillis">The time on the <see cref="Environment.TickCount64"/> clock.</param>
     public void Tick(long nowMillis)
     {
         TickLongPress(nowMillis);
@@ -619,6 +634,13 @@ public sealed partial class NestedShell
         }
     }
 
+    /// <summary>
+    /// Starts an interactive move. The move ends at the next button release. It does nothing for a window that is not mapped or is fullscreen.
+    /// </summary>
+    /// <param name="window">The window to move.</param>
+    /// <param name="serial">The serial of the touch down that started the move, so that the touch point drives it, or <see langword="null"/> for the pointer.</param>
+    /// <param name="keepTitleOnScreen"><see langword="true"/> to keep the title bar inside the work area during the move.</param>
+    /// <param name="anchor">The grab point in logical layout coordinates, or <see langword="null"/> for the pointer position.</param>
     public void BeginMove(ManagedWindow window, uint? serial, bool keepTitleOnScreen = true, Point? anchor = null)
     {
         if (!window.IsMapped || window.Fullscreen)
@@ -673,6 +695,14 @@ public sealed partial class NestedShell
             clipped.Height - insets.Top - insets.Bottom);
     }
 
+    /// <summary>
+    /// Starts an interactive resize. It does nothing for a window that is not mapped, fullscreen or maximized, or when <paramref name="edges"/> is <see cref="ResizeEdges.None"/>.
+    /// </summary>
+    /// <param name="window">The window to resize.</param>
+    /// <param name="edges">The edges that the resize moves.</param>
+    /// <param name="serial">The serial of the touch down that started the resize, so that the touch point drives it, or <see langword="null"/> for the pointer.</param>
+    /// <param name="keepTitleOnScreen"><see langword="true"/> to clip the resize to the work area.</param>
+    /// <param name="anchor">The grab point in logical layout coordinates, or <see langword="null"/> for the pointer position.</param>
     public void BeginResize(ManagedWindow window, ResizeEdges edges, uint? serial, bool keepTitleOnScreen = true, Point? anchor = null)
     {
         if (!window.IsMapped || window.Fullscreen || window.Maximized || edges == ResizeEdges.None)
@@ -1259,8 +1289,17 @@ public sealed partial class NestedShell
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the window switcher is open.
+    /// </summary>
     public bool SwitcherOpen => _switcherOpen;
 
+    /// <summary>
+    /// Gives keyboard focus to a consumer UI surface, for example a panel search field, until <see cref="ReleasePanelKeyboard"/>.
+    /// Focus changes between windows do not take it back.
+    /// </summary>
+    /// <param name="surface">The surface that gets the keyboard.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public void GivePanelKeyboard(IUISurface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -1269,6 +1308,9 @@ public sealed partial class NestedShell
         _router.SetKeyboardFocus(surface, [.. _pressedKeys]);
     }
 
+    /// <summary>
+    /// Gives keyboard focus back to the focused window. It does nothing when the panel does not have the keyboard.
+    /// </summary>
     public void ReleasePanelKeyboard()
     {
         if (!_panelHasKeyboard)
@@ -1280,12 +1322,27 @@ public sealed partial class NestedShell
         ApplyKeyboardFocus();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a consumer UI surface holds the keyboard through <see cref="GivePanelKeyboard"/>.
+    /// </summary>
     public bool PanelHasKeyboard => _panelHasKeyboard;
 
+    /// <summary>
+    /// Occurs when a press or a touch lands outside every open consumer popup and its owner. The shell consumes that press.
+    /// </summary>
     public event Action? PopupDismissRequested;
 
+    /// <summary>
+    /// Gets a value indicating whether a consumer popup is open.
+    /// </summary>
     public bool HasOpenPopups => _uiPopups.Count > 0;
 
+    /// <summary>
+    /// Records an open consumer popup. A press outside the popup and its owner then raises <see cref="PopupDismissRequested"/>.
+    /// </summary>
+    /// <param name="popup">The popup surface.</param>
+    /// <param name="owner">The surface that opened the popup.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="popup"/> or <paramref name="owner"/> is <see langword="null"/>.</exception>
     public void PopupOpened(IUISurface popup, IUISurface owner)
     {
         ArgumentNullException.ThrowIfNull(popup);
@@ -1293,6 +1350,11 @@ public sealed partial class NestedShell
         _uiPopups[popup] = owner;
     }
 
+    /// <summary>
+    /// Removes a consumer popup that <see cref="PopupOpened"/> recorded.
+    /// </summary>
+    /// <param name="popup">The popup surface.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="popup"/> is <see langword="null"/>.</exception>
     public void PopupClosed(IUISurface popup)
     {
         ArgumentNullException.ThrowIfNull(popup);

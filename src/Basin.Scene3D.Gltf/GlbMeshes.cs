@@ -3,8 +3,19 @@ using Basin.Scene3D;
 
 namespace Basin.Scene3D.Gltf;
 
+/// <summary>
+/// Bakes the rigid meshes of a glTF file into <see cref="WorldMesh"/> values.
+/// </summary>
 public static class GlbMeshes
 {
+    /// <summary>
+    /// Bakes every mesh without a skin under the scene roots into one mesh, each at its node's world matrix.
+    /// </summary>
+    /// <param name="document">The parsed file.</param>
+    /// <param name="hidden">The names of nodes to skip. A skipped node also skips its children.</param>
+    /// <param name="image">The texture of the result, or <see langword="null"/>.</param>
+    /// <returns>A new mesh in the file's world space.</returns>
+    /// <exception cref="NotSupportedException">A primitive is not a triangle list, or an accessor has a type the reader does not read.</exception>
     public static WorldMesh Flatten(GlbDocument document, IReadOnlyCollection<string> hidden, WorldImage? image)
     {
         var world = document.WorldMatrices();
@@ -37,6 +48,15 @@ public static class GlbMeshes
         }
     }
 
+    /// <summary>
+    /// Appends the triangles of one glTF mesh at a transform. A primitive with no POSITION attribute is skipped. A missing normal becomes +y.
+    /// </summary>
+    /// <param name="document">The parsed file.</param>
+    /// <param name="mesh">The index of the mesh in <see cref="GltfRoot.Meshes"/>.</param>
+    /// <param name="transform">The transform from the mesh's space to the result's space.</param>
+    /// <param name="vertices">The list that receives the vertices.</param>
+    /// <param name="indices">The list that receives the indices, offset by the vertices already in <paramref name="vertices"/>.</param>
+    /// <exception cref="NotSupportedException">A primitive is not a triangle list.</exception>
     public static void Append(
         GlbDocument document, int mesh, in Matrix4x4 transform, List<WorldVertex> vertices, List<uint> indices)
     {

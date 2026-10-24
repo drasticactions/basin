@@ -1,7 +1,16 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// One step of the KWin blur strength table. The fifteen steps spread over four downsample bands.
+/// </summary>
+/// <param name="Iterations">The number of downsample passes, from 1 to 4.</param>
+/// <param name="Offset">The dual-Kawase sample offset in texels.</param>
+/// <param name="ExpandSize">How far outside the region the passes can sample, in pixels.</param>
 public readonly record struct BlurStrength(int Iterations, double Offset, int ExpandSize)
 {
+    /// <summary>
+    /// The number of strength steps.
+    /// </summary>
     public const int Steps = 15;
 
     private static readonly (double MinOffset, double MaxOffset, int ExpandSize)[] Offsets =
@@ -14,8 +23,16 @@ public readonly record struct BlurStrength(int Iterations, double Offset, int Ex
 
     private static readonly BlurStrength[] Table = Build();
 
+    /// <summary>
+    /// Returns the table entry for a strength step.
+    /// </summary>
+    /// <param name="strength">The step. The method clamps it to the range from 1 to <see cref="Steps"/>.</param>
+    /// <returns>The iteration count, offset and expand size of that step.</returns>
     public static BlurStrength For(int strength) => Table[Math.Clamp(strength, 1, Steps) - 1];
 
+    /// <summary>
+    /// Gets three times the standard deviation of the dual-Kawase passes at this step, in pixels. <see cref="BlurKernel.SmolGaussian"/> uses it as the radius.
+    /// </summary>
     public double Radius
     {
         get

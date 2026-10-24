@@ -4,6 +4,9 @@ using System.Runtime.Versioning;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// The Windows listener on a Hyper-V socket. It accepts on a background task and posts every event to the compositor thread. For the WSL2 VM, it binds again when the VM restarts.
+/// </summary>
 [SupportedOSPlatform("windows")]
 public sealed class HyperVWaypipeListener : IWaypipeListener
 {
@@ -53,6 +56,9 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         _options = options;
     }
 
+    /// <summary>
+    /// Gets the address that the listener binds now. It changes after a rebind.
+    /// </summary>
     public HyperVEndPoint LocalEndPoint
     {
         get
@@ -66,8 +72,12 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
 
     EndPoint IWaypipeListener.LocalEndPoint => LocalEndPoint;
 
+    /// <summary>
+    /// Gets the VM that the listener was asked to bind.
+    /// </summary>
     public HyperVVm Vm => _vm;
 
+    /// <inheritdoc/>
     public int Live
     {
         get
@@ -79,8 +89,12 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         }
     }
 
+    /// <inheritdoc/>
     public int Accepted => _accepted;
 
+    /// <summary>
+    /// Occurs on the compositor thread for each new channel. Channels that arrived before the first handler go to that handler when it is added.
+    /// </summary>
     public event Action<WaypipeChannel>? ChannelAccepted
     {
         add
@@ -102,10 +116,30 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         remove => _channelAccepted -= value;
     }
 
+    /// <summary>
+    /// Occurs on the compositor thread after the listener binds the same port on a new WSL2 VM id.
+    /// </summary>
     public event Action<HyperVEndPoint>? Rebound;
 
+    /// <summary>
+    /// Occurs on the compositor thread when accept or every rebind attempt fails.
+    /// </summary>
     public event Action<Exception>? Failed;
 
+    /// <summary>
+    /// Resolves the VM id and binds a vsock port on it.
+    /// </summary>
+    /// <param name="endpoint">The vsock endpoint. It must not name a context id.</param>
+    /// <param name="vm">The VM to bind.</param>
+    /// <param name="post">The delegate that runs an action on the compositor thread.</param>
+    /// <param name="compression">The compression that every channel expects from its peer.</param>
+    /// <param name="limits">The limits for each channel, or <see langword="null"/> for the defaults.</param>
+    /// <param name="options">The content that each channel accepts, or <see langword="null"/> for the defaults.</param>
+    /// <param name="cancellation">Cancels the VM id query.</param>
+    /// <returns>A task that completes with the bound listener, which the caller owns.</returns>
+    /// <exception cref="ArgumentException"><paramref name="endpoint"/> names a context id.</exception>
+    /// <exception cref="WslVmException">The WSL2 VM id cannot be resolved.</exception>
+    /// <exception cref="IOException">The socket cannot be made, bound or put in the listening state.</exception>
     public static async Task<HyperVWaypipeListener> BindAsync(
         VsockEndPoint endpoint,
         HyperVVm vm,
@@ -130,6 +164,18 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         return Start(vm, socket, local, post, compression, limits, options);
     }
 
+    /// <summary>
+    /// Binds a random port from 49152 through 65535, with up to 32 attempts. <see cref="HyperVEndPoint.VsockPort"/> of <see cref="LocalEndPoint"/> gives the port.
+    /// </summary>
+    /// <param name="vm">The VM to bind.</param>
+    /// <param name="post">The delegate that runs an action on the compositor thread.</param>
+    /// <param name="compression">The compression that every channel expects from its peer.</param>
+    /// <param name="limits">The limits for each channel, or <see langword="null"/> for the defaults.</param>
+    /// <param name="options">The content that each channel accepts, or <see langword="null"/> for the defaults.</param>
+    /// <param name="cancellation">Cancels the VM id query.</param>
+    /// <returns>A task that completes with the bound listener, which the caller owns.</returns>
+    /// <exception cref="WslVmException">The WSL2 VM id cannot be resolved.</exception>
+    /// <exception cref="IOException">Every attempt failed, or the socket failed for another reason.</exception>
     public static async Task<HyperVWaypipeListener> BindAnyPortAsync(
         HyperVVm vm,
         Action<Action> post,
@@ -155,6 +201,12 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         }
     }
 
+    /// <summary>
+    /// Closes the socket and binds the same port again on the current VM id. Live channels stay open.
+    /// </summary>
+    /// <param name="cancellation">Cancels the wait for another rebind and the VM id query.</param>
+    /// <returns>A task that completes when the rebind is done.</returns>
+    /// <exception cref="ObjectDisposedException">The listener is disposed.</exception>
     public async Task RebindAsync(CancellationToken cancellation = default)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -169,6 +221,9 @@ public sealed class HyperVWaypipeListener : IWaypipeListener
         }
     }
 
+    /// <summary>
+    /// Stops the accept loop and the VM watch, closes the socket, and disposes every live channel. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

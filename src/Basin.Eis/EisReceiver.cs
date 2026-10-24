@@ -6,6 +6,9 @@ using static Basin.Eis.EisLog;
 
 namespace Basin.Eis;
 
+/// <summary>
+/// Serves one libeis sender client and gives its input to an <see cref="IInputSink"/>. It offers only the granted device types and refuses receiver clients and a second client.
+/// </summary>
 public sealed unsafe class EisReceiver : IDisposable
 {
     private const uint AxisVertical = 0;
@@ -32,6 +35,14 @@ public sealed unsafe class EisReceiver : IDisposable
     private bool _touchPending;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EisReceiver"/> class. It creates an EIS context and watches its fd on <paramref name="loop"/>.
+    /// </summary>
+    /// <param name="loop">The compositor loop that dispatches the context.</param>
+    /// <param name="sink">The sink that receives the client's input.</param>
+    /// <param name="keymap">The keymap that the keyboard device sends, or <see langword="null"/> for none. A change recreates the keyboard device.</param>
+    /// <param name="granted">The device types that the client can bind.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> or <paramref name="sink"/> is <see langword="null"/>.</exception>
     public EisReceiver(ICompositorEventLoop loop, IInputSink sink, IActiveKeymap? keymap, InputDeviceCapability granted)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -50,15 +61,38 @@ public sealed unsafe class EisReceiver : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a sender client is connected.
+    /// </summary>
     public bool HasClient => _client is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the client has started emulation and not stopped it or disconnected.
+    /// </summary>
     public bool IsEmulating { get; private set; }
 
+    /// <summary>
+    /// Gets the number of devices that the client has bound: relative pointer, absolute pointer, keyboard and touch.
+    /// </summary>
     public int DeviceCount =>
         (_pointer is null ? 0 : 1) + (_absolute is null ? 0 : 1) + (_keyboardDevice is null ? 0 : 1) + (_touch is null ? 0 : 1);
 
+    /// <summary>
+    /// Creates a socket pair in the EIS context and returns the client end.
+    /// </summary>
+    /// <returns>The client's fd. The caller owns it and gives it to the client.</returns>
     public int AddClientFd() => _context.AddClient();
 
+    /// <summary>
+    /// Adds a region to the absolute pointer and touch devices, and recreates each device that exists. A region with no area is skipped.
+    /// </summary>
+    /// <param name="mappingId">The region's mapping id.</param>
+    /// <param name="x">The layout x of the region.</param>
+    /// <param name="y">The layout y of the region.</param>
+    /// <param name="width">The region width.</param>
+    /// <param name="height">The region height.</param>
+    /// <param name="scale">The physical scale of the region.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="mappingId"/> is <see langword="null"/>.</exception>
     public void AddRegion(string mappingId, int x, int y, int width, int height, double scale)
     {
         ArgumentNullException.ThrowIfNull(mappingId);
@@ -76,6 +110,9 @@ public sealed unsafe class EisReceiver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Dispatches the EIS context and gives its events to the sink. An exception is logged, not raised. The loop calls it when the fd is readable.
+    /// </summary>
     public void Pump()
     {
         if (_disposed)
@@ -100,6 +137,9 @@ public sealed unsafe class EisReceiver : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases every button and key that the client holds and cancels its touches, so that nothing stays pressed in the sink.
+    /// </summary>
     public void ReleaseAll()
     {
         var time = Now;
@@ -129,6 +169,9 @@ public sealed unsafe class EisReceiver : IDisposable
         _touchPending = false;
     }
 
+    /// <summary>
+    /// Releases all held input, removes the devices and the seat, disconnects the client and closes the context.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

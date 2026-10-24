@@ -4,6 +4,9 @@ using Wayland;
 
 namespace Basin;
 
+/// <summary>
+/// A client's <c>wl_surface</c>. It collects requests into <see cref="Pending"/> and moves them onto <see cref="Current"/> on commit, unless a <see cref="CommitParkReason"/> holds the commit.
+/// </summary>
 public sealed class Surface
 {
     private const CommitParkReason DeferredReasons =
@@ -55,38 +58,59 @@ public sealed class Surface
         resource.Destroyed += (_, _) => OnDestroyed();
     }
 
+    /// <summary>Gets the surface resource.</summary>
     public WlSurfaceResource Resource { get; }
 
+    /// <summary>Gets the state of the last applied commit. Sizes, offsets and surface damage are in logical coordinates.</summary>
     public SurfaceState Current { get; } = new();
 
+    /// <summary>Gets the state that the client is building for its next commit. Extensions add their payloads here before the commit.</summary>
     public SurfaceState Pending { get; } = new();
 
+    /// <summary>Gets the role name, or <see langword="null"/> before a role is set. A surface keeps its role name for life.</summary>
     public string? Role { get; private set; }
 
+    /// <summary>Gets the object that implements the role, or <see langword="null"/> when there is none or the role object was destroyed.</summary>
     public object? RoleObject { get; private set; }
 
+    /// <summary>Gets the subsurface role, or <see langword="null"/> when the surface is not a live subsurface.</summary>
     public Subsurface? SubsurfaceRole { get; internal set; }
 
+    /// <summary>Gets the child subsurfaces stacked below this surface, from bottom to top.</summary>
     public List<Subsurface> SubsurfacesBelow { get; } = [];
 
+    /// <summary>Gets the child subsurfaces stacked above this surface, from bottom to top.</summary>
     public List<Subsurface> SubsurfacesAbove { get; } = [];
 
+    /// <summary>Gets a value indicating whether the current state has a buffer and the surface is not destroyed.</summary>
     public bool IsMapped => Current.Buffer is not null && !_destroyed;
 
+    /// <summary>Gets a value indicating whether the resource is destroyed.</summary>
     public bool IsDestroyed => _destroyed;
 
+    /// <summary>Occurs after a commit applies to <see cref="Current"/>, after the subsurface placement changes and before synchronized children apply their caches.</summary>
     public event Action? Committed;
 
+    /// <summary>Occurs when <c>wl_surface.commit</c> arrives, before any state moves. Extensions latch their pending state here.</summary>
     public event Action? CommitRequested;
 
+    /// <summary>Occurs once, after the surface released its state at resource destruction.</summary>
     public event Action? Destroyed;
 
+    /// <summary>Gets the factor by which the client's surface coordinates exceed logical coordinates. It is 1 for an ordinary client.</summary>
     public double ServerScale => Current.ServerScale;
 
+    /// <summary>Gets a value indicating whether <see cref="SetServerScale"/> overrides the client's default scale.</summary>
     public bool HasServerScaleOverride => _serverScaleOverride > 0;
 
+    /// <summary>Occurs after the server scale changes and the current size is recomputed.</summary>
     public event Action? ServerScaleChanged;
 
+    /// <summary>
+    /// Overrides the server scale of this surface. State that the client committed earlier stays in the old units until the next commit.
+    /// </summary>
+    /// <param name="scale">The scale. It must be positive and finite.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not positive and finite.</exception>
     public void SetServerScale(double scale)
     {
         if (!double.IsFinite(scale) || scale <= 0)
@@ -98,6 +122,7 @@ public sealed class Surface
         ApplyServerScale(scale);
     }
 
+    /// <summary>Removes the override and returns the surface to its client's default scale.</summary>
     public void ClearServerScale()
     {
         _serverScaleOverride = 0;
@@ -152,8 +177,15 @@ public sealed class Surface
         }
     }
 
+    /// <summary>Tests whether <see cref="TrySetRole"/> succeeds for a role, without setting it.</summary>
+    /// <param name="role">The role name.</param>
+    /// <returns><see langword="true"/> when the surface has no role, or has the same role and no live role object.</returns>
     public bool CanSetRole(string role) => Role is null || (Role == role && RoleObject is null);
 
+    /// <summary>Gives the surface a role. A surface can take a second role object only for the same role name, after the first one is gone.</summary>
+    /// <param name="role">The role name.</param>
+    /// <param name="roleObject">The object that implements the role.</param>
+    /// <returns><see langword="true"/> when the role is set, or <see langword="false"/> when the surface has a different role or a live role object.</returns>
     public bool TrySetRole(string role, object roleObject)
     {
         if (!CanSetRole(role))
@@ -166,36 +198,51 @@ public sealed class Surface
         return true;
     }
 
+    /// <summary>Drops the role object and the subsurface role. The role name stays.</summary>
     public void ClearRoleObject()
     {
         RoleObject = null;
         SubsurfaceRole = null;
     }
 
+    /// <summary>Gets or sets a value indicating whether a frame limiter holds frame callbacks back. While it is <see langword="true"/>, <see cref="SendFrameDone"/> sends nothing.</summary>
     public bool PacingHeld { get; set; }
 
+    /// <summary>Gets the number of times that the surface sent frame callbacks.</summary>
     public long PacingUses { get; private set; }
 
+    /// <summary>Gets or sets the frame limiter's cycle in nanoseconds, or zero for none. Presentation feedback reports it as the refresh when it is longer.</summary>
     public uint PacingIntervalNanos { get; set; }
 
+    /// <summary>Gets the monotonic time in nanoseconds of the last presentation, or zero before the first.</summary>
     public long PresentAnchorNanos { get; private set; }
 
+    /// <summary>Gets the refresh period in nanoseconds of the output at the last presentation, or zero for no fixed grid.</summary>
     public long PresentAnchorGrid { get; private set; }
 
+    /// <summary>Records a presentation as the anchor for commit-timing targets.</summary>
+    /// <param name="timeNanos">The presentation time in monotonic nanoseconds.</param>
+    /// <param name="gridNanos">The output's refresh period in nanoseconds, or zero for no fixed grid.</param>
     public void NotePresented(long timeNanos, long gridNanos)
     {
         PresentAnchorNanos = timeNanos;
         PresentAnchorGrid = gridNanos;
     }
 
+    /// <summary>Gets the monotonic time in nanoseconds when the surface last sent frame callbacks.</summary>
     public long LastPacingUseNanos { get; private set; }
 
+    /// <summary>Increments <see cref="PacingUses"/> and stamps <see cref="LastPacingUseNanos"/> with the current time.</summary>
     public void NotePacingUse()
     {
         PacingUses++;
         LastPacingUseNanos = MonotonicClock.Nanos;
     }
 
+    /// <summary>
+    /// Sends <c>done</c> to each frame callback of the current state and clears them. It does nothing while <see cref="PacingHeld"/> is <see langword="true"/>.
+    /// </summary>
+    /// <param name="timestampMs">The timestamp in milliseconds.</param>
     public void SendFrameDone(uint timestampMs)
     {
         if (PacingHeld)
@@ -240,6 +287,11 @@ public sealed class Surface
 
     private HashSet<OutputGlobal>? _enteredOutputs;
 
+    /// <summary>
+    /// Records whether the surface is on an output, and sends <c>enter</c> or <c>leave</c> to each of the client's bindings of it on a change.
+    /// </summary>
+    /// <param name="output">The output global.</param>
+    /// <param name="inside"><see langword="true"/> when the surface overlaps the output.</param>
     public void SetOutputPresence(OutputGlobal output, bool inside)
     {
         if (_destroyed || inside == (_enteredOutputs?.Contains(output) ?? false))
@@ -271,11 +323,14 @@ public sealed class Surface
         OutputPresenceChanged?.Invoke();
     }
 
+    /// <summary>Gets the outputs that the surface was last told it entered.</summary>
     public IReadOnlyCollection<OutputGlobal> EnteredOutputs =>
         _enteredOutputs ?? (IReadOnlyCollection<OutputGlobal>)Array.Empty<OutputGlobal>();
 
+    /// <summary>Occurs after <see cref="SetOutputPresence"/> changes the entered outputs.</summary>
     public event Action? OutputPresenceChanged;
 
+    /// <summary>Gets the largest scale of the entered outputs, or zero when the surface is on no output.</summary>
     public double EnteredOutputScale
     {
         get
@@ -295,6 +350,10 @@ public sealed class Surface
 
     private int _preferredBufferScale;
 
+    /// <summary>
+    /// Sends <c>wl_surface.preferred_buffer_scale</c> when the value changes. A client below version 6 gets nothing.
+    /// </summary>
+    /// <param name="scale">The preferred integer buffer scale.</param>
     public void SetPreferredBufferScale(int scale)
     {
         if (_destroyed || scale == _preferredBufferScale || Resource.Version < 6)
@@ -435,28 +494,43 @@ public sealed class Surface
         Pending.Committed |= SurfaceStateFields.Offset;
     }
 
+    /// <summary>Gets a value indicating whether commits wait in the park queue.</summary>
     public bool HasParkedCommits => _queue is { IsEmpty: false };
 
+    /// <summary>Gets the earliest target time in monotonic nanoseconds of a commit parked by commit timing, or zero when there is none.</summary>
     public long NextParkedCommitTimeNanos => _queue?.EarliestTargetTimeNanos ?? 0;
 
+    /// <summary>Makes the next commit arm the fifo barrier when it applies.</summary>
     public void SetFifoBarrier() => _pendingArmBarrier = true;
 
+    /// <summary>Makes the next commit wait while the fifo barrier is armed.</summary>
     public void WaitFifoBarrier() => _pendingWaitBarrier = true;
 
+    /// <summary>Gets a value indicating whether the fifo barrier is armed.</summary>
     public bool FifoBarrierArmed => _barrierArmed;
 
+    /// <summary>Disarms the fifo barrier. It does not release parked commits.</summary>
     public void ClearFifoBarrier() => _barrierArmed = false;
 
+    /// <summary>Gets a value indicating whether the next commit carries a target presentation time.</summary>
     public bool HasPendingCommitTime => _pendingCommitTimeNanos > 0;
 
+    /// <summary>Sets the target presentation time of the next commit. The commit parks until the time arrives.</summary>
+    /// <param name="targetNanos">The target time in monotonic nanoseconds.</param>
     public void SetCommitTime(long targetNanos) => _pendingCommitTimeNanos = targetNanos;
 
+    /// <summary>
+    /// Parks the next commit until <see cref="ReleaseHeldCommits"/>. A synchronized subsurface ignores the hold, because its parent's commit applies it.
+    /// </summary>
     public void HoldNextCommit() => _pendingHold = true;
 
+    /// <summary>Tells the surface that the next commit has an explicit acquire point, so it does not wait for an implicit dmabuf fence.</summary>
     public void MarkExplicitAcquire() => _pendingExplicit = true;
 
+    /// <summary>Gets the number of fences that parked commits still wait for.</summary>
     public int ParkedForFences => _fences?.Count ?? 0;
 
+    /// <summary>Gets the output that drew the surface most recently, or <see langword="null"/> when none did or that output is gone.</summary>
     public IOutput? MainOutput => PresentedMain is { Retired: false } main ? main.Output : null;
 
     internal PresentedSet? PresentedMain { get; set; }
@@ -467,6 +541,10 @@ public sealed class Surface
 
     internal long PresentedStamp { get; set; }
 
+    /// <summary>Makes the next commit park until a fence signals. The surface takes ownership of the fence.</summary>
+    /// <param name="fence">The fence.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="fence"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The next commit already has a fence.</exception>
     public void ParkFence(ISurfaceCommitFence fence)
     {
         ArgumentNullException.ThrowIfNull(fence);
@@ -491,6 +569,10 @@ public sealed class Surface
         ReleaseParkedCommits(MonotonicClock.Nanos, refreshCycleCompleted: false);
     }
 
+    /// <summary>
+    /// Clears the hold on parked commits and applies each commit at the front of the queue that is now ready.
+    /// </summary>
+    /// <returns><see langword="true"/> when at least one commit applied.</returns>
     public bool ReleaseHeldCommits()
     {
         _holdCleared = true;
@@ -586,9 +668,22 @@ public sealed class Surface
         ApplyCachedAndPending();
     }
 
+    /// <summary>
+    /// Applies the parked commits at the front of the queue that are ready, in order. It stops at the first commit that is not ready.
+    /// </summary>
+    /// <param name="nowNanos">The current or predicted time in monotonic nanoseconds.</param>
+    /// <param name="refreshCycleCompleted"><see langword="true"/> to disarm the fifo barrier first.</param>
+    /// <returns><see langword="true"/> when at least one commit applied.</returns>
     public bool ReleaseParkedCommits(long nowNanos, bool refreshCycleCompleted) =>
         ReleaseParkedCommits(nowNanos, refreshCycleCompleted, gridNanos: -1);
 
+    /// <summary>
+    /// Applies the parked commits at the front of the queue that are ready, in order. Held commits stay parked.
+    /// </summary>
+    /// <param name="nowNanos">The predicted vblank time in monotonic nanoseconds.</param>
+    /// <param name="refreshCycleCompleted"><see langword="true"/> to disarm the fifo barrier first.</param>
+    /// <param name="gridNanos">The output's refresh period in nanoseconds for target rounding, or a negative value to compare times directly.</param>
+    /// <returns><see langword="true"/> when at least one commit applied.</returns>
     public bool ReleaseParkedCommits(long nowNanos, bool refreshCycleCompleted, long gridNanos)
     {
         _thread.Assert();
@@ -636,6 +731,7 @@ public sealed class Surface
         FinishCommit();
     }
 
+    /// <summary>Gets the fields that the last applied commit set.</summary>
     public SurfaceStateFields LastCommitFields { get; private set; }
 
     private void ApplyCachedAndPending()
@@ -764,6 +860,10 @@ public sealed class Surface
         guarded.MarkAllDirty();
     }
 
+    /// <summary>
+    /// Computes the bounding box of the current surface and buffer damage in surface-local logical coordinates, clipped to the surface size.
+    /// </summary>
+    /// <returns>The damage extents, an empty box when there is no damage, or the whole surface when a transform or viewport is set.</returns>
     public Box CommittedDamageExtents()
     {
         var state = Current;
@@ -810,8 +910,11 @@ public sealed class Surface
 
     private int _acquireFenceFd = -1;
 
+    /// <summary>Gets the sync_file that signals when the current content is written, or -1 when there is none. The surface owns it.</summary>
     public int AcquireFenceFd => _acquireFenceFd;
 
+    /// <summary>Replaces the acquire fence and closes the old one. The surface takes ownership of the new fd.</summary>
+    /// <param name="syncFileFd">The sync_file fd, or -1 for none.</param>
     public void SetAcquireFence(int syncFileFd)
     {
         if (_acquireFenceFd == syncFileFd)

@@ -7,8 +7,14 @@ using ImGuiApi = Hexa.NET.ImGui.ImGui;
 
 namespace Basin.Inspector;
 
+/// <summary>
+/// The Memory panel. It shows the <see cref="Basin.Diagnostics.BasinCounters"/> totals and census, the GC collections, the bytes allocated between draws and the open descriptor count.
+/// </summary>
 public sealed unsafe class MemoryPanel : IInspectorPanel
 {
+    /// <summary>
+    /// The number of draws that the allocation plot keeps.
+    /// </summary>
     public const int Samples = 240;
 
     private const int ORdOnly = 0;
@@ -26,12 +32,20 @@ public sealed unsafe class MemoryPanel : IInspectorPanel
     private int _samples;
     private int _fds = -1;
 
+    /// <inheritdoc/>
     public ReadOnlySpan<byte> Name => "Memory"u8;
 
+    /// <summary>
+    /// Gets or sets the rate in frames per second at which the panel redraws while it is shown. The default is 4. The census and the descriptor count refresh at 1 Hz.
+    /// </summary>
     public int RefreshHz { get; set; } = 4;
 
+    /// <summary>
+    /// Gets the number of open file descriptors of the process at the last count. It is -1 before the first draw or when the count failed.
+    /// </summary>
     public int OpenDescriptors => _fds;
 
+    /// <inheritdoc/>
     public void Draw(ref InspectorDraw draw)
     {
         draw.RequestRefresh(RefreshHz);

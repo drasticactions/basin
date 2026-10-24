@@ -4,6 +4,9 @@ using Basin.Scene;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Sends each output's configured image description to the <see cref="ColorManager"/> and to its scene output. It refreshes when the configuration is applied.
+/// </summary>
 public sealed class OutputColorDriver
 {
     private readonly ColorManager _color;
@@ -11,6 +14,12 @@ public sealed class OutputColorDriver
     private readonly List<(OutputGlobal Global, IOutput Output, SceneOutput? Scene)> _outputs = [];
     private readonly Dictionary<OutputGlobal, ImageDescription> _blendSpaces = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputColorDriver"/> class.
+    /// </summary>
+    /// <param name="color">The color manager that receives the output descriptions.</param>
+    /// <param name="configuration">The configuration that supplies the descriptions.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="color"/> or <paramref name="configuration"/> is <see langword="null"/>.</exception>
     public OutputColorDriver(ColorManager color, ColorOutputConfiguration configuration)
     {
         ArgumentNullException.ThrowIfNull(color);
@@ -20,8 +29,20 @@ public sealed class OutputColorDriver
         configuration.Applied += _ => Refresh();
     }
 
+    /// <summary>
+    /// Gets the image description that the configuration gives an output.
+    /// </summary>
+    /// <param name="output">The output to describe.</param>
+    /// <returns>The configured description.</returns>
     public ImageDescription DescriptionOf(IOutput output) => _configuration.DescriptionOf(output);
 
+    /// <summary>
+    /// Adds an output and sends its description. For a known global, it only replaces a different non-null scene output.
+    /// </summary>
+    /// <param name="global">The output's global.</param>
+    /// <param name="output">The output to describe.</param>
+    /// <param name="scene">The scene output that gets the blend space, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="global"/> or <paramref name="output"/> is <see langword="null"/>.</exception>
     public void Add(OutputGlobal global, IOutput output, SceneOutput? scene = null)
     {
         ArgumentNullException.ThrowIfNull(global);
@@ -45,6 +66,11 @@ public sealed class OutputColorDriver
         Describe(entry);
     }
 
+    /// <summary>
+    /// Removes an output, its blend space and its description in the color manager.
+    /// </summary>
+    /// <param name="global">The output's global.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="global"/> is <see langword="null"/>.</exception>
     public void Remove(OutputGlobal global)
     {
         ArgumentNullException.ThrowIfNull(global);
@@ -53,6 +79,12 @@ public sealed class OutputColorDriver
         _color.RemoveOutputDescription(global);
     }
 
+    /// <summary>
+    /// Sets the description that the scene output blends in. Without one, the scene output blends in the output's own description.
+    /// </summary>
+    /// <param name="global">The output's global.</param>
+    /// <param name="description">The blend space, or <see langword="null"/> to use the output description.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="global"/> is <see langword="null"/>.</exception>
     public void SetBlendSpace(OutputGlobal global, ImageDescription? description)
     {
         ArgumentNullException.ThrowIfNull(global);
@@ -74,6 +106,9 @@ public sealed class OutputColorDriver
         }
     }
 
+    /// <summary>
+    /// Sends the description of every added output again.
+    /// </summary>
     public void Refresh()
     {
         foreach (var entry in _outputs)

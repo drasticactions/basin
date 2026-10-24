@@ -2,8 +2,20 @@ using Basin.Capabilities;
 
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// The metacity engine below the frame renderer. It measures, lays out and paints a frame on a Skia canvas with no <see cref="IUISurface"/>.
+/// It keeps state between calls, so it must not paint two frames at the same time.
+/// </summary>
 public sealed partial class MetacityPainter
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MetacityPainter"/> class. The painter owns none of its arguments.
+    /// </summary>
+    /// <param name="theme">The loaded theme.</param>
+    /// <param name="palette">The colors for <c>gtk:</c> specs.</param>
+    /// <param name="buttonLayout">The button layout.</param>
+    /// <param name="font">The title font.</param>
+    /// <param name="resources">The shared Skia resources.</param>
     public MetacityPainter(MetacityTheme theme, MetacityPalette palette, MetacityButtonLayout buttonLayout, MetacityFont font, MetacityResources resources)
     {
         ArgumentNullException.ThrowIfNull(theme);
@@ -23,14 +35,29 @@ public sealed partial class MetacityPainter
     private readonly SkiaSharp.SKColor[] _colors;
     private int _paletteVersion;
 
+    /// <summary>
+    /// Gets the theme that the painter draws.
+    /// </summary>
     public MetacityTheme Theme { get; }
 
+    /// <summary>
+    /// Gets the colors that <c>gtk:</c> specs resolve against.
+    /// </summary>
     public MetacityPalette Palette { get; }
 
+    /// <summary>
+    /// Gets the button layout.
+    /// </summary>
     public MetacityButtonLayout ButtonLayout { get; }
 
+    /// <summary>
+    /// Gets the title font.
+    /// </summary>
     public MetacityFont Font { get; }
 
+    /// <summary>
+    /// Gets the shared Skia resources.
+    /// </summary>
     public MetacityResources Resources { get; }
 
     internal ReadOnlySpan<SkiaSharp.SKColor> Colors
@@ -54,6 +81,11 @@ public sealed partial class MetacityPainter
     internal MetacityFrameStyle? StyleFor(in MetacityFrameInput input) =>
         Theme.GetStyle(input.Type, input.FrameStateKind, MetacityResize.Both, input.Focus);
 
+    /// <summary>
+    /// Measures the frame thickness for the style that the theme gives the window.
+    /// </summary>
+    /// <param name="input">The window and pointer state.</param>
+    /// <returns>The insets in logical pixels. They are zero for a fullscreen window or when the theme has no style for the window.</returns>
     public FrameInsets Measure(in MetacityFrameInput input)
     {
         if (StyleFor(input) is not { } style)
@@ -79,6 +111,14 @@ public sealed partial class MetacityPainter
         return new FrameInsets(top, layout.RightWidth, bottom, layout.LeftWidth);
     }
 
+    /// <summary>
+    /// Lays out the frame around a client area and writes the result to a geometry.
+    /// </summary>
+    /// <param name="input">The window and pointer state.</param>
+    /// <param name="clientWidth">The client width in logical pixels.</param>
+    /// <param name="clientHeight">The client height in logical pixels. A shaded window ignores it.</param>
+    /// <param name="geometry">The geometry to write.</param>
+    /// <returns><see langword="true"/> when the theme has a style for the window. When false, the geometry is not changed.</returns>
     public bool Layout(in MetacityFrameInput input, int clientWidth, int clientHeight, MetacityFrameGeometry geometry)
     {
         ArgumentNullException.ThrowIfNull(geometry);

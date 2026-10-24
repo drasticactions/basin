@@ -9,6 +9,9 @@ using static Basin.Seat.Backends.SeatBackendsLog;
 
 namespace Basin.Seat.Backends;
 
+/// <summary>
+/// Wires libinput or a nested parent's devices to a seat. It counts devices, sets the seat capabilities, loads the cursor, moves the layout pointer and raises each event for the compositor's policy.
+/// </summary>
 public sealed class SeatBinder
 {
     private readonly Seat _seat;
@@ -27,6 +30,14 @@ public sealed class SeatBinder
     private static readonly uint SwitchVt12 = XkbKeysym.FromName("XF86Switch_VT_12").Value;
     private const int VtKeyCount = 768;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SeatBinder"/> class. It creates <see cref="Injector"/> and makes it the seat's synthetic input when the seat has none.
+    /// </summary>
+    /// <param name="seat">The seat to drive.</param>
+    /// <param name="layout">The output layout of the pointer and the touch mapping.</param>
+    /// <param name="pointer">The layout pointer that the binder moves.</param>
+    /// <param name="cursor">The cursor controller that the binder loads and shows.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public SeatBinder(Seat seat, OutputLayout layout, LayoutPointer pointer, CursorController cursor)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -50,8 +61,14 @@ public sealed class SeatBinder
     private bool _clientCursorHidden;
     private bool _confineLock;
 
+    /// <summary>
+    /// Gets or sets the policy that allows a parent pointer lock for an active confinement with a hidden client cursor. With no policy, every surface is allowed.
+    /// </summary>
     public Func<Surface, bool>? ConfineLockAllowed { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether a confinement holds the parent pointer lock now.
+    /// </summary>
     public bool ConfineLocked => _confineLock;
 
     private bool WantsConfineLock(PointerConstraint? constraint) =>
@@ -82,22 +99,46 @@ public sealed class SeatBinder
         }
     }
 
+    /// <summary>
+    /// Gets or sets the DRM backend. When it is set, the cursor images use dumb buffers at the DRM cursor size. Otherwise they use shm buffers of 128 by 128.
+    /// </summary>
     public DrmBackend? Drm { get; set; }
 
+    /// <summary>
+    /// Gets or sets the cursor theme that gets the cursor images when they load.
+    /// </summary>
     public CursorImageTheme? Theme { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the parent's keymap becomes the seat keymap in a nested run. An input configurator that names a keymap wins. The default is <see langword="true"/>.
+    /// </summary>
     public bool AdoptParentKeymap { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the callback that gives the keyboard device with its own keymap for a libinput device. A <see langword="null"/> result means the seat keymap.
+    /// </summary>
     public Func<InputDevice, Basin.Capabilities.IInjectedKeyboard?>? KeyboardFor { get; set; }
 
+    /// <summary>
+    /// Gets or sets a callback that stops the layout pointer while it returns <see langword="true"/>. Relative motion still goes to the relative pointer manager and raises <see cref="Motion"/>.
+    /// </summary>
     public Func<bool>? PointerFrozen { get; set; }
 
+    /// <summary>
+    /// Gets or sets the callback that gives the scroll factor of a device. Without it, the factor is 1.
+    /// </summary>
     public Func<InputDevice, double>? ScrollFactorFor { get; set; }
 
+    /// <summary>
+    /// Gets or sets the callback that names the output of a device. An empty or <see langword="null"/> name falls back to libinput's own mapping.
+    /// </summary>
     public Func<InputDevice, string?>? OutputNameFor { get; set; }
 
     internal InputConfigurator? Configurator { get; set; }
 
+    /// <summary>
+    /// Gets or sets the pointer constraint driver that the motion gate asks. A lock or confinement change also requests or releases the parent pointer lock.
+    /// </summary>
     public PointerConstraintDriver? Constraints
     {
         get => _constraints;
@@ -116,38 +157,92 @@ public sealed class SeatBinder
         }
     }
 
+    /// <summary>
+    /// Gets the parent pointer lock that <see cref="BindParent"/> creates, or <see langword="null"/> before it.
+    /// </summary>
     public ParentPointerLock? ParentLock { get; private set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the XF86Switch_VT keysyms switch the session on libinput. The default is <see langword="true"/>.
+    /// </summary>
     public bool VtSwitching { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the relative pointer manager that gets every nonzero motion delta before the constraint gate.
+    /// </summary>
     public RelativePointerManager? RelativePointer { get; set; }
 
+    /// <summary>
+    /// Occurs after libinput adds a device and the seat capabilities are updated.
+    /// </summary>
     public event Action<InputDevice>? DeviceAdded;
 
+    /// <summary>
+    /// Occurs after libinput removes a device and the seat capabilities are updated.
+    /// </summary>
     public event Action<InputDevice>? DeviceRemoved;
 
+    /// <summary>
+    /// Occurs for each key from libinput, the parent or the injector. The arguments are the time, the evdev key code and the press state. A VT switch key is not raised.
+    /// </summary>
     public event Action<uint, uint, bool>? Key;
 
+    /// <summary>
+    /// Occurs after the parent's modifier state is given to the seat keyboard.
+    /// </summary>
     public event Action? ModifiersChanged;
 
+    /// <summary>
+    /// Occurs after a motion moved the layout pointer. A lock holds the pointer and raises no motion.
+    /// </summary>
     public event SeatMotionHandler? Motion;
 
+    /// <summary>
+    /// Occurs for each pointer button. The arguments are the time, the evdev button code and the press state.
+    /// </summary>
     public event Action<uint, uint, bool>? Button;
 
+    /// <summary>
+    /// Occurs for each scroll event, scaled by the device's scroll factor. The arguments are the time and the axis.
+    /// </summary>
     public event Action<uint, PointerAxis>? Axis;
 
+    /// <summary>
+    /// Occurs when the parent's pointer leaves the nested compositor's window.
+    /// </summary>
     public event Action? PointerLeft;
 
+    /// <summary>
+    /// Occurs when a contact starts. The arguments are the time, the contact id and the layout position.
+    /// </summary>
     public event Action<uint, int, double, double>? TouchDown;
 
+    /// <summary>
+    /// Occurs when a contact moves. The arguments are the time, the contact id and the layout position.
+    /// </summary>
     public event Action<uint, int, double, double>? TouchMotion;
 
+    /// <summary>
+    /// Occurs when a contact ends. The arguments are the time and the contact id.
+    /// </summary>
     public event Action<uint, int>? TouchUp;
 
+    /// <summary>
+    /// Occurs at the end of a group of touch events that belong together.
+    /// </summary>
     public event Action? TouchFrame;
 
+    /// <summary>
+    /// Occurs when the source cancels every contact.
+    /// </summary>
     public event Action? TouchCancelled;
 
+    /// <summary>
+    /// Wires the keys, pointer, scroll, touch and LEDs of a libinput backend to the seat and to the binder events. Device counts set the seat capabilities.
+    /// </summary>
+    /// <param name="input">The libinput backend.</param>
+    /// <param name="start"><see langword="true"/> to start the backend after the wiring.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
     public void BindLibinput(LibinputBackend input, bool start = true)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -259,6 +354,11 @@ public sealed class SeatBinder
         }
     }
 
+    /// <summary>
+    /// Sends the seat keyboard's LED state to every libinput keyboard, now and on each change.
+    /// </summary>
+    /// <param name="input">The libinput backend.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
     public void BindLibinputLeds(LibinputBackend input)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -281,6 +381,11 @@ public sealed class SeatBinder
         _seat.Keyboard.LedsChanged += PushLeds;
     }
 
+    /// <summary>
+    /// Wires only the touch devices of a libinput backend, for a program that keeps its own key and pointer wiring. Do not combine it with <see cref="BindLibinput"/>.
+    /// </summary>
+    /// <param name="input">The libinput backend.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="input"/> is <see langword="null"/>.</exception>
     public void BindLibinputTouch(LibinputBackend input)
     {
         ArgumentNullException.ThrowIfNull(input);
@@ -305,6 +410,11 @@ public sealed class SeatBinder
         WireLibinputTouch(input);
     }
 
+    /// <summary>
+    /// Wires only the touch devices of a nested parent. Do not combine it with <see cref="BindParent"/>.
+    /// </summary>
+    /// <param name="parent">The Wayland backend of the parent.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="parent"/> is <see langword="null"/>.</exception>
     public void BindParentTouch(WaylandBackend parent)
     {
         ArgumentNullException.ThrowIfNull(parent);
@@ -339,6 +449,11 @@ public sealed class SeatBinder
         input.TouchCancel += _ => TouchCancelled?.Invoke();
     }
 
+    /// <summary>
+    /// Wires the keyboards, pointers and touch devices of a nested parent and creates <see cref="ParentLock"/>.
+    /// </summary>
+    /// <param name="parent">The Wayland backend of the parent.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="parent"/> is <see langword="null"/>.</exception>
     public void BindParent(WaylandBackend parent)
     {
         ArgumentNullException.ThrowIfNull(parent);
@@ -408,6 +523,9 @@ public sealed class SeatBinder
         return true;
     }
 
+    /// <summary>
+    /// Sets the seat's pointer capability and loads the cursor when the seat has no pointer.
+    /// </summary>
     public void EnsurePointerCapability()
     {
         if ((_seat.Capabilities & SeatCapability.Pointer) == 0)
@@ -417,6 +535,9 @@ public sealed class SeatBinder
         }
     }
 
+    /// <summary>
+    /// Loads the cursor images once, at the size from <see cref="CursorSizeFromEnvironment"/>. It does nothing when the cursor has images already.
+    /// </summary>
     public void EnsureCursorLoaded()
     {
         if (_cursorLoaded || _cursor.Images is not null)
@@ -442,19 +563,36 @@ public sealed class SeatBinder
         }
     }
 
+    /// <summary>
+    /// Reads XCURSOR_SIZE.
+    /// </summary>
+    /// <returns>The positive size from the variable, or 24 when it is unset or not valid.</returns>
     public static int CursorSizeFromEnvironment()
     {
         var text = Environment.GetEnvironmentVariable("XCURSOR_SIZE");
         return int.TryParse(text, out var size) && size > 0 ? size : 24;
     }
 
+    /// <summary>
+    /// Makes the keyboard device from <see cref="KeyboardFor"/> the active seat keyboard. A consumer that wires libinput by hand calls it before each key.
+    /// </summary>
+    /// <param name="device">The libinput device of the key.</param>
     public void ActivateKeyboard(InputDevice device) => _seat.Keyboard.Activate(KeyboardFor?.Invoke(device));
 
+    /// <summary>
+    /// Scales a scroll value and its value120 by the device's scroll factor. A consumer that wires libinput by hand calls it on each scroll.
+    /// </summary>
+    /// <param name="device">The libinput device of the scroll.</param>
+    /// <param name="axis">The scroll event.</param>
+    /// <returns>The scaled event, or the same event for a factor of 1.</returns>
     public PointerAxis Scale(InputDevice device, PointerAxis axis) =>
         Scaled(axis, ScrollFactorFor is { } factorFor ? factorFor(device) : 1.0);
 
     internal void DeliverAxis(uint timeMs, PointerAxis axis, double factor) => Axis?.Invoke(timeMs, Scaled(axis, factor));
 
+    /// <summary>
+    /// Gets the injector that delivers synthetic input through this binder's events.
+    /// </summary>
     public SeatInjector Injector { get; }
 
     internal void RaiseMotion(uint timeMs, double dx, double dy) => Motion?.Invoke(timeMs, dx, dy, null, null);
@@ -472,6 +610,12 @@ public sealed class SeatBinder
                 Value120 = (int)Math.Round(axis.Value120 * factor),
             };
 
+    /// <summary>
+    /// Finds the output of a device by name, from <see cref="OutputNameFor"/> first and then from libinput.
+    /// </summary>
+    /// <param name="device">The libinput device.</param>
+    /// <returns>The output, or <see langword="null"/> when no name is known or no output has it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public IOutput? OutputFor(InputDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -493,6 +637,11 @@ public sealed class SeatBinder
         return null;
     }
 
+    /// <summary>
+    /// Finds the output that a touch device maps to. Without a named output, it is the first output of the layout.
+    /// </summary>
+    /// <param name="device">The libinput touch device.</param>
+    /// <returns>The output, or <see langword="null"/> when the layout has none.</returns>
     public IOutput? TouchOutput(InputDevice device)
     {
         if (OutputFor(device) is { } known)

@@ -6,12 +6,24 @@ using Basin.Capabilities;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// Converts compositor cursor shapes and cursor surfaces into Avalonia cursors.
+/// </summary>
 public static class AvaloniaCursor
 {
     private static readonly Dictionary<StandardCursorType, Cursor> Cache = [];
 
+    /// <summary>
+    /// Gets or sets a factory for platform cursors that replace the standard Avalonia cursors.
+    /// It must be set before the first <see cref="For"/> call, because results are cached.
+    /// </summary>
     public static Func<StandardCursorType, Cursor?>? NativeFrameCursor { get; set; }
 
+    /// <summary>
+    /// Gets the Avalonia cursor that is nearest to a cursor shape. The result is cached and shared, so the caller must not dispose it.
+    /// </summary>
+    /// <param name="shape">The shape that the client asked for.</param>
+    /// <returns>A cached cursor. Shapes with no match give the arrow.</returns>
     public static Cursor For(CursorShape shape)
     {
         var standard = Map(shape);
@@ -25,6 +37,13 @@ public static class AvaloniaCursor
         return cursor;
     }
 
+    /// <summary>
+    /// Copies the current buffer of a cursor surface into a new Avalonia cursor. A buffer with a different size than the surface is resampled.
+    /// </summary>
+    /// <param name="surface">The cursor surface. Its buffer must be 32-bit premultiplied BGRA.</param>
+    /// <param name="hotspotX">The hotspot column in surface pixels.</param>
+    /// <param name="hotspotY">The hotspot row in surface pixels.</param>
+    /// <returns>A new cursor that the caller owns, or <see langword="null"/> when the surface has no readable buffer.</returns>
     public static Cursor? FromSurface(Surface surface, int hotspotX, int hotspotY)
     {
         ArgumentNullException.ThrowIfNull(surface);

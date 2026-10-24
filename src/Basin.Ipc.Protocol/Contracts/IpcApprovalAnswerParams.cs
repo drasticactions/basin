@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// The params of <c>approval/answer</c>: the answer to one pending approval request.
+/// </summary>
 public sealed class IpcApprovalAnswerParams : IIpcParams, IIpcReusable
 {
     private long _id;
@@ -9,16 +12,27 @@ public sealed class IpcApprovalAnswerParams : IIpcParams, IIpcReusable
 
     private int _present;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcApprovalAnswerParams"/> class. Every key starts absent, so the deserializer can fill it.
+    /// </summary>
     public IpcApprovalAnswerParams()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcApprovalAnswerParams"/> class. Both keys are present.
+    /// </summary>
+    /// <param name="id">The request id from the approval event.</param>
+    /// <param name="answer"><c>allow_once</c>, <c>allow_run</c> or <c>deny</c>.</param>
     public IpcApprovalAnswerParams(long id, string answer)
     {
         Id = id;
         Answer = answer;
     }
 
+    /// <summary>
+    /// Gets or sets the id of the request, as the <c>approval/requested</c> event carries it. The key is required.
+    /// </summary>
     public long Id
     {
         get => _id;
@@ -29,6 +43,9 @@ public sealed class IpcApprovalAnswerParams : IIpcParams, IIpcReusable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the answer: <c>allow_once</c> runs the held call, <c>allow_run</c> also allows the method for the run, and <c>deny</c> refuses it. The key is required.
+    /// </summary>
     public string Answer
     {
         get => _answer;
@@ -39,6 +56,7 @@ public sealed class IpcApprovalAnswerParams : IIpcParams, IIpcReusable
         }
     }
 
+    /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'id' is required"

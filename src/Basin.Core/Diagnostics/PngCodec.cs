@@ -3,10 +3,20 @@ using System.IO.Compression;
 
 namespace Basin.Diagnostics;
 
+/// <summary>
+/// A small PNG encoder and decoder for screenshots and golden images. It reads only the formats that it writes.
+/// </summary>
 public static class PngCodec
 {
     private static ReadOnlySpan<byte> Signature => [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
 
+    /// <summary>
+    /// Encodes 8-bit RGBA pixels as a PNG file. It throws <see cref="ArgumentException"/> when the span length is not 4 bytes per pixel.
+    /// </summary>
+    /// <param name="rgba">Tightly packed RGBA bytes.</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <returns>The bytes of the PNG file.</returns>
     public static byte[] Encode(ReadOnlySpan<byte> rgba, int width, int height)
     {
         if (rgba.Length != width * height * 4)
@@ -41,6 +51,14 @@ public static class PngCodec
         return output.ToArray();
     }
 
+    /// <summary>
+    /// Encodes 16-bit RGB samples as a PNG file with optional color chunks. It throws <see cref="ArgumentException"/> when the span length is not 3 samples per pixel.
+    /// </summary>
+    /// <param name="rgb">Tightly packed RGB samples.</param>
+    /// <param name="width">The image width in pixels.</param>
+    /// <param name="height">The image height in pixels.</param>
+    /// <param name="color">The <c>cICP</c> and HDR chunks to write, or <see langword="null"/> for none.</param>
+    /// <returns>The bytes of the PNG file.</returns>
     public static byte[] Encode16(ReadOnlySpan<ushort> rgb, int width, int height, PngColorChunks? color)
     {
         if (rgb.Length != width * height * 3)
@@ -106,6 +124,13 @@ public static class PngCodec
         return output.ToArray();
     }
 
+    /// <summary>
+    /// Finds the first chunk of a type in a PNG file.
+    /// </summary>
+    /// <param name="png">The bytes of the PNG file.</param>
+    /// <param name="type">The four-letter chunk type, for example <c>cICP</c>.</param>
+    /// <param name="data">A copy of the chunk data, or an empty array when the chunk is not found.</param>
+    /// <returns><see langword="false"/> when the data is not a PNG file or has no such chunk.</returns>
     public static bool TryReadChunk(ReadOnlySpan<byte> png, string type, out byte[] data)
     {
         data = [];
@@ -130,6 +155,11 @@ public static class PngCodec
         return false;
     }
 
+    /// <summary>
+    /// Decodes a 16-bit RGB PNG file. It throws <see cref="NotSupportedException"/> for any other format or for an interlaced file.
+    /// </summary>
+    /// <param name="png">The bytes of the PNG file.</param>
+    /// <returns>Tightly packed RGB samples and the image size.</returns>
     public static (ushort[] Rgb, int Width, int Height) Decode16(ReadOnlySpan<byte> png)
     {
         if (!TryReadChunk(png, "IHDR", out var ihdr) || ihdr[8] != 16 || ihdr[9] != 2 || ihdr[12] != 0)
@@ -179,6 +209,11 @@ public static class PngCodec
         return (rgb, width, height);
     }
 
+    /// <summary>
+    /// Decodes an 8-bit RGB or RGBA PNG file. RGB pixels get an alpha of 255. It throws <see cref="NotSupportedException"/> for other formats.
+    /// </summary>
+    /// <param name="png">The bytes of the PNG file.</param>
+    /// <returns>Tightly packed RGBA bytes and the image size.</returns>
     public static (byte[] Rgba, int Width, int Height) Decode(ReadOnlySpan<byte> png)
     {
         if (!png[..8].SequenceEqual(Signature))

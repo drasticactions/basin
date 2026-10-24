@@ -1,9 +1,18 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Holds the analytic glow shader for the step overview grid. It writes premultiplied color with alpha 0, so every shader row adds it to the target.
+/// </summary>
 public static class GridStepGlowShader
 {
+    /// <summary>
+    /// The number of <c>vec4</c> uniforms that <see cref="Pack"/> writes.
+    /// </summary>
     public const int UniformCount = 29;
 
+    /// <summary>
+    /// The uniforms of the shader: five step map vectors, two bulge vectors, ten light boxes and twelve scalar vectors.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("m0", PixelShaderUniformType.Float4),
@@ -39,6 +48,10 @@ public static class GridStepGlowShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the shader source for every dialect. The SPIR-V loads from an embedded resource on the first read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The SPIR-V resource is missing from the assembly.</exception>
     public static PixelShaderSource Source => new()
     {
         Glsl = GridGlowCommon.Chunk + Body + GlslMain,
@@ -206,6 +219,13 @@ public static class GridStepGlowShader
         }
         """;
 
+    /// <summary>
+    /// Writes the uniforms for a step overview grid from its step map, lights, effects and reveal. A grid with no map gets all zeros, which draws no glow.
+    /// </summary>
+    /// <param name="grid">The grid source to describe.</param>
+    /// <param name="bounds">The bounds of the grid mesh, in output pixels.</param>
+    /// <param name="into">The destination, with at least <see cref="UniformCount"/> values.</param>
+    /// <exception cref="ArgumentException"><paramref name="into"/> is shorter than <see cref="UniformCount"/>.</exception>
     public static void Pack(CanvasStepSource grid, in Box bounds, Span<PixelShaderUniformValue> into)
     {
         if (into.Length < UniformCount)

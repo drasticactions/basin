@@ -3,6 +3,9 @@ using Wayland.Server;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Gives the Xwayland client its scale and the per-client output overrides, so that X11 sees outputs in physical pixels. It updates both when the layout or the server settings change.
+/// </summary>
 public sealed class XWaylandOutputs : IDisposable
 {
     private readonly XWaylandServer _server;
@@ -11,6 +14,14 @@ public sealed class XWaylandOutputs : IDisposable
     private readonly Func<ILogicalOutputOverrides?> _logical;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XWaylandOutputs"/> class and subscribes to the server and the layout.
+    /// </summary>
+    /// <param name="server">The server whose client gets the overrides.</param>
+    /// <param name="layout">The layout that supplies the outputs and their scales.</param>
+    /// <param name="clientScales">The store for the client scale.</param>
+    /// <param name="logical">A function that returns the logical output overrides, or <see langword="null"/> when none exist. It is called on each update.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public XWaylandOutputs(
         XWaylandServer server, OutputLayout layout, ClientScales clientScales, Func<ILogicalOutputOverrides?> logical)
     {
@@ -28,10 +39,22 @@ public sealed class XWaylandOutputs : IDisposable
         layout.Changed += Refresh;
     }
 
+    /// <summary>
+    /// Gets the current X11 scale: the fixed server scale, or the largest output scale when the scale is automatic.
+    /// </summary>
     public double Scale { get; private set; }
 
+    /// <summary>
+    /// Occurs when <see cref="Refresh"/> computes a new scale. The argument is the new scale.
+    /// </summary>
     public event Action<double>? ScaleChanged;
 
+    /// <summary>
+    /// Finds the largest output scale in a layout.
+    /// </summary>
+    /// <param name="layout">The layout to search.</param>
+    /// <returns>The largest scale, and never less than 1.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="layout"/> is <see langword="null"/>.</exception>
     public static double LargestScale(OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -44,6 +67,9 @@ public sealed class XWaylandOutputs : IDisposable
         return scale;
     }
 
+    /// <summary>
+    /// Computes the scale again and applies the overrides to the running client. It does nothing after dispose.
+    /// </summary>
     public void Refresh()
     {
         if (_disposed)
@@ -65,6 +91,9 @@ public sealed class XWaylandOutputs : IDisposable
         }
     }
 
+    /// <summary>
+    /// Unsubscribes from the server and the layout. Overrides that are already set stay in effect.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

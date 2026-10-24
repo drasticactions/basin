@@ -6,6 +6,9 @@ using static Basin.Desktop.DesktopLog;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Shows one cursor across the outputs of a layout. It puts the cursor on a hardware cursor plane when the output accepts it, and draws it in the scene when not. In parent mode, it hands the cursor to the host instead.
+/// </summary>
 public sealed class CursorController : IDisposable
 {
     private readonly OutputLayout _layout;
@@ -35,6 +38,10 @@ public sealed class CursorController : IDisposable
     private bool _software;
     private double _x, _y;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CursorController"/> class. No cursor shows until <see cref="Load"/> and <see cref="AddOutput"/> are called.
+    /// </summary>
+    /// <param name="layout">The layout that places the cursor position on outputs.</param>
     public CursorController(OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -42,8 +49,14 @@ public sealed class CursorController : IDisposable
         _layout.Changed += Refresh;
     }
 
+    /// <summary>
+    /// Gets or sets the capture service that receives the cursor image and position, so that captures can include the cursor. When it is <see langword="null"/>, nothing is published.
+    /// </summary>
     public IScreenCapture? Capture { get; set; }
 
+    /// <summary>
+    /// Gets or sets the cursor size factor on top of the output scale. A value below 1 becomes 1. A change reloads the theme images.
+    /// </summary>
     public double Magnification
     {
         get => _magnification;
@@ -68,21 +81,45 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the theme images. It is <see langword="null"/> before <see cref="Load"/>.
+    /// </summary>
     public CursorImages? Images => _images;
 
+    /// <summary>
+    /// Gets the output that shows the cursor now. It is <see langword="null"/> when the cursor is hidden, in parent mode, or outside every added output.
+    /// </summary>
     public IOutput? CursorOutput => _cursorOn;
 
+    /// <summary>
+    /// Tests whether the scene draws the cursor on an output, because the hardware cursor plane refused the image.
+    /// </summary>
+    /// <param name="output">The output to test.</param>
+    /// <returns><see langword="true"/> when the cursor is on <paramref name="output"/> and is drawn in the scene.</returns>
     public bool IsSoftwareOn(IOutput output) => ReferenceEquals(_cursorOn, output) && _software;
 
+    /// <summary>
+    /// Gets a diagnostic word for the cursor path: <c>none</c> when no theme cursor is loaded, then <c>parent</c>, <c>software</c> or <c>plane</c>.
+    /// </summary>
     public string DrawnBy =>
         _images?.Named("left_ptr") is null ? "none"
         : _parentMode ? "parent"
         : _software ? "software"
         : "plane";
 
+    /// <summary>
+    /// Gets a diagnostic word for the image: the theme cursor name, <c>client</c> for a client image, or <c>nothing</c>.
+    /// </summary>
     public string Showing =>
         _showing is null ? "nothing" : _showingName.Length > 0 ? _showingName : "client";
 
+    /// <summary>
+    /// Loads the cursor theme into buffers from an allocator and shows <c>left_ptr</c>. It replaces an earlier load and logs a warning when no theme is found.
+    /// </summary>
+    /// <param name="allocator">The allocator for cursor buffers. The controller owns it and disposes it.</param>
+    /// <param name="bufferWidth">The cursor buffer width in pixels, usually the hardware cursor size.</param>
+    /// <param name="bufferHeight">The cursor buffer height in pixels.</param>
+    /// <param name="logicalSize">The cursor size in logical pixels.</param>
     public void Load(IAllocator allocator, int bufferWidth, int bufferHeight, int logicalSize = 24)
     {
         ArgumentNullException.ThrowIfNull(allocator);
@@ -112,6 +149,11 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Adds an output that can show the cursor.
+    /// </summary>
+    /// <param name="output">The output to add.</param>
+    /// <param name="scene">The scene output that draws a software cursor, or <see langword="null"/> when the output has only a hardware cursor.</param>
     public void AddOutput(IOutput output, SceneOutput? scene)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -121,6 +163,10 @@ public sealed class CursorController : IDisposable
         Refresh();
     }
 
+    /// <summary>
+    /// Removes an output and takes the cursor off it.
+    /// </summary>
+    /// <param name="output">The output to remove.</param>
     public void RemoveOutput(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -135,10 +181,21 @@ public sealed class CursorController : IDisposable
         Refresh();
     }
 
+    /// <summary>
+    /// Gets or sets the cursor shape manager whose <see cref="CursorShapeManager.Scale"/> the controller keeps at the largest output scale.
+    /// </summary>
     public CursorShapeManager? Shapes { get; set; }
 
+    /// <summary>
+    /// Gets or sets the color profile service that converts cursor images for each output. Set it before <see cref="Load"/>, which reads it.
+    /// </summary>
     public IColorProfileService? ColorProfiles { get; set; }
 
+    /// <summary>
+    /// Sets the image description of an added output, so that the cursor is converted for that output. It does nothing for an output that was not added.
+    /// </summary>
+    /// <param name="output">The output to describe.</param>
+    /// <param name="description">The image description, or <see langword="null"/> for the default.</param>
     public void Describe(IOutput output, ImageDescription? description)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -195,8 +252,15 @@ public sealed class CursorController : IDisposable
         PublishCursor();
     }
 
+    /// <summary>
+    /// Switches to parent mode before a parent cursor is attached. The controller then stops drawing the cursor on its outputs.
+    /// </summary>
     public void UseParentCursor() => _parentMode = true;
 
+    /// <summary>
+    /// Switches to parent mode and hands the current image to a host cursor.
+    /// </summary>
+    /// <param name="parent">The host cursor that shows the image.</param>
     public void AttachParent(IParentCursor parent)
     {
         ArgumentNullException.ThrowIfNull(parent);
@@ -208,6 +272,9 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reloads the theme images for the current largest output scale and shows the current named cursor again.
+    /// </summary>
     public void ReloadForScale() =>
         _images?.ReloadForScale(MaxScale(), () =>
         {
@@ -218,6 +285,11 @@ public sealed class CursorController : IDisposable
             }
         });
 
+    /// <summary>
+    /// Defines or replaces a named cursor that code paints instead of the theme. The definition survives later loads.
+    /// </summary>
+    /// <param name="name">The cursor name.</param>
+    /// <param name="paint">The painter, called with the scale. It returns <see langword="null"/> when it cannot paint.</param>
     public void Define(string name, Func<double, XcursorImage?> paint)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -231,6 +303,10 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Shows a named cursor from the theme or from <see cref="Define"/>. It does nothing when the name shows already or is unknown.
+    /// </summary>
+    /// <param name="name">The cursor name, for example <c>left_ptr</c>.</param>
     public void ShowNamed(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -243,6 +319,10 @@ public sealed class CursorController : IDisposable
         Show(image);
     }
 
+    /// <summary>
+    /// Sets the client cursor image. It shows only while the pointer is over a client.
+    /// </summary>
+    /// <param name="image">The image to show over the client.</param>
     public void ShowImage(CursorImage image)
     {
         _clientCursor = image;
@@ -252,6 +332,9 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Clears the client cursor image. While the pointer is over a client, <c>left_ptr</c> shows.
+    /// </summary>
     public void ClearClientCursor()
     {
         _clientCursor = null;
@@ -261,6 +344,11 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Reports the surface under the pointer. A change of surface clears the client cursor image, and the client cursor shows only when <paramref name="overClient"/> is <see langword="true"/>.
+    /// </summary>
+    /// <param name="surface">The surface under the pointer, or <see langword="null"/>.</param>
+    /// <param name="overClient"><see langword="true"/> when the pointer is over client content rather than compositor chrome.</param>
     public void SetHover(Surface? surface, bool overClient)
     {
         if (!ReferenceEquals(surface, _hoverSurface))
@@ -276,6 +364,10 @@ public sealed class CursorController : IDisposable
         }
     }
 
+    /// <summary>
+    /// Takes a client <c>set_cursor</c> request. The controller follows commits on the cursor surface and sends its frame callbacks after the output shows the new image.
+    /// </summary>
+    /// <param name="request">The cursor surface and hotspot.</param>
     public void HandleCursorRequest(CursorRequest request)
     {
         if (!ReferenceEquals(request.Surface, _clientSurface))
@@ -299,8 +391,14 @@ public sealed class CursorController : IDisposable
         TakeClientCursor();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Hide"/> hid the cursor.
+    /// </summary>
     public bool IsHidden => _hidden;
 
+    /// <summary>
+    /// Hides the cursor on every output, or on the host in parent mode, until <see cref="Reveal"/>.
+    /// </summary>
     public void Hide()
     {
         if (_hidden)
@@ -319,6 +417,9 @@ public sealed class CursorController : IDisposable
         Withdraw();
     }
 
+    /// <summary>
+    /// Shows the cursor again after <see cref="Hide"/>.
+    /// </summary>
     public void Reveal()
     {
         if (!_hidden)
@@ -354,6 +455,11 @@ public sealed class CursorController : IDisposable
         _software = false;
     }
 
+    /// <summary>
+    /// Moves the cursor and moves it to another output when the position crosses one. A hidden cursor keeps the position and does not move.
+    /// </summary>
+    /// <param name="x">The X position in layout coordinates.</param>
+    /// <param name="y">The Y position in layout coordinates.</param>
     public void MoveTo(double x, double y)
     {
         (_x, _y) = (x, y);
@@ -376,6 +482,9 @@ public sealed class CursorController : IDisposable
         Present();
     }
 
+    /// <summary>
+    /// Stops following the layout, the outputs and the client cursor surface, and disposes the theme images and the allocator.
+    /// </summary>
     public void Dispose()
     {
         _layout.Changed -= Refresh;

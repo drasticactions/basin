@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin.UI.ImGui;
 
+/// <summary>
+/// The Dear ImGui chrome host. Each surface has its own contexts, and all surfaces share one font atlas and one renderer backend. Use it on the thread that created it.
+/// </summary>
 public sealed class ImGuiUIHost : IUIHost
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -27,16 +30,32 @@ public sealed class ImGuiUIHost : IUIHost
         _fonts = new ImGuiFonts(options.FontSize);
     }
 
+    /// <summary>
+    /// Gets the name of the renderer backend, "gl" or "vulkan".
+    /// </summary>
     public string Name => _backend.Name;
 
+    /// <summary>
+    /// Gets the size of the shared font atlas, in logical pixels.
+    /// </summary>
     public float FontSize => _fonts.Size;
 
+    /// <summary>
+    /// Gets or sets the interval in milliseconds between frames while a surface animates. The constructor clamps the option to at least 1. The setter does not clamp.
+    /// </summary>
     public int FrameIntervalMillis { get; set; }
 
+    /// <inheritdoc/>
     public UITargetKind Produces => _backend.Produces;
 
+    /// <summary>
+    /// Gets <see cref="ImGuiUISurface"/>, the type of every surface that the host creates.
+    /// </summary>
     public Type SurfaceContract => typeof(ImGuiUISurface);
 
+    /// <summary>
+    /// Gets the live surfaces in the order of creation. A surface leaves the list when it is disposed.
+    /// </summary>
     public IReadOnlyList<ImGuiUISurface> Surfaces => _surfaces;
 
     internal IImGuiBackend Backend => _backend;
@@ -45,6 +64,7 @@ public sealed class ImGuiUIHost : IUIHost
 
     internal bool HasVertexOffset => _backend.HasVertexOffset;
 
+    /// <inheritdoc/>
     public long? NextDueMillis
     {
         get
@@ -76,10 +96,18 @@ public sealed class ImGuiUIHost : IUIHost
         }
     }
 
+    /// <inheritdoc/>
     public event Action? WakeupRequested;
 
+    /// <inheritdoc/>
     public IUISurface? CreateSurface(in UISurfaceOptions options) => Create(options);
 
+    /// <summary>
+    /// Creates a configured surface with the concrete type. The caller owns the surface and must dispose it.
+    /// </summary>
+    /// <param name="options">The target kind, the logical size and the scale.</param>
+    /// <returns>The surface, or <see langword="null"/> when the backend does not produce the kind, cannot make a target, or rejects the size.</returns>
+    /// <exception cref="ObjectDisposedException">The host is disposed.</exception>
     public ImGuiUISurface? Create(in UISurfaceOptions options)
     {
         _thread.Assert();
@@ -107,6 +135,9 @@ public sealed class ImGuiUIHost : IUIHost
         return surface;
     }
 
+    /// <summary>
+    /// Draws each surface that is dirty or due. A surface that draws the same frame again publishes no buffer. The call does nothing after <see cref="Dispose"/>.
+    /// </summary>
     public void Pump()
     {
         _thread.Assert();
@@ -131,6 +162,9 @@ public sealed class ImGuiUIHost : IUIHost
         }
     }
 
+    /// <summary>
+    /// Disposes every surface, then the backend and the font atlas. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

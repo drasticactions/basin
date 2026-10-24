@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_session_lock_manager_v1</c> global. It allows one lock at a time, and sends <c>locked</c> after each enabled output commits a frame.
+/// </summary>
 public sealed class SessionLockManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -15,6 +21,12 @@ public sealed class SessionLockManager : IDisposable
     private readonly List<Waiter> _waiters = [];
     private ExtSessionLockV1Resource? _activeLock;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SessionLockManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global and supplies serials.</param>
+    /// <param name="compositor">The compositor global that resolves lock surfaces.</param>
+    /// <param name="layout">The layout whose enabled outputs must repaint before the lock is presented, or <see langword="null"/> to present at once.</param>
     public SessionLockManager(WlServerDisplay display, CompositorGlobal compositor, OutputLayout? layout = null)
     {
         _display = display;
@@ -23,20 +35,44 @@ public sealed class SessionLockManager : IDisposable
         _global = display.CreateGlobal(ExtSessionLockManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a client asked for a lock and has not unlocked. It stays <see langword="true"/> when the locking client dies.
+    /// </summary>
     public bool IsLocked { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the lock is on screen and the client got <c>locked</c>.
+    /// </summary>
     public bool IsPresentedLocked { get; private set; }
 
+    /// <summary>
+    /// Occurs when a client asks for a lock while the session is not locked. The consumer must hide all content and clear focus at once.
+    /// </summary>
     public event Action? LockRequested;
 
+    /// <summary>
+    /// Occurs when the lock is presented on every enabled output.
+    /// </summary>
     public event Action? Locked;
 
+    /// <summary>
+    /// Occurs when the locking client unlocks.
+    /// </summary>
     public event Action? Unlocked;
 
+    /// <summary>
+    /// Occurs when the locking client destroys the lock without an unlock. The session stays locked.
+    /// </summary>
     public event Action? Abandoned;
 
+    /// <summary>
+    /// Occurs when the locking client creates a lock surface.
+    /// </summary>
     public event Action<LockSurface>? NewLockSurface;
 
+    /// <summary>
+    /// Stops waiting for outputs and removes the global.
+    /// </summary>
     public void Dispose()
     {
         CancelWaiters();

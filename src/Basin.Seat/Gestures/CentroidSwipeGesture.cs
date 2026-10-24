@@ -1,21 +1,40 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Recognizes a swipe of a fixed number of fingers by the motion of their center, as a member of the touch gesture chain.
+/// </summary>
 public sealed class CentroidSwipeGesture : ITouchGestures
 {
     private readonly TouchContacts _contacts = new();
     private Phase _phase;
     private double _travel;
 
+    /// <summary>
+    /// Gets or sets the exact number of contacts that the swipe needs. One more contact stops the watch.
+    /// </summary>
     public uint Fingers { get; set; } = 3;
 
+    /// <summary>
+    /// Gets or sets the travel of the center along <see cref="Axis"/> that starts the swipe.
+    /// </summary>
     public double Slop { get; set; } = 24;
 
+    /// <summary>
+    /// Gets or sets the axis along which the slop is measured.
+    /// </summary>
     public SwipeAxis Axis { get; set; } = SwipeAxis.Horizontal;
 
+    /// <summary>
+    /// Gets or sets the handler that decides to claim and receives the swipe. With no handler, the gesture never claims.
+    /// </summary>
     public ICentroidSwipeHandler? Handler { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether a swipe is claimed and not yet ended.
+    /// </summary>
     public bool IsClaimed => _phase == Phase.Claimed;
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Down(int id, uint timeMs, double x, double y)
     {
         _contacts.Down(id, x, y);
@@ -37,6 +56,7 @@ public sealed class CentroidSwipeGesture : ITouchGestures
         return TouchGestureVerdict.Pass;
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Motion(int id, uint timeMs, double x, double y)
     {
         if (!_contacts.Motion(id, x, y, out var dx, out var dy))
@@ -78,6 +98,7 @@ public sealed class CentroidSwipeGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Up(int id, uint timeMs)
     {
         _ = _contacts.Up(id);
@@ -105,6 +126,7 @@ public sealed class CentroidSwipeGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public void Cancel()
     {
         _contacts.Clear();
@@ -117,6 +139,11 @@ public sealed class CentroidSwipeGesture : ITouchGestures
         _travel = 0;
     }
 
+    /// <summary>
+    /// Returns zero. This gesture never withholds events.
+    /// </summary>
+    /// <param name="into">The buffer, which is not written.</param>
+    /// <returns>Always zero.</returns>
     public int TakeWithheld(Span<EdgeSwipeSample> into) => 0;
 
     private enum Phase

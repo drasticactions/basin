@@ -3,6 +3,9 @@ using Wayland;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// The seat's touch device. It delivers down, motion, up, frame and cancel to the clients under each contact and runs touch grabs.
+/// </summary>
 public sealed class SeatTouch
 {
     private readonly Seat _seat;
@@ -18,18 +21,46 @@ public sealed class SeatTouch
         _defaultGrab = new DefaultGrab(this);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a contact is down on a client surface.
+    /// </summary>
     public bool HasPoints => _points.Count > 0;
 
+    /// <summary>
+    /// Gets the router that drives this device, or <see langword="null"/>. A new <see cref="TouchRouter"/> sets it.
+    /// </summary>
     public TouchRouter? Router { get; internal set; }
 
+    /// <summary>
+    /// Gets the grab that receives the notify calls: the newest started grab, or the default grab that delivers to clients.
+    /// </summary>
     public ITouchGrab Grab => _grabs.Count > 0 ? _grabs[^1] : _defaultGrab;
 
+    /// <summary>
+    /// Gets a value indicating whether a grab other than the default one is active.
+    /// </summary>
     public bool HasGrab => _grabs.Count > 0;
 
+    /// <summary>
+    /// Checks whether a serial belongs to a touch down that is still on its surface.
+    /// </summary>
+    /// <param name="serial">The serial.</param>
+    /// <returns><see langword="true"/> when the contact of that down is still live.</returns>
     public bool IsActiveDownSerial(uint serial) => TryGetPointBySerial(serial, out _);
 
+    /// <summary>
+    /// Checks whether the client of a surface has bound <c>wl_touch</c>.
+    /// </summary>
+    /// <param name="surface">The surface, or <see langword="null"/>.</param>
+    /// <returns><see langword="false"/> for a null or destroyed surface, or a client with no touch resource.</returns>
     public bool Accepts(Surface? surface) => _seat.ClientOf(surface) is { Touches.Count: > 0 };
 
+    /// <summary>
+    /// Finds the live contact of a touch down serial.
+    /// </summary>
+    /// <param name="serial">The down serial.</param>
+    /// <param name="id">The contact id, or zero when it is not found.</param>
+    /// <returns><see langword="false"/> when no live contact has that serial.</returns>
     public bool TryGetPointBySerial(uint serial, out int id)
     {
         foreach (var (pointId, point) in _points)
@@ -49,6 +80,15 @@ public sealed class SeatTouch
 
     private const int NotifyScopeWarmup = 10;
 
+    /// <summary>
+    /// Passes a touch down to the active grab.
+    /// </summary>
+    /// <param name="surface">The surface under the contact.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal surface-local position in logical pixels.</param>
+    /// <param name="y">The vertical surface-local position in logical pixels.</param>
+    /// <returns>The serial that the grab issued, or zero.</returns>
     public uint NotifyDown(Surface surface, uint timeMs, int id, double x, double y)
     {
         if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
@@ -68,6 +108,11 @@ public sealed class SeatTouch
         }
     }
 
+    /// <summary>
+    /// Passes the lift of a contact to the active grab.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
     public void NotifyUp(uint timeMs, int id)
     {
         if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
@@ -88,6 +133,13 @@ public sealed class SeatTouch
         }
     }
 
+    /// <summary>
+    /// Passes a contact motion to the active grab.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal position local to the surface of the down.</param>
+    /// <param name="y">The vertical position local to the surface of the down.</param>
     public void NotifyMotion(uint timeMs, int id, double x, double y)
     {
         if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
@@ -108,6 +160,9 @@ public sealed class SeatTouch
         }
     }
 
+    /// <summary>
+    /// Passes the end of a group of touch events to the active grab.
+    /// </summary>
     public void NotifyFrame()
     {
         if (HasGrab || _scopedNotifies < NotifyScopeWarmup)
@@ -128,12 +183,32 @@ public sealed class SeatTouch
         }
     }
 
+    /// <summary>
+    /// Passes a cancel of the whole touch sequence to the active grab.
+    /// </summary>
     public void NotifyCancel() => Grab.Cancel();
 
+    /// <summary>
+    /// Pushes a grab. It receives every notify call until it ends or a newer grab starts.
+    /// </summary>
+    /// <param name="grab">The grab.</param>
     public void StartGrab(ITouchGrab grab) => _grabs.Add(grab);
 
+    /// <summary>
+    /// Removes a grab without a cancel call.
+    /// </summary>
+    /// <param name="grab">The grab. A grab that is not started is ignored.</param>
     public void EndGrab(ITouchGrab grab) => _grabs.Remove(grab);
 
+    /// <summary>
+    /// Sends <c>wl_touch.down</c> to the client of a surface and records the contact. It bypasses grabs.
+    /// </summary>
+    /// <param name="surface">The surface under the contact.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal surface-local position in logical pixels.</param>
+    /// <param name="y">The vertical surface-local position in logical pixels.</param>
+    /// <returns>The down serial, issued also when the client has no touch resource.</returns>
     public uint SendDown(Surface surface, uint timeMs, int id, double x, double y)
     {
         var serial = _seat.NextSerial(SerialKind.TouchDown);
@@ -152,6 +227,11 @@ public sealed class SeatTouch
         return serial;
     }
 
+    /// <summary>
+    /// Sends <c>wl_touch.up</c> for a recorded contact and forgets it. An unknown contact is ignored. It bypasses grabs.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
     public void SendUp(uint timeMs, int id)
     {
         if (!_points.Remove(id, out var point))
@@ -171,6 +251,13 @@ public sealed class SeatTouch
         }
     }
 
+    /// <summary>
+    /// Sends <c>wl_touch.motion</c> for a recorded contact. An unknown contact is ignored. It bypasses grabs.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal position local to the surface of the down.</param>
+    /// <param name="y">The vertical position local to the surface of the down.</param>
     public void SendMotion(uint timeMs, int id, double x, double y)
     {
         if (!_points.TryGetValue(id, out var point) || _seat.ClientOf(point.Surface) is not { } client)
@@ -187,6 +274,9 @@ public sealed class SeatTouch
         _frameClients.Add(client);
     }
 
+    /// <summary>
+    /// Sends <c>wl_touch.frame</c> to every client that received a touch event since the last frame. It bypasses grabs.
+    /// </summary>
     public void SendFrame()
     {
         foreach (var client in _frameClients)
@@ -200,6 +290,9 @@ public sealed class SeatTouch
         _frameClients.Clear();
     }
 
+    /// <summary>
+    /// Sends <c>wl_touch.cancel</c> to every client with a live contact and forgets all contacts. It bypasses grabs.
+    /// </summary>
     public void SendCancel()
     {
         foreach (var point in _points.Values)

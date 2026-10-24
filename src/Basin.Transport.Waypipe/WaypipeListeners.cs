@@ -2,8 +2,23 @@ using System.Runtime.Versioning;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// Selects and binds the right <see cref="IWaypipeListener"/> for the platform.
+/// </summary>
 public static class WaypipeListeners
 {
+    /// <summary>
+    /// Binds a listener for an endpoint string. A host with descriptors gets a <see cref="WaypipeListener"/> and a completed task. Windows gets a <see cref="HyperVWaypipeListener"/>.
+    /// </summary>
+    /// <param name="endpoint">The endpoint as <see cref="WaypipeEndpoint.ForListening"/> reads it. On Windows it must be "vsock:PORT".</param>
+    /// <param name="host">The loop and the post delegate. The bind uses the one that the platform needs.</param>
+    /// <param name="vm">The Hyper-V VM to bind on Windows, or <see langword="null"/> for <see cref="HyperVVm.Wsl"/>. Other platforms ignore it.</param>
+    /// <param name="compression">The compression that every channel expects from its peer.</param>
+    /// <param name="limits">The limits for each channel, or <see langword="null"/> for the defaults.</param>
+    /// <param name="options">The content that each channel accepts, or <see langword="null"/> for the defaults.</param>
+    /// <param name="cancellation">Cancels a Hyper-V bind that has not completed.</param>
+    /// <returns>A task that completes with the bound listener, which the caller owns.</returns>
+    /// <exception cref="PlatformNotSupportedException">The platform binds no listening socket, or Windows got an endpoint other than vsock.</exception>
     public static Task<IWaypipeListener> BindAsync(
         string endpoint,
         WaypipeListenerHost host,

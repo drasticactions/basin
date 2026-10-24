@@ -6,6 +6,9 @@ using static Basin.Backend.Wayland.WaylandBackendLog;
 
 namespace Basin.Backend.Wayland;
 
+/// <summary>
+/// An output that presents into a toplevel window on the parent compositor. Its mode is in physical pixels and follows the parent's configure size and the output scale.
+/// </summary>
 public sealed class WaylandOutput : OutputBase, IPresentingOutput
 {
     private const int ProtReadWrite = 3;
@@ -156,6 +159,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _surface.Commit();
     }
 
+    /// <summary>
+    /// Sets the title of the parent window. The request is queued and not flushed.
+    /// </summary>
+    /// <param name="title">The new title.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="title"/> is <see langword="null"/>.</exception>
     public void SetTitle(string title)
     {
         ArgumentNullException.ThrowIfNull(title);
@@ -164,10 +172,19 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _hostFrame?.RaiseStateChanged();
     }
 
+    /// <summary>Gets the title that <see cref="SetTitle(string)"/> set last. The first title is <c>basin — NAME</c>.</summary>
     public string Title { get; private set; } = string.Empty;
 
+    /// <summary>Gets the icon name that <see cref="SetIcon"/> set last, or <see langword="null"/>.</summary>
     public string? IconName { get; private set; }
 
+    /// <summary>
+    /// Sets the icon of the parent window from a theme name, pixels, or both. A <see langword="null"/> name with no pixels clears the icon.
+    /// </summary>
+    /// <param name="name">The icon name in the icon theme, or <see langword="null"/>.</param>
+    /// <param name="argb">The square icon as premultiplied ARGB8888 pixels, row by row. The pixels are copied.</param>
+    /// <param name="size">The width and height of <paramref name="argb"/>, or 0 for no pixels.</param>
+    /// <returns><see langword="false"/> when the parent has no toplevel icon manager or <paramref name="argb"/> is shorter than <paramref name="size"/> squared.</returns>
     public unsafe bool SetIcon(string? name, ReadOnlySpan<uint> argb = default, int size = 0)
     {
         if (_backend.ParentToplevelIcon is not { } manager)
@@ -234,22 +251,40 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    /// <summary>Raises <see cref="CloseRequested"/>, as the parent's close request does.</summary>
     public void RequestClose() => CloseRequested?.Invoke();
 
+    /// <summary>Occurs when the parent asks to close the window, or when <see cref="RequestClose"/> runs. The policy belongs to the consumer.</summary>
     public event Action? CloseRequested;
 
+    /// <summary>
+    /// Occurs when the parent reports that a committed frame reached the screen. The arguments are the time in nanoseconds, the refresh interval in nanoseconds and the sequence count.
+    /// It needs a parent with <c>wp_presentation</c> on <c>CLOCK_MONOTONIC</c>.
+    /// </summary>
     public event Action<ulong, uint, ulong>? PresentedOnScreen;
 
+    /// <summary>Occurs when the parent reports that a committed frame was not shown, for example because the window was occluded.</summary>
     public event Action? PresentationDiscarded;
 
+    /// <summary>
+    /// Gets the scale that the parent prefers for the window, from <c>wp_fractional_scale_v1</c>. It is 1 when the parent has no fractional scale manager.
+    /// </summary>
     public double HostScale { get; private set; } = 1;
 
+    /// <summary>Occurs when <see cref="HostScale"/> changes.</summary>
     public event Action? HostScaleChanged;
 
+    /// <summary>Gets a value indicating whether the parent agreed to draw server-side decorations in its last configure.</summary>
     public bool Decorated { get; private set; }
 
+    /// <summary>
+    /// Gets the host frame for chrome that the consumer draws. It is <see langword="null"/> when the parent decorates, or lacks subsurfaces or a viewporter.
+    /// </summary>
     public WaylandHostFrame? HostFrame => _hostFrame;
 
+    /// <summary>
+    /// Occurs when the output creates its host frame on a configure without server-side decorations. A handler added while <see cref="HostFrame"/> is set runs at once with it.
+    /// </summary>
     public event Action<WaylandHostFrame> HostFrameAvailable
     {
         add
@@ -264,6 +299,10 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         remove => _hostFrameAvailable -= value;
     }
 
+    /// <summary>
+    /// Asks the parent to activate the window through <c>xdg_activation_v1</c>, with the latest input serial when one exists.
+    /// </summary>
+    /// <returns><see langword="false"/> when the parent has no activation global.</returns>
     public bool RequestActivation()
     {
         if (_backend.ParentActivation is not { } activation)
@@ -289,6 +328,12 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    /// <summary>
+    /// Locks the parent pointer to this window, or releases the lock. A lock that is already active stays as it is.
+    /// </summary>
+    /// <param name="locked"><see langword="true"/> to lock, <see langword="false"/> to release.</param>
+    /// <param name="confine">The region the lock applies in, in output-local physical pixels, or <see langword="null"/> for the whole surface.</param>
+    /// <returns><see langword="false"/> when the parent has no pointer constraints or the seat has no pointer.</returns>
     public bool LockPointer(bool locked, Region? confine = null)
     {
         if (_backend.ParentPointerConstraints is not { } constraints || _backend.Pointer is not { } pointer)
@@ -314,6 +359,11 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    /// <summary>
+    /// Tells the parent where to show the pointer when the lock ends. It does nothing when no lock is active.
+    /// </summary>
+    /// <param name="x">The X position in output-local physical pixels.</param>
+    /// <param name="y">The Y position in output-local physical pixels.</param>
     public void SetCursorPositionHint(double x, double y)
     {
         if (_lockedPointer is not { IsDestroyed: false } locked)
@@ -566,6 +616,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _presentationScale = 1;
     }
 
+    /// <inheritdoc/>
     public override void RequestFrame()
     {
         if (_framePending || _frameRequested || !_configured)
@@ -578,17 +629,32 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         _frameRequested = false;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a commit can carry an in-fence. It needs a parent syncobj manager and a <see cref="WaylandBackend.RenderDevice"/>.
+    /// </summary>
     public override bool SupportsInFence => _backend.ParentSyncobj is not null && _backend.RenderDevice is not null;
 
+    /// <summary>
+    /// Returns whether the parent can present a dmabuf of this format and modifier directly. Overlay planes are never available.
+    /// </summary>
+    /// <param name="format">The DRM fourcc format.</param>
+    /// <param name="modifier">The DRM format modifier.</param>
+    /// <param name="overlay"><see langword="true"/> to ask about an overlay plane instead of the primary one.</param>
+    /// <returns><see langword="true"/> when <paramref name="overlay"/> is <see langword="false"/> and the parent lists the pair.</returns>
     public override bool CanScanout(DrmFormat format, ulong modifier, bool overlay) =>
         !overlay && _backend.ParentDmabuf is not null && _backend.ParentDmabufFormats.Contains(format, modifier);
 
+    /// <summary>Gets the dmabuf formats and modifiers that the parent accepts, which a buffer needs to present without a copy.</summary>
     public DrmFormatSet ScanoutFormats => _backend.ParentDmabufFormats;
 
+    /// <summary>
+    /// Gets the image description that the parent surface carries now. It is <see langword="null"/> for SDR content or when the parent has no color manager.
+    /// </summary>
     public Basin.Capabilities.ImageDescription? PassthroughDescription => _color?.Applied;
 
     private ParentSurfaceColor? _color;
 
+    /// <inheritdoc/>
     protected override bool TestCommitCore(OutputState state)
     {
         if ((state.Fields & OutputStateFields.Mode) != 0 &&
@@ -610,6 +676,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    /// <inheritdoc/>
     protected override bool CommitCore(OutputState state)
     {
         if ((state.Fields & OutputStateFields.Scale) != 0 && _configured)
@@ -1008,6 +1075,7 @@ public sealed class WaylandOutput : OutputBase, IPresentingOutput
         return imported;
     }
 
+    /// <inheritdoc/>
     protected override void OnDestroy()
     {
         _disposedOutput = true;

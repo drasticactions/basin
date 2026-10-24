@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_text_input_manager_v1</c> global for older clients. A text input is active when its client activated it on the surface with keyboard focus.
+/// </summary>
 public sealed class TextInputV1Manager : IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -15,6 +21,12 @@ public sealed class TextInputV1Manager : IDisposable
     private readonly List<TextInput> _textInputs = [];
     private Surface? _active;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TextInputV1Manager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="seat">The seat whose keyboard focus selects the active text input, or <see langword="null"/>.</param>
+    /// <param name="method">The input method that serves text input, or <see langword="null"/>.</param>
     public TextInputV1Manager(WlServerDisplay display, Seat.Seat? seat, ITextInputMethod? method)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -35,10 +47,19 @@ public sealed class TextInputV1Manager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when a text input on a surface becomes the active one.
+    /// </summary>
     public event Action<Surface>? TextInputActivated;
 
+    /// <summary>
+    /// Occurs when no text input is active any more.
+    /// </summary>
     public event Action? TextInputDeactivated;
 
+    /// <summary>
+    /// Stops following the seat and the input method, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_seat is { } withSeat)

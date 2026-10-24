@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's full-screen zoom as a post stage. It scales the whole frame and moves the view with the cursor or a focus rectangle.
+/// </summary>
 public sealed class ZoomStage : IPostStage
 {
     private const int PushThreshold = 4;
@@ -23,6 +26,11 @@ public sealed class ZoomStage : IPostStage
     private long _lastCursorNanos;
     private bool _hasLast;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ZoomStage"/> class.
+    /// </summary>
+    /// <param name="shader">The compiled <see cref="ZoomShader"/>, or <see langword="null"/>. Without it, the stage scales through a render transform with no sharpening and no pixel grid.</param>
+    /// <param name="options">The settings. The default value uses the default <see cref="ZoomOptions"/>.</param>
     public ZoomStage(IPixelShader? shader, ZoomOptions options = default)
     {
         _shader = shader;
@@ -32,26 +40,56 @@ public sealed class ZoomStage : IPostStage
         _source = _zoom;
     }
 
+    /// <summary>
+    /// Gets or sets the settings. A new value applies on the next step.
+    /// </summary>
     public ZoomOptions Options
     {
         get => _options;
         set => _options = value;
     }
 
+    /// <summary>
+    /// Gets or sets the source of focus and caret rectangles, or <see langword="null"/> for none.
+    /// </summary>
     public IZoomTarget? Target { get; set; }
 
+    /// <summary>
+    /// Gets the current zoom. A value of 1 draws the frame unchanged.
+    /// </summary>
     public double Zoom => _zoom;
 
+    /// <summary>
+    /// Gets the zoom that <see cref="Step"/> moves toward.
+    /// </summary>
     public double TargetZoom => _target;
 
+    /// <summary>
+    /// Gets the horizontal translation of the scaled frame, in output pixels.
+    /// </summary>
     public double TranslationX => _translationX;
 
+    /// <summary>
+    /// Gets the vertical translation of the scaled frame, in output pixels.
+    /// </summary>
     public double TranslationY => _translationY;
 
+    /// <summary>
+    /// Gets a value indicating whether the frame is zoomed or the zoom still moves.
+    /// </summary>
     public bool IsActive => _zoom != 1.0 || _zoom != _target;
 
+    /// <summary>
+    /// Gets a value indicating whether the zoom is at or above <see cref="ZoomOptions.PixelGridZoom"/>.
+    /// </summary>
     public bool DrawsPixelGrid => _zoom >= _options.PixelGridZoom;
 
+    /// <summary>
+    /// Records the cursor position and the time of the motion. The focus delay counts from this time.
+    /// </summary>
+    /// <param name="x">The horizontal position, in output pixels.</param>
+    /// <param name="y">The vertical position, in output pixels.</param>
+    /// <param name="nowNanos">The time of the motion, in nanoseconds.</param>
     public void SetCursor(double x, double y, long nowNanos)
     {
         _thread.Assert();
@@ -60,6 +98,9 @@ public sealed class ZoomStage : IPostStage
         _lastCursorNanos = nowNanos;
     }
 
+    /// <summary>
+    /// Multiplies the target zoom by <see cref="ZoomOptions.ZoomFactor"/>.
+    /// </summary>
     public void ZoomIn()
     {
         _thread.Assert();
@@ -72,6 +113,9 @@ public sealed class ZoomStage : IPostStage
         }
     }
 
+    /// <summary>
+    /// Divides the target zoom by <see cref="ZoomOptions.ZoomFactor"/>. A result below 1.01 becomes 1.
+    /// </summary>
     public void ZoomOut()
     {
         _thread.Assert();
@@ -85,12 +129,19 @@ public sealed class ZoomStage : IPostStage
         }
     }
 
+    /// <summary>
+    /// Sets the target zoom without a new start for the animation.
+    /// </summary>
+    /// <param name="target">The target zoom. Values below 1 use 1.</param>
     public void ZoomTo(double target)
     {
         _thread.Assert();
         _target = Math.Max(1.0, target);
     }
 
+    /// <summary>
+    /// Sets the target zoom to 1.
+    /// </summary>
     public void Reset()
     {
         _thread.Assert();
@@ -98,6 +149,11 @@ public sealed class ZoomStage : IPostStage
         _target = 1.0;
     }
 
+    /// <summary>
+    /// Pans the tracked point by an offset.
+    /// </summary>
+    /// <param name="dx">The horizontal offset, in output pixels.</param>
+    /// <param name="dy">The vertical offset, in output pixels.</param>
     public void MoveBy(double dx, double dy)
     {
         _thread.Assert();
@@ -107,14 +163,37 @@ public sealed class ZoomStage : IPostStage
         _cursorY += dy;
     }
 
+    /// <summary>
+    /// Pans left by the width over <see cref="ZoomOptions.MoveFactor"/>.
+    /// </summary>
+    /// <param name="width">The screen width, in pixels.</param>
     public void MoveLeft(int width) => MoveBy(-width / _options.MoveFactor, 0);
 
+    /// <summary>
+    /// Pans right by the width over <see cref="ZoomOptions.MoveFactor"/>.
+    /// </summary>
+    /// <param name="width">The screen width, in pixels.</param>
     public void MoveRight(int width) => MoveBy(width / _options.MoveFactor, 0);
 
+    /// <summary>
+    /// Pans up by the height over <see cref="ZoomOptions.MoveFactor"/>.
+    /// </summary>
+    /// <param name="height">The screen height, in pixels.</param>
     public void MoveUp(int height) => MoveBy(0, -height / _options.MoveFactor);
 
+    /// <summary>
+    /// Pans down by the height over <see cref="ZoomOptions.MoveFactor"/>.
+    /// </summary>
+    /// <param name="height">The screen height, in pixels.</param>
     public void MoveDown(int height) => MoveBy(0, height / _options.MoveFactor);
 
+    /// <summary>
+    /// Moves the zoom linearly toward the target and updates the translation from the cursor or an accepted focus rectangle.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <param name="screenWidth">The output width, in pixels.</param>
+    /// <param name="screenHeight">The output height, in pixels.</param>
+    /// <returns>The value of <see cref="IsActive"/> after the step.</returns>
     public bool Step(in FrameTick tick, int screenWidth, int screenHeight)
     {
         _thread.Assert();
@@ -161,6 +240,13 @@ public sealed class ZoomStage : IPostStage
         return IsActive;
     }
 
+    /// <summary>
+    /// Maps a box through the current zoom and translation, rounded outward.
+    /// </summary>
+    /// <param name="scene">The box in the composited frame, in physical pixels.</param>
+    /// <param name="context">The frame size, timing and damage.</param>
+    /// <param name="output">The box on the output.</param>
+    /// <returns>Always <see langword="true"/>.</returns>
     public bool TryMapBox(in Box scene, in PostContext context, out Box output)
     {
         if (_zoom <= 1.0)
@@ -177,6 +263,7 @@ public sealed class ZoomStage : IPostStage
         return true;
     }
 
+    /// <inheritdoc/>
     public void Render(IRenderPass pass, ITexture frame, in PostContext context)
     {
         ArgumentNullException.ThrowIfNull(pass);

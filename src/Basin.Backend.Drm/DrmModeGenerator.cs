@@ -1,7 +1,17 @@
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// Derives a custom mode at another refresh rate from a native timing.
+/// </summary>
 public static class DrmModeGenerator
 {
+    /// <summary>
+    /// Keeps the pixel clock and horizontal timing, and changes the vertical front porch to reach the refresh rate.
+    /// </summary>
+    /// <param name="preferred">The native timing to start from.</param>
+    /// <param name="refreshMilliHz">The wanted refresh rate in millihertz.</param>
+    /// <param name="mode">The new timing, or <paramref name="preferred"/> on failure.</param>
+    /// <returns><see langword="false"/> when an input is not positive or the front porch is less than one line.</returns>
     public static bool TrySameTiming(in DrmTiming preferred, int refreshMilliHz, out DrmTiming mode)
     {
         mode = preferred;
@@ -24,6 +34,13 @@ public static class DrmModeGenerator
         return true;
     }
 
+    /// <summary>
+    /// Keeps every timing line and scales the pixel clock to reach the refresh rate. The clock rounds up to the next kilohertz.
+    /// </summary>
+    /// <param name="preferred">The native timing to start from.</param>
+    /// <param name="refreshMilliHz">The wanted refresh rate in millihertz.</param>
+    /// <param name="mode">The new timing, or <paramref name="preferred"/> on failure.</param>
+    /// <returns><see langword="false"/> when an input is not positive.</returns>
     public static bool TryScaledClock(in DrmTiming preferred, int refreshMilliHz, out DrmTiming mode)
     {
         mode = preferred;

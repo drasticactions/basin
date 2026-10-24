@@ -1,9 +1,18 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Holds the analytic glow shader for a canvas grid in warp, terrace and scale mode. It writes premultiplied color with alpha 0, so every shader row adds it to the target.
+/// </summary>
 public static class GridGlowShader
 {
+    /// <summary>
+    /// The number of <c>vec4</c> uniforms that <see cref="Pack"/> writes.
+    /// </summary>
     public const int UniformCount = 30;
 
+    /// <summary>
+    /// The uniforms of the shader: two vectors per warp zone, ten light boxes and twelve scalar vectors.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("w0a", PixelShaderUniformType.Float4),
@@ -40,6 +49,10 @@ public static class GridGlowShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the shader source for every dialect. The SPIR-V loads from an embedded resource on the first read.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The SPIR-V resource is missing from the assembly.</exception>
     public static PixelShaderSource Source => new()
     {
         Glsl = GridGlowCommon.Chunk + Body + GlslMain,
@@ -492,6 +505,13 @@ public static class GridGlowShader
         }
         """;
 
+    /// <summary>
+    /// Writes the uniforms for a canvas grid from its warps, view, lights, effects and reveal.
+    /// </summary>
+    /// <param name="grid">The grid source to describe.</param>
+    /// <param name="bounds">The bounds of the grid mesh, in output pixels.</param>
+    /// <param name="into">The destination, with at least <see cref="UniformCount"/> values.</param>
+    /// <exception cref="ArgumentException"><paramref name="into"/> is shorter than <see cref="UniformCount"/>.</exception>
     public static void Pack(CanvasGridSource grid, in Box bounds, Span<PixelShaderUniformValue> into)
     {
         if (into.Length < UniformCount)

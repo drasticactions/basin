@@ -4,8 +4,17 @@ using System.Text;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Lists and formats scene nodes for logs and diagnostics.
+/// </summary>
 public static class SceneDump
 {
+    /// <summary>
+    /// Sends one formatted line for each node in a subtree, depth first.
+    /// </summary>
+    /// <param name="root">The first node to list.</param>
+    /// <param name="line">The callback for each line.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="root"/> or <paramref name="line"/> is <see langword="null"/>.</exception>
     public static void Write(SceneNode root, Action<string> line)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -16,6 +25,12 @@ public static class SceneDump
         }
     }
 
+    /// <summary>
+    /// Takes a snapshot of every node in a subtree, depth first. Disabled nodes are included.
+    /// </summary>
+    /// <param name="root">The first node to list. Its depth is 0.</param>
+    /// <returns>A new list with one entry for each node.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="root"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<SceneNodeInfo> Nodes(SceneNode root)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -24,6 +39,11 @@ public static class SceneDump
         return nodes;
     }
 
+    /// <summary>
+    /// Formats a node snapshot as one indented line with its kind, name, position, state and details.
+    /// </summary>
+    /// <param name="node">The node snapshot.</param>
+    /// <returns>The formatted line, indented two spaces for each level of depth.</returns>
     public static string Format(in SceneNodeInfo node)
     {
         var text = new StringBuilder();
@@ -44,6 +64,11 @@ public static class SceneDump
         return text.ToString();
     }
 
+    /// <summary>
+    /// Builds the slash-separated path from the root to a node. Each part is the node's <see cref="SceneNode.DebugName"/>, or its kind when it has no name.
+    /// </summary>
+    /// <param name="node">The node, or <see langword="null"/>.</param>
+    /// <returns>The path, or <c>(scene)</c> for <see langword="null"/>.</returns>
     public static string PathOf(SceneNode? node)
     {
         if (node is null)

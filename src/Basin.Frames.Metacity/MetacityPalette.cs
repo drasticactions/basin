@@ -1,5 +1,8 @@
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// The GTK colors that the theme's <c>gtk:</c> color specs resolve against, with one entry for each <see cref="MetacityStateFlag"/>.
+/// </summary>
 public sealed class MetacityPalette
 {
     internal const int StateCount = 8;
@@ -9,6 +12,13 @@ public sealed class MetacityPalette
     private readonly MetacityColor[] _text = new MetacityColor[StateCount];
     private readonly MetacityColor[] _base = new MetacityColor[StateCount];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MetacityPalette"/> class with the same colors for every state.
+    /// </summary>
+    /// <param name="bg">The background color.</param>
+    /// <param name="fg">The foreground color.</param>
+    /// <param name="base">The base color of entry fields.</param>
+    /// <param name="text">The text color of entry fields.</param>
     public MetacityPalette(MetacityColor bg, MetacityColor fg, MetacityColor @base, MetacityColor text)
     {
         for (var i = 0; i < StateCount; i++)
@@ -20,6 +30,9 @@ public sealed class MetacityPalette
         }
     }
 
+    /// <summary>
+    /// Gets a new palette with Adwaita's light colors. Each read makes a new instance.
+    /// </summary>
     public static MetacityPalette Light
     {
         get
@@ -38,6 +51,9 @@ public sealed class MetacityPalette
         }
     }
 
+    /// <summary>
+    /// Gets a new palette with Adwaita's dark colors. Each read makes a new instance.
+    /// </summary>
     public static MetacityPalette Dark
     {
         get
@@ -56,10 +72,27 @@ public sealed class MetacityPalette
         }
     }
 
+    /// <summary>
+    /// Gets the named colors for <c>gtk:custom</c> specs. A missing name uses the spec's fallback.
+    /// </summary>
+    /// <remarks>
+    /// A change here does not change <see cref="Version"/>, so a painter that has already painted keeps the old colors until the next <see cref="Set"/> call.
+    /// </remarks>
     public Dictionary<string, MetacityColor> Custom { get; } = new(StringComparer.Ordinal);
 
+    /// <summary>
+    /// Gets a counter that each <see cref="Set"/> call increments. A painter resolves its colors again when it changes.
+    /// </summary>
     public int Version { get; private set; }
 
+    /// <summary>
+    /// Sets the colors for one state. A <see langword="null"/> argument keeps the current color.
+    /// </summary>
+    /// <param name="state">The state to change.</param>
+    /// <param name="bg">The new background color.</param>
+    /// <param name="fg">The new foreground color.</param>
+    /// <param name="base">The new base color.</param>
+    /// <param name="text">The new text color.</param>
     public void Set(MetacityStateFlag state, MetacityColor? bg = null, MetacityColor? fg = null, MetacityColor? @base = null, MetacityColor? text = null)
     {
         var i = (int)state;
@@ -86,20 +119,60 @@ public sealed class MetacityPalette
         Version++;
     }
 
+    /// <summary>
+    /// Gets the background color, GTK's <c>bg</c>.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The color for the state.</returns>
     public MetacityColor Bg(MetacityStateFlag state) => _bg[(int)state];
 
+    /// <summary>
+    /// Gets the foreground color, GTK's <c>fg</c>.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The color for the state.</returns>
     public MetacityColor Fg(MetacityStateFlag state) => _fg[(int)state];
 
+    /// <summary>
+    /// Gets the base color of entry fields, GTK's <c>base</c>.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The color for the state.</returns>
     public MetacityColor Base(MetacityStateFlag state) => _base[(int)state];
 
+    /// <summary>
+    /// Gets the text color of entry fields, GTK's <c>text</c>.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The color for the state.</returns>
     public MetacityColor Text(MetacityStateFlag state) => _text[(int)state];
 
+    /// <summary>
+    /// Gets GTK's <c>light</c> color, the background shaded by 1.3.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The derived color.</returns>
     public MetacityColor LightOf(MetacityStateFlag state) => Bg(state).Shade(1.3);
 
+    /// <summary>
+    /// Gets GTK's <c>dark</c> color, the background shaded by 0.7.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The derived color.</returns>
     public MetacityColor DarkOf(MetacityStateFlag state) => Bg(state).Shade(0.7);
 
+    /// <summary>
+    /// Gets GTK's <c>mid</c> color, the mean of the light and dark colors.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The derived color.</returns>
     public MetacityColor MidOf(MetacityStateFlag state) => LightOf(state).Mean(DarkOf(state));
 
+    /// <summary>
+    /// Gets GTK's <c>text_aa</c> color, the mean of the foreground and base colors.
+    /// </summary>
+    /// <param name="state">The widget state.</param>
+    /// <returns>The derived color.</returns>
     public MetacityColor TextAaOf(MetacityStateFlag state) => Fg(state).Mean(Base(state));
 
     internal MetacityColor Component(MetacityGtkComponent component, MetacityStateFlag state) => component switch

@@ -2,6 +2,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Routes each touch contact to one owner: a gesture, the chrome, a client surface, pointer emulation or a capture. It must be used on the thread that created it.
+/// </summary>
 public sealed class TouchRouter
 {
     private const int Capacity = TouchContacts.Capacity;
@@ -11,6 +14,10 @@ public sealed class TouchRouter
     private readonly EdgeSwipeSample[] _replay = new EdgeSwipeSample[EdgeSwipeRecognizer.WithheldCapacity];
     private readonly Slot[] _slots = new Slot[Capacity];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TouchRouter"/> class and sets itself as the router of the touch device.
+    /// </summary>
+    /// <param name="touch">The seat touch device that receives client contacts.</param>
     public TouchRouter(SeatTouch touch)
     {
         ArgumentNullException.ThrowIfNull(touch);
@@ -18,18 +25,39 @@ public sealed class TouchRouter
         touch.Router = this;
     }
 
+    /// <summary>
+    /// Gets or sets the hit tester that finds client surfaces. With none, no contact reaches a client.
+    /// </summary>
     public ITouchHitTester? HitTester { get; set; }
 
+    /// <summary>
+    /// Gets or sets the compositor chrome, which is offered each touch down before client surfaces.
+    /// </summary>
     public ITouchChrome? Chrome { get; set; }
 
+    /// <summary>
+    /// Gets or sets the gesture that sees each event before any other target.
+    /// </summary>
     public ITouchGestures? Gestures { get; set; }
 
+    /// <summary>
+    /// Gets or sets the mouse emulation for surfaces whose client has not bound <c>wl_touch</c>.
+    /// </summary>
     public TouchPointerDriver? Pointer { get; set; }
 
+    /// <summary>
+    /// Gets or sets the observer that learns where each routed touch down went.
+    /// </summary>
     public ITouchInteractionObserver? Interaction { get; set; }
 
+    /// <summary>
+    /// Gets or sets the sink that receives a notice for each touch event.
+    /// </summary>
     public ITouchActivitySink? Activity { get; set; }
 
+    /// <summary>
+    /// Gets the number of contacts that are down. The router holds at most <see cref="TouchContacts.Capacity"/> contacts.
+    /// </summary>
     public int LiveContacts
     {
         get
@@ -47,6 +75,13 @@ public sealed class TouchRouter
         }
     }
 
+    /// <summary>
+    /// Routes a touch down. A down past the contact capacity is dropped.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
     public void Down(uint timeMs, int id, double x, double y)
     {
         _thread.Assert();
@@ -90,6 +125,13 @@ public sealed class TouchRouter
         RouteDown(slot, timeMs, id, x, y);
     }
 
+    /// <summary>
+    /// Routes a motion to the owner of the contact. A motion of an unknown contact is dropped.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
     public void Motion(uint timeMs, int id, double x, double y)
     {
         _thread.Assert();
@@ -123,6 +165,11 @@ public sealed class TouchRouter
         RouteMotion(slot, timeMs, id, x, y);
     }
 
+    /// <summary>
+    /// Routes a lift to the owner of the contact and frees the contact.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="id">The contact id.</param>
     public void Up(uint timeMs, int id)
     {
         _thread.Assert();
@@ -150,12 +197,18 @@ public sealed class TouchRouter
         _slots[slot].Live = false;
     }
 
+    /// <summary>
+    /// Ends a group of touch events. It sends <c>wl_touch.frame</c> to every client that received an event in the group.
+    /// </summary>
     public void Frame()
     {
         _thread.Assert();
         _touch.NotifyFrame();
     }
 
+    /// <summary>
+    /// Cancels every contact on every target and forgets them, for example when the touch device goes away.
+    /// </summary>
     public void Cancel()
     {
         _thread.Assert();
@@ -177,6 +230,12 @@ public sealed class TouchRouter
         }
     }
 
+    /// <summary>
+    /// Takes a live contact from its owner and sends its later events to <paramref name="capture"/>. A client that owned it receives <c>wl_touch.cancel</c>.
+    /// </summary>
+    /// <param name="id">The contact id.</param>
+    /// <param name="capture">The receiver of the later events.</param>
+    /// <returns><see langword="false"/> when the contact is not down.</returns>
     public bool Capture(int id, ITouchCapture capture)
     {
         _thread.Assert();
@@ -206,6 +265,13 @@ public sealed class TouchRouter
         return true;
     }
 
+    /// <summary>
+    /// Gets the last layout position of a live contact.
+    /// </summary>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <returns><see langword="false"/> when the contact is not down.</returns>
     public bool TryGetPosition(int id, out double x, out double y)
     {
         _thread.Assert();
@@ -222,6 +288,15 @@ public sealed class TouchRouter
         return true;
     }
 
+    /// <summary>
+    /// Feeds a synthetic touch down to the gestures only. A claim cancels every routed contact. Nothing reaches a client.
+    /// </summary>
+    /// <param name="id">The synthetic contact id. It must be negative.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <returns>The verdict of the gestures.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is zero or more.</exception>
     public TouchGestureVerdict SyntheticDown(int id, uint timeMs, double x, double y)
     {
         _thread.Assert();
@@ -229,6 +304,15 @@ public sealed class TouchRouter
         return Synthetic(Gestures?.Down(id, timeMs, x, y) ?? TouchGestureVerdict.Pass);
     }
 
+    /// <summary>
+    /// Feeds a synthetic motion to the gestures only. A decline drops the withheld samples instead of a replay.
+    /// </summary>
+    /// <param name="id">The synthetic contact id. It must be negative.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <returns>The verdict of the gestures.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is zero or more.</exception>
     public TouchGestureVerdict SyntheticMotion(int id, uint timeMs, double x, double y)
     {
         _thread.Assert();
@@ -236,6 +320,13 @@ public sealed class TouchRouter
         return Synthetic(Gestures?.Motion(id, timeMs, x, y) ?? TouchGestureVerdict.Pass);
     }
 
+    /// <summary>
+    /// Feeds a synthetic lift to the gestures only.
+    /// </summary>
+    /// <param name="id">The synthetic contact id. It must be negative.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <returns>The verdict of the gestures.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="id"/> is zero or more.</exception>
     public TouchGestureVerdict SyntheticUp(int id, uint timeMs)
     {
         _thread.Assert();

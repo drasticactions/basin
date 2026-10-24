@@ -7,8 +7,14 @@ using ImGuiApi = Hexa.NET.ImGui.ImGui;
 
 namespace Basin.Inspector;
 
+/// <summary>
+/// The Scene panel. It shows a scene tree as a list or as an ImNodes graph, and the damage-tint switch of the output driver.
+/// </summary>
 public sealed unsafe class ScenePanel : IInspectorPanel, IDisposable
 {
+    /// <summary>
+    /// The largest number of nodes that the panel collects. A larger tree shows as capped.
+    /// </summary>
     public const int MaxGraphNodes = 128;
 
     private readonly SceneTree _root;
@@ -21,6 +27,12 @@ public sealed unsafe class ScenePanel : IInspectorPanel, IDisposable
     private int _placedCount = -1;
     private bool _graph;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ScenePanel"/> class.
+    /// </summary>
+    /// <param name="root">The tree that the panel shows.</param>
+    /// <param name="driver">The driver whose <see cref="OutputDriver.DebugDamageTint"/> the panel switches, or <see langword="null"/> for no switch.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="root"/> is <see langword="null"/>.</exception>
     public ScenePanel(SceneTree root, OutputDriver? driver = null)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -28,10 +40,15 @@ public sealed unsafe class ScenePanel : IInspectorPanel, IDisposable
         _driver = driver;
     }
 
+    /// <inheritdoc/>
     public ReadOnlySpan<byte> Name => "Scene"u8;
 
+    /// <summary>
+    /// Gets or sets the rate in frames per second at which the panel redraws while it is shown. The default is 4.
+    /// </summary>
     public int RefreshHz { get; set; } = 4;
 
+    /// <inheritdoc/>
     public void Draw(ref InspectorDraw draw)
     {
         draw.RequestRefresh(RefreshHz);
@@ -66,6 +83,9 @@ public sealed unsafe class ScenePanel : IInspectorPanel, IDisposable
         ImGuiApi.EndChild();
     }
 
+    /// <summary>
+    /// Drops the references to the collected scene nodes.
+    /// </summary>
     public void Dispose()
     {
         Array.Clear(_nodes);

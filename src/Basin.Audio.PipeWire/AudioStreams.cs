@@ -4,10 +4,19 @@ using PipeWire;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Binds every <c>Stream/Output/Audio</c> node and its client, and reports each one as an <see cref="AudioStream"/>. It skips the voices and players of the session. Only this class allocates per stream.
+/// </summary>
 public sealed class AudioStreams : IDisposable
 {
+    /// <summary>
+    /// The node property that marks a node of a voice or player. A stream that shows it with the value <c>true</c> is removed.
+    /// </summary>
     public const string VoiceKey = "basin.voice";
 
+    /// <summary>
+    /// The property that carries a launch tag, read into <see cref="AudioStream.LaunchId"/>. A consumer puts it in the environment of the programs it launches.
+    /// </summary>
     public const string LaunchKey = "basin.launch.id";
 
     private const string StreamClass = "Stream/Output/Audio";
@@ -18,6 +27,11 @@ public sealed class AudioStreams : IDisposable
     private readonly Dictionary<uint, AudioStream> _streams = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AudioStreams"/> class. It binds the streams that already exist and follows the registry of <paramref name="session"/> until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="session">The session to watch.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     public AudioStreams(AudioSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -32,16 +46,36 @@ public sealed class AudioStreams : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the streams whose node and client properties are read. A stream is in the collection before <see cref="Added"/> is raised.
+    /// </summary>
     public IReadOnlyCollection<AudioStream> Streams => _streams.Values;
 
+    /// <summary>
+    /// Occurs when the properties of a new stream and its client are read for the first time.
+    /// </summary>
     public event Action<AudioStream>? Added;
 
+    /// <summary>
+    /// Occurs when a known stream or its client sends new properties. The argument is a new <see cref="AudioStream"/> that replaces the old one.
+    /// </summary>
     public event Action<AudioStream>? Changed;
 
+    /// <summary>
+    /// Occurs when the node of a reported stream goes away, or when it later shows <see cref="VoiceKey"/>.
+    /// </summary>
     public event Action<AudioStream>? Removed;
 
+    /// <summary>
+    /// Finds a reported stream by its node id.
+    /// </summary>
+    /// <param name="nodeId">The PipeWire global id of the node.</param>
+    /// <returns>The stream, or <see langword="null"/> when it is not reported.</returns>
     public AudioStream? Find(uint nodeId) => _streams.GetValueOrDefault(nodeId);
 
+    /// <summary>
+    /// Stops following the registry and destroys every node and client proxy. It raises no <see cref="Removed"/>. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

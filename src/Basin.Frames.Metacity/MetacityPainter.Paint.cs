@@ -3,6 +3,9 @@ using SkiaSharp;
 
 namespace Basin.Frames.Metacity;
 
+/// <content>
+/// The paint pass: the window background, the frame pieces, the buttons and the title, in marco's order.
+/// </content>
 public sealed partial class MetacityPainter
 {
 
@@ -30,6 +33,13 @@ public sealed partial class MetacityPainter
         return strokeWidth % 2 == 0 ? (float)Math.Round(center) : (float)Math.Floor(center) + 0.5f;
     }
 
+    /// <summary>
+    /// Paints the frame on a canvas in device pixels. It draws nothing when the theme has no style for the window.
+    /// </summary>
+    /// <param name="canvas">The canvas, one unit to one device pixel.</param>
+    /// <param name="input">The window and pointer state. It must be the input of the layout.</param>
+    /// <param name="geometry">The geometry that <see cref="Layout(in MetacityFrameInput, int, int, MetacityFrameGeometry)"/> wrote for this input.</param>
+    /// <param name="scale">The output scale from logical to device pixels.</param>
     public void Paint(SKCanvas canvas, in MetacityFrameInput input, MetacityFrameGeometry geometry, double scale)
     {
         ArgumentNullException.ThrowIfNull(canvas);

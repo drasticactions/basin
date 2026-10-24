@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The mesh source for the grid lines of a step map: the desktop grid, the shelf grid, the lines across each wall and the base lines.
+/// </summary>
 public sealed class CanvasStepSource : IMeshSource
 {
     private static readonly double[] Quarters = [0.25, 0.5, 0.75];
@@ -23,52 +26,96 @@ public sealed class CanvasStepSource : IMeshSource
     private bool _toned;
     private HaloPart? _glow;
 
+    /// <summary>
+    /// Gets or sets the step map to draw. With no map or an identity map the source writes nothing.
+    /// </summary>
     public CanvasStepMap? Map { get; set; }
 
+    /// <summary>
+    /// Gets or sets the grid cell in canvas pixels. The setter keeps it at 2 or above.
+    /// </summary>
     public int CellSize
     {
         get => _cellSize;
         set => _cellSize = Math.Max(2, value);
     }
 
+    /// <summary>
+    /// Gets or sets the least screen spacing between drawn lines. A denser grid draws only every second, fourth or later line. Zero draws every line.
+    /// </summary>
     public double MinLineSpacing
     {
         get => _minSpacing;
         set => _minSpacing = Math.Max(0.0, value);
     }
 
+    /// <summary>
+    /// Gets or sets the straight line color, before <see cref="Alpha"/>.
+    /// </summary>
     public RenderColor Color { get; set; } = new(0.16f, 0.21f, 0.75f, 1f);
 
+    /// <summary>
+    /// Gets or sets the wall source whose colors the base lines darken. When it is <see langword="null"/>, the base lines use the default wall colors.
+    /// </summary>
     public CanvasStepSurfaceSource? Walls { get; set; }
 
+    /// <summary>
+    /// Gets or sets the fade of the grid lines, from 0 to 1. It does not fade the base lines. The setter clamps the value.
+    /// </summary>
     public float Alpha
     {
         get => _alpha;
         set => _alpha = Math.Clamp(value, 0f, 1f);
     }
 
+    /// <summary>
+    /// Gets or sets the reveal animation of the shelf, desktop and wall lines. It does not cover the base lines.
+    /// </summary>
     public GridReveal Reveal
     {
         get => _reveal;
         set => _reveal = value;
     }
 
+    /// <summary>
+    /// Gets or sets the highlight sources near windows and the pointer.
+    /// </summary>
     public GridLights Lights { get; set; } = new();
 
+    /// <summary>
+    /// Gets or sets the density dimming and the glow. The default is no effect.
+    /// </summary>
     public GridEffects Effects { get; set; } = GridEffects.None;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the source draws any grid line. The base lines draw either way.
+    /// </summary>
     public bool Lines { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the source draws the shelf grid.
+    /// </summary>
     public bool ShelfLines { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the source draws the lines across the walls.
+    /// </summary>
     public bool WallGridLines { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the source draws the desktop grid.
+    /// </summary>
     public bool DesktopLines { get; set; } = true;
 
+    /// <summary>
+    /// Gets the second mesh source that writes the glow halo beside each line. It writes nothing unless <see cref="Effects"/> asks for the mesh halo. Draw it with additive blending.
+    /// </summary>
     public IMeshSource Glow => _glow ??= new HaloPart(this);
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds) => Walk(bounds, [], write: false, halo: false);
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into) => _ = Walk(bounds, into, write: true, halo: false);
 
     private sealed class HaloPart(CanvasStepSource grid) : IMeshSource

@@ -1,5 +1,8 @@
 namespace Basin.Ipc;
 
+/// <summary>
+/// A call that an interceptor held. It keeps a copy of the parameters and must be allowed or denied once.
+/// </summary>
 public sealed class IpcHeldCall
 {
     private readonly IpcServer _server;
@@ -17,20 +20,42 @@ public sealed class IpcHeldCall
         Started = started;
     }
 
+    /// <summary>
+    /// Gets the name of the held method.
+    /// </summary>
     public string Method { get; }
 
+    /// <summary>
+    /// Gets the copy of the call's params as raw JSON.
+    /// </summary>
     public ReadOnlySpan<byte> Parameters => _parameters;
 
+    /// <summary>
+    /// Gets the state of the connection or line front that made the call.
+    /// </summary>
     public IpcClientState Client { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the call came from the stdin line front.
+    /// </summary>
     public bool FromLineFront { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Allow"/> or <see cref="Deny"/> ran.
+    /// </summary>
     public bool IsDone { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the call has no answer and its connection is not closed.
+    /// </summary>
     public bool IsOpen => !IsDone && _reply is not { IsOpen: false };
 
     internal long Started { get; }
 
+    /// <summary>
+    /// Runs the held method on the loop. An answer that comes before the server attaches the reply is kept and applied on attach.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The call already has an answer.</exception>
     public void Allow()
     {
         if (Take() is { } reply)
@@ -43,6 +68,11 @@ public sealed class IpcHeldCall
         }
     }
 
+    /// <summary>
+    /// Answers the held call with a <c>refused</c> error. An answer that comes before the server attaches the reply is kept and applied on attach.
+    /// </summary>
+    /// <param name="message">The text of the error.</param>
+    /// <exception cref="InvalidOperationException">The call already has an answer.</exception>
     public void Deny(string message)
     {
         ArgumentNullException.ThrowIfNull(message);

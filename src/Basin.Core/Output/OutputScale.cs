@@ -1,7 +1,17 @@
 namespace Basin;
 
+/// <summary>
+/// Chooses an automatic output scale from the panel size, as KWin does.
+/// </summary>
 public static class OutputScale
 {
+    /// <summary>
+    /// Chooses a scale from the panel density and the viewing distance of the output class. The result is a multiple of 0.05 from 1 to 3, and it passes <see cref="OutputScaling.Snap"/> unchanged.
+    /// </summary>
+    /// <param name="mode">The mode in physical pixels.</param>
+    /// <param name="physicalMm">The panel size in millimeters. A side under 3 mm gives a scale of 1.</param>
+    /// <param name="outputClass">The kind of display, which sets the target density.</param>
+    /// <returns>The scale. Values under 1.2 become 1, and values within 0.06 of an integer become that integer.</returns>
     public static double Choose(OutputMode mode, (int Width, int Height) physicalMm, OutputClass outputClass)
     {
         if (physicalMm.Width < 3 || physicalMm.Height < 3)

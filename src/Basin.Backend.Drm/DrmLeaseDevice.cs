@@ -6,6 +6,9 @@ using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// Offers the non-desktop connectors of a <see cref="DrmBackend"/> for DRM leasing and tracks the leases that it created.
+/// </summary>
 public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
 {
     private const int OpenReadWrite = 0x2;
@@ -23,12 +26,26 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
 
     internal DrmLeaseDevice(DrmBackend backend) => _backend = backend;
 
+    /// <summary>
+    /// Occurs when the device revokes a lease because a leased connector went away or the backend is disposed. The argument is the lessee id.
+    /// It does not occur for <see cref="RevokeLease"/>.
+    /// </summary>
     public event Action<uint>? LeaseRevoked;
 
+    /// <summary>
+    /// Occurs when a scan changes the set of leasable connectors.
+    /// </summary>
     public event Action? ConnectorsChanged;
 
+    /// <summary>
+    /// Gets a snapshot of the lessee ids of the active leases.
+    /// </summary>
     public IReadOnlyList<uint> Lessees => [.. _leases.Select(l => l.LesseeId)];
 
+    /// <summary>
+    /// Opens a new fd on the card that is not DRM master, so that a client can read the connectors.
+    /// </summary>
+    /// <returns>The new fd, which the caller owns, or -1 when the card cannot be opened or the fd cannot drop master.</returns>
     public int OpenEnumerationFd()
     {
         if (_backend.DevicePath.Length == 0)
@@ -55,6 +72,11 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
         return fd;
     }
 
+    /// <summary>
+    /// Copies the leasable connectors into a span.
+    /// </summary>
+    /// <param name="connectors">The destination.</param>
+    /// <returns>The number of connectors copied, or -1 when the span is too small.</returns>
     public int EnumerateConnectors(Span<LeasableConnector> connectors)
     {
         if (_connectors.Count > connectors.Length)
@@ -70,6 +92,13 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
         return _connectors.Count;
     }
 
+    /// <summary>
+    /// Leases a set of KMS objects to a client.
+    /// </summary>
+    /// <param name="objectIds">The connector, CRTC and plane ids to lease.</param>
+    /// <param name="leaseFd">The lease fd, which the caller owns, or -1 on failure.</param>
+    /// <param name="lesseeId">The lessee id, or 0 on failure.</param>
+    /// <returns><see langword="false"/> when the list is empty, the session is inactive, or the kernel refuses the lease.</returns>
     public bool TryCreateLease(ReadOnlySpan<uint> objectIds, out int leaseFd, out uint lesseeId)
     {
         leaseFd = -1;
@@ -99,6 +128,10 @@ public sealed unsafe class DrmLeaseDevice : IDrmLeaseDevice
         return true;
     }
 
+    /// <summary>
+    /// Revokes a lease that this device created. An unknown lessee id does nothing.
+    /// </summary>
+    /// <param name="lesseeId">The lessee id from <see cref="TryCreateLease"/>.</param>
     public void RevokeLease(uint lesseeId)
     {
         if (_leases.RemoveAll(l => l.LesseeId == lesseeId) == 0)

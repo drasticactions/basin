@@ -7,9 +7,15 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_linux_drm_syncobj_manager_v1</c> global. It waits on acquire points before a commit applies, and signals release points when the buffer is free.
+/// </summary>
 [SupportedOSPlatform("linux")]
 public sealed class LinuxDrmSyncobjManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorSurfaceExists = 0;
@@ -25,8 +31,22 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
     private readonly Dictionary<nint, DrmSyncobjTimeline> _timelines = [];
     private readonly Dictionary<Surface, SyncSurface> _surfaces = [];
 
+    /// <summary>
+    /// Holds the explicit sync points of the current buffer of a surface.
+    /// </summary>
+    /// <param name="Acquire">The timeline that signals when the buffer is ready.</param>
+    /// <param name="AcquirePoint">The point on <paramref name="Acquire"/> to wait for.</param>
+    /// <param name="Release">The timeline to signal when the compositor is done with the buffer.</param>
+    /// <param name="ReleasePoint">The point on <paramref name="Release"/> to signal.</param>
     public sealed record CommitSync(DrmSyncobjTimeline Acquire, ulong AcquirePoint, DrmSyncobjTimeline Release, ulong ReleasePoint);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinuxDrmSyncobjManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces get sync state.</param>
+    /// <param name="device">The DRM device that imports the timelines.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> or <paramref name="device"/> is <see langword="null"/>.</exception>
     public LinuxDrmSyncobjManager(WlServerDisplay display, CompositorGlobal compositor, IDrmSyncDevice device)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -36,6 +56,11 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
         _global = display.CreateGlobal(WpLinuxDrmSyncobjManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Checks that the renderer completes its reads by submit, because release points signal when the buffer is replaced.
+    /// </summary>
+    /// <param name="renderer">The renderer that reads the client buffers.</param>
+    /// <exception cref="NotSupportedException">The renderer has <see cref="RenderFencePrecision.PerSubmission"/> fences.</exception>
     public void DeclareRenderer(IRenderer renderer)
     {
         if (renderer.FencePrecision == RenderFencePrecision.PerSubmission)
@@ -46,18 +71,39 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the number of commits that carried both an acquire and a release point.
+    /// </summary>
     public long ExplicitCommits { get; private set; }
 
+    /// <summary>
+    /// Gets the number of buffer commits on surfaces with a syncobj object, with or without explicit points.
+    /// </summary>
     public long ManagedCommits { get; private set; }
 
+    /// <summary>
+    /// Gets the number of acquire points that had no fence to export when the commit applied, so the manager waited on the CPU.
+    /// </summary>
     public long LateAcquires { get; private set; }
 
+    /// <summary>
+    /// Gets the number of commits that waited on the loop for an unsignaled acquire point.
+    /// </summary>
     public long ParkedAcquires { get; private set; }
 
+    /// <summary>
+    /// Gets the number of unsignaled acquire points that the manager cannot wait for on the loop, so the commit applies at once.
+    /// </summary>
     public long UnparkedAcquires { get; private set; }
 
+    /// <summary>
+    /// Gets the number of acquire points that still had no fence to export after the CPU wait.
+    /// </summary>
     public long UnexportableAcquires { get; private set; }
 
+    /// <summary>
+    /// Gets the number of release points that waited for outstanding renderer reads of the buffer.
+    /// </summary>
     public long DeferredReleases { get; private set; }
 
     private void SignalRelease(IBuffer buffer, DrmSyncobjTimeline timeline, ulong point)
@@ -120,17 +166,36 @@ public sealed class LinuxDrmSyncobjManager : IDisposable
 
     private const long MaterializeTimeoutNs = 100_000_000;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Gets the sync points of the surface's current buffer.
+    /// </summary>
+    /// <param name="surface">The surface to look up.</param>
+    /// <returns>The sync points, or <see langword="null"/> when the current buffer has no explicit sync.</returns>
     public CommitSync? CurrentOf(Surface surface) =>
         _surfaces.TryGetValue(surface, out var sync) ? sync.Current : null;
 
+    /// <summary>
+    /// Blocks the calling thread until the acquire point of the surface's current buffer signals.
+    /// </summary>
+    /// <param name="surface">The surface whose buffer to wait for.</param>
+    /// <param name="timeoutNs">The longest wait in nanoseconds.</param>
+    /// <returns><see langword="true"/> when the point signaled or there is no explicit sync, or <see langword="false"/> on timeout.</returns>
     public bool WaitAcquireCpu(Surface surface, long timeoutNs = 1_000_000_000)
     {
         var sync = CurrentOf(surface);
         return sync is null || sync.Acquire.Wait(sync.AcquirePoint, timeoutNs);
     }
 
+    /// <summary>
+    /// Tests without blocking whether the acquire point of the surface's current buffer has signaled.
+    /// </summary>
+    /// <param name="surface">The surface to test.</param>
+    /// <returns><see langword="true"/> when the point signaled or there is no explicit sync.</returns>
     public bool AcquireReady(Surface surface)
     {
         var sync = CurrentOf(surface);

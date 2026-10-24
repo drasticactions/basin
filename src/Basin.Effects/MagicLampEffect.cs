@@ -3,8 +3,14 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's magic lamp minimize animation. It deforms the window through a mesh that pours the window into the icon rectangle.
+/// </summary>
 public sealed class MagicLampEffect : IMeshTransform
 {
+    /// <summary>
+    /// The largest side of a mesh cell, in pixels.
+    /// </summary>
     public const int CellSize = 40;
 
     private const string NodeName = "magiclamp";
@@ -19,10 +25,23 @@ public sealed class MagicLampEffect : IMeshTransform
     private double _progress;
     private SceneTransform? _node;
 
+    /// <summary>
+    /// Gets a value indicating whether the effect node is live. It stays live after the animation ends, until <see cref="End"/>.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets a value indicating whether the current or last animation is a restore, which runs from the icon back to the window.
+    /// </summary>
     public bool IsRestoring => _restoring;
 
+    /// <summary>
+    /// Chooses a target for a window with no reported icon. The target is a point on the window edge nearest the cursor, or the cursor itself when it is outside the window.
+    /// </summary>
+    /// <param name="window">The window box.</param>
+    /// <param name="cursorX">The horizontal cursor position.</param>
+    /// <param name="cursorY">The vertical cursor position.</param>
+    /// <returns>An empty icon box at the target point, and the edge that moves toward it.</returns>
     public static (Box Icon, MinimizeEdge Edge) FallbackTarget(in Box window, double cursorX, double cursorY)
     {
         var x = cursorX;
@@ -89,6 +108,17 @@ public sealed class MagicLampEffect : IMeshTransform
         return (new Box((int)Math.Round(x), (int)Math.Round(y), 0, 0), edge);
     }
 
+    /// <summary>
+    /// Starts an animation that is anchored at a given tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="window">The window box, in the same space as <paramref name="icon"/>.</param>
+    /// <param name="icon">The icon box that the window pours into.</param>
+    /// <param name="edge">The window edge that moves toward the icon.</param>
+    /// <param name="restoring"><see langword="true"/> to run from the icon back to the window.</param>
+    /// <param name="now">The tick that the animation starts at.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled or <paramref name="window"/> is empty, and then nothing starts.</returns>
     public bool Begin(
         TransformStack stack,
         in Box window,
@@ -107,6 +137,17 @@ public sealed class MagicLampEffect : IMeshTransform
         return true;
     }
 
+    /// <summary>
+    /// Starts an animation that the first <see cref="Step"/> anchors. A running animation on the same node restarts.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="window">The window box, in the same space as <paramref name="icon"/>.</param>
+    /// <param name="icon">The icon box that the window pours into.</param>
+    /// <param name="edge">The window edge that moves toward the icon.</param>
+    /// <param name="restoring"><see langword="true"/> to run from the icon back to the window.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled or <paramref name="window"/> is empty, and then nothing starts.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Begin(
         TransformStack stack,
         in Box window,
@@ -135,6 +176,11 @@ public sealed class MagicLampEffect : IMeshTransform
         return true;
     }
 
+    /// <summary>
+    /// Updates the deformation for a tick. The node keeps the last pose after the end, until <see cref="End"/>.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the animation runs.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -155,6 +201,10 @@ public sealed class MagicLampEffect : IMeshTransform
         return false;
     }
 
+    /// <summary>
+    /// Removes the effect node and its deformation at once.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
     public void End(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -169,6 +219,11 @@ public sealed class MagicLampEffect : IMeshTransform
         _node = null;
     }
 
+    /// <summary>
+    /// Calculates the union of the window bounds and the icon box, which contains every pose of the mesh.
+    /// </summary>
+    /// <param name="childBounds">The undeformed content bounds, in the transform's local coordinates.</param>
+    /// <returns>The union box.</returns>
     public Box MapBounds(in Box childBounds)
     {
         var target = new Box(
@@ -183,12 +238,14 @@ public sealed class MagicLampEffect : IMeshTransform
         return new Box(x0, y0, x1 - x0, y1 - y0);
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box childBounds)
     {
         _grid.Layout(childBounds, CellSize);
         return _grid.VertexCount;
     }
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box childBounds, Span<MeshVertex> into)
     {
         _grid.Layout(childBounds, CellSize);

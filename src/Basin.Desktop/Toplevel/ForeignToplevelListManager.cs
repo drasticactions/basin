@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_foreign_toplevel_list_v1</c> global. It lists the toplevels of an <see cref="IToplevelModel"/> with a stable random identifier each.
+/// </summary>
 public sealed class ForeignToplevelListManager : IToplevelObserver, IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private static readonly Dictionary<nint, ulong> HandleToplevels = [];
@@ -31,6 +37,12 @@ public sealed class ForeignToplevelListManager : IToplevelObserver, IDisposable
         public string? SentAppId;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ForeignToplevelListManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="model">The toplevels to list, or <see langword="null"/> to list none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public ForeignToplevelListManager(WlServerDisplay display, IToplevelModel? model)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -42,15 +54,26 @@ public sealed class ForeignToplevelListManager : IToplevelObserver, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void OnToplevelAdded(ulong toplevelId) => OnAdded(toplevelId);
 
+    /// <inheritdoc/>
     public void OnToplevelChanged(ulong toplevelId) => OnChanged(toplevelId);
 
+    /// <inheritdoc/>
     public void OnToplevelRemoved(ulong toplevelId) => OnRemoved(toplevelId);
 
+    /// <summary>
+    /// Finds the toplevel that a live <c>ext_foreign_toplevel_handle_v1</c> resource names.
+    /// </summary>
+    /// <param name="handleResource">The raw handle of the handle resource.</param>
+    /// <returns>The toplevel id, or 0 when the handle is unknown or destroyed.</returns>
     public static ulong ToplevelOf(nint handleResource) =>
         HandleToplevels.GetValueOrDefault(handleResource);
 
+    /// <summary>
+    /// Stops observing the model and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_model is { } live)
@@ -61,6 +84,11 @@ public sealed class ForeignToplevelListManager : IToplevelObserver, IDisposable
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Gets the identifier that the list sends for a toplevel.
+    /// </summary>
+    /// <param name="toplevelId">The toplevel id.</param>
+    /// <returns>32 hex digits, or <see langword="null"/> when the toplevel is not listed.</returns>
     public string? IdentifierOf(ulong toplevelId) =>
         _toplevels.GetValueOrDefault(toplevelId)?.Identifier;
 

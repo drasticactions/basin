@@ -6,8 +6,14 @@ using SDL3;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Turns a drag from the host into a seat drag on one window. The drag offers a URI list and plain text, because SDL gives the data only at the drop.
+/// </summary>
 public sealed class SdlDrop : ISdlEventSink, IDisposable
 {
+    /// <summary>
+    /// The MIME type that carries the dropped files as <c>file://</c> URIs, one per line.
+    /// </summary>
     public const string UriListMime = "text/uri-list";
 
     private static readonly string[] Mimes = [UriListMime, "text/plain;charset=utf-8", "text/plain"];
@@ -26,6 +32,12 @@ public sealed class SdlDrop : ISdlEventSink, IDisposable
     private byte[]? _plain;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlDrop"/> class and adds it to the loop as an event sink.
+    /// </summary>
+    /// <param name="host">The host whose seat runs the drag.</param>
+    /// <param name="loop">The SDL loop that delivers the drop events.</param>
+    /// <param name="window">The window that receives drops. Drop events of other windows are ignored.</param>
     public SdlDrop(BasinCompositorHost host, SdlLoop loop, SdlOutputWindow window)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -39,10 +51,21 @@ public sealed class SdlDrop : ISdlEventSink, IDisposable
         loop.AddSink(this);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a host drag runs in the seat now.
+    /// </summary>
     public bool IsDragging => _source is not null;
 
+    /// <summary>
+    /// Gets the number of drops that carried files or text.
+    /// </summary>
     public long Drops { get; private set; }
 
+    /// <summary>
+    /// Records the drop events of the window. The drag starts and ends in the next dispatch, after the input of the window.
+    /// </summary>
+    /// <param name="e">The SDL event.</param>
+    /// <returns><see langword="true"/> for a drop event of the window, else <see langword="false"/>.</returns>
     public bool Handle(in SDL.Event e)
     {
         var type = (SDL.EventType)e.Type;
@@ -196,6 +219,9 @@ public sealed class SdlDrop : ISdlEventSink, IDisposable
         _waiting.Clear();
     }
 
+    /// <summary>
+    /// Leaves the loop, cancels a running drag and closes the descriptors that wait for data. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -4,12 +4,24 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// The D-Bus connection of the portal backend. It owns the backend name, the request and session objects, and the installed modules, and runs every method call on the compositor loop.
+/// </summary>
 public sealed class PortalBus : IDisposable
 {
+    /// <summary>
+    /// The bus name that the backend requests when the caller names none.
+    /// </summary>
     public const string DefaultBusName = "org.freedesktop.impl.portal.desktop.basin";
 
+    /// <summary>
+    /// The well-known name of the <c>xdg-desktop-portal</c> frontend. Only its owner can call the backend.
+    /// </summary>
     public const string FrontendName = "org.freedesktop.portal.Desktop";
 
+    /// <summary>
+    /// The object path of the backend root. Request and session objects are below it.
+    /// </summary>
     public const string RootPath = "/org/freedesktop/portal/desktop";
 
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -25,6 +37,15 @@ public sealed class PortalBus : IDisposable
     private bool _starting;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PortalBus"/> class. The constructor does not connect. <see cref="Start"/> or the first installed module connects.
+    /// </summary>
+    /// <param name="loop">The compositor loop that runs every method call.</param>
+    /// <param name="address">The bus address, or <see langword="null"/> for the session bus.</param>
+    /// <param name="busName">The name to request, or <see langword="null"/> for <see cref="DefaultBusName"/>.</param>
+    /// <param name="ownedByModules"><see langword="true"/> to dispose the bus when the last module detaches.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException"><paramref name="address"/> is <see langword="null"/> and the process has no session bus.</exception>
     public PortalBus(ICompositorEventLoop loop, string? address = null, string? busName = null, bool ownedByModules = false)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -38,26 +59,59 @@ public sealed class PortalBus : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the compositor loop that method calls and continuations run on.
+    /// </summary>
     public ICompositorEventLoop Loop { get; }
 
+    /// <summary>
+    /// Gets the D-Bus address that the bus connects to.
+    /// </summary>
     public string Address { get; }
 
+    /// <summary>
+    /// Gets the name that the bus requests on connect.
+    /// </summary>
     public string BusName { get; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a caller other than the frontend can call the backend. Set it only for tests.
+    /// </summary>
     public bool AcceptAnySender { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the bus got <see cref="BusName"/>. A second backend on the same bus does not get it and answers no calls.
+    /// </summary>
     public bool OwnsName { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the connection is up and <see cref="Started"/> completed.
+    /// </summary>
     public bool IsConnected => _connection is not null && _started.Task.IsCompletedSuccessfully;
 
+    /// <summary>
+    /// Gets a task that completes on the loop when the connection is up. It faults when the bus is unreachable, and it is canceled by <see cref="Dispose"/>.
+    /// </summary>
     public Task Started => _started.Task;
 
+    /// <summary>
+    /// Gets the unique name of the frontend that the bus accepts calls from. It is <see langword="null"/> while no frontend is known.
+    /// </summary>
     public string? FrontendUniqueName => _frontendUniqueName;
 
+    /// <summary>
+    /// Gets the open sessions, keyed by object path.
+    /// </summary>
     public IReadOnlyDictionary<string, PortalSession> Sessions => _sessions;
 
+    /// <summary>
+    /// Gets the modules that are installed on this bus.
+    /// </summary>
     public IReadOnlyList<PortalModule> Modules => _modules;
 
+    /// <summary>
+    /// Occurs on the loop when the frontend leaves the bus, after the bus closes every session and request.
+    /// </summary>
     public event Action? FrontendLost;
 
     internal DBusConnection? Connection => _connection;
@@ -68,8 +122,14 @@ public sealed class PortalBus : IDisposable
 
     internal PortalCall Current { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the process environment names a D-Bus session bus.
+    /// </summary>
     public static bool HasSessionBus => DBusAddress.Session is not null;
 
+    /// <summary>
+    /// Starts to connect in the background. A second call, or a call after <see cref="Dispose"/>, does nothing. <see cref="Started"/> reports the result.
+    /// </summary>
     public void Start()
     {
         _thread.Assert();
@@ -82,6 +142,11 @@ public sealed class PortalBus : IDisposable
         _ = ConnectAsync();
     }
 
+    /// <summary>
+    /// Finds an installed module by type.
+    /// </summary>
+    /// <typeparam name="T">The module type.</typeparam>
+    /// <returns>The first installed module of type <typeparamref name="T"/>, or <see langword="null"/> when none is installed.</returns>
     public T? Module<T>()
         where T : PortalModule
     {
@@ -96,8 +161,18 @@ public sealed class PortalBus : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Finds an open session by object path.
+    /// </summary>
+    /// <param name="path">The session object path.</param>
+    /// <returns>The session, or <see langword="null"/> when no open session has that path.</returns>
     public PortalSession? SessionAt(string path) => _sessions.GetValueOrDefault(path);
 
+    /// <summary>
+    /// Registers a request object, so that a <c>Close</c> call from the frontend cancels it. The caller must give it back to <see cref="Release"/>.
+    /// </summary>
+    /// <param name="handle">The request object path that the frontend gave.</param>
+    /// <returns>The request whose token the frontend can cancel.</returns>
     public PortalRequest Track(ObjectPath handle)
     {
         _thread.Assert();
@@ -106,6 +181,11 @@ public sealed class PortalBus : IDisposable
         return request;
     }
 
+    /// <summary>
+    /// Removes a request and disposes it. A request that is not registered stays as it is.
+    /// </summary>
+    /// <param name="request">The request from <see cref="Track"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="request"/> is <see langword="null"/>.</exception>
     public void Release(PortalRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -116,6 +196,11 @@ public sealed class PortalBus : IDisposable
         }
     }
 
+    /// <summary>
+    /// Adds a session, so that the frontend can close it by path. A different session at the same path is closed with no <c>Closed</c> signal.
+    /// </summary>
+    /// <param name="session">The session to add.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     public void Register(PortalSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -205,6 +290,9 @@ public sealed class PortalBus : IDisposable
         }
     }
 
+    /// <summary>
+    /// Closes every session and request, releases the bus name, and closes the connection. It must run on the loop thread.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

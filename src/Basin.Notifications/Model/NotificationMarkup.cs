@@ -3,8 +3,19 @@ using System.Text;
 
 namespace Basin.Notifications;
 
+/// <summary>
+/// Reduces the body markup of the specification to plain text and a list of spans.
+/// </summary>
 public static class NotificationMarkup
 {
+    /// <summary>
+    /// Reduces markup to plain text. <c>b</c>, <c>i</c>, <c>u</c>, <c>a</c> and <c>img</c> become spans, <c>br</c> becomes a line feed, and other tags are removed with their text kept.
+    /// Entities are decoded. A less-than sign that does not start a tag stays as text.
+    /// </summary>
+    /// <param name="markup">The body text with markup.</param>
+    /// <param name="spans">The spans in order of start, the longer span first at the same start. It is empty when the text has no markup.</param>
+    /// <returns>The plain text. It is <paramref name="markup"/> itself when the text has no tag or entity.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="markup"/> is <see langword="null"/>.</exception>
     public static string Reduce(string markup, out NotificationSpan[] spans)
     {
         ArgumentNullException.ThrowIfNull(markup);

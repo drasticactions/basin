@@ -4,6 +4,9 @@ using Wayland.Server;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// The state of one <c>xdg_surface</c>: its window geometry, its configure serials and its mapped state. The toplevel or popup role object sits on top of it.
+/// </summary>
 public sealed class XdgSurfaceState
 {
     private readonly List<uint> _pendingConfigures = [];
@@ -81,34 +84,72 @@ public sealed class XdgSurfaceState
         XdgSurfaceRegistry.Register(resource, this);
     }
 
+    /// <summary>
+    /// Gets the shell that made the surface.
+    /// </summary>
     public XdgShell Shell { get; }
 
+    /// <summary>
+    /// Gets the <c>wl_surface</c> under the <c>xdg_surface</c>.
+    /// </summary>
     public Surface Surface { get; }
 
     internal XdgWmBaseResource WmBase { get; }
 
     internal XdgSurfaceResource Resource { get; }
 
+    /// <summary>
+    /// Gets the role object, an <see cref="XdgToplevelWindow"/> or an <see cref="XdgPopupWindow"/>. It is <see langword="null"/> before the client assigns a role and after the role object is destroyed.
+    /// </summary>
     public object? Role { get; private set; }
 
+    /// <summary>
+    /// Gets the window geometry in surface-local logical pixels that the last commit applied. It is empty when the client never set one.
+    /// </summary>
     public Box WindowGeometry { get; private set; }
 
+    /// <summary>
+    /// Gets <see cref="WindowGeometry"/>, or the bounds of the current surface when the window geometry is empty.
+    /// </summary>
     public Box EffectiveGeometry => WindowGeometry.IsEmpty
         ? new Box(0, 0, Surface.Current.Width, Surface.Current.Height)
         : WindowGeometry;
 
+    /// <summary>
+    /// Gets a value indicating whether the surface is mapped. A commit maps it when the <c>wl_surface</c> is mapped, and the destruction of the role, the <c>xdg_surface</c> or the <c>wl_surface</c> unmaps it.
+    /// </summary>
     public bool IsMapped => _mapped;
 
+    /// <summary>
+    /// Gets the progress of the last configure that was sent with a <see cref="Transaction"/>.
+    /// </summary>
     public ConfigureState ConfigureState { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the client did not acknowledge the newest configure yet.
+    /// </summary>
     public bool HasUnackedConfigure => _pendingConfigures.Count > 0;
 
+    /// <summary>
+    /// Occurs at the commit that maps the surface.
+    /// </summary>
     public event Action? Mapped;
 
+    /// <summary>
+    /// Occurs when a mapped surface unmaps.
+    /// </summary>
     public event Action? Unmapped;
 
+    /// <summary>
+    /// Occurs after each commit that does not raise a protocol error, after <see cref="Mapped"/>. It does not occur for the initial commit that solicits the first configure.
+    /// </summary>
     public event Action? Committed;
 
+    /// <summary>
+    /// Sends <c>xdg_surface.configure</c> and joins a transaction. The surface is ready when the client acknowledges this serial and commits a buffer. A later configure releases the earlier participant.
+    /// </summary>
+    /// <param name="transaction">The transaction that waits for the surface.</param>
+    /// <returns>The configure serial.</returns>
     public uint SendConfigure(Transaction transaction)
     {
         ArgumentNullException.ThrowIfNull(transaction);
@@ -123,6 +164,10 @@ public sealed class XdgSurfaceState
         return serial;
     }
 
+    /// <summary>
+    /// Sends <c>xdg_surface.configure</c> with a new serial. The role object must send its own configure event first.
+    /// </summary>
+    /// <returns>The configure serial.</returns>
     public uint SendConfigure()
     {
         var serial = Shell.Display.NextSerial();
@@ -152,6 +197,9 @@ public sealed class XdgSurfaceState
         (Role as XdgPopupWindow)?.OnAckConfigure();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the <c>wl_surface</c> committed at least once after the <c>xdg_surface</c> was created.
+    /// </summary>
     public bool HasCommitted { get; private set; }
 
     private void OnCommitted()

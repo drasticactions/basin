@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_workspace_manager_v1</c> global. It shows groups and workspaces that the consumer creates, or projects them from an <see cref="IWorkspaceModel"/>.
+/// </summary>
 public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlServerDisplay _display;
@@ -30,6 +36,12 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
     private readonly Dictionary<WorkspaceGroup, ulong> _modelGroupIds = [];
     private readonly Dictionary<ulong, Workspace> _modelWorkspaces = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WorkspaceManager"/> class and creates the global. With a model, it projects the model at once and follows it.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="model">The workspace model to project, or <see langword="null"/> when the consumer creates groups and workspaces itself.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public WorkspaceManager(WlServerDisplay display, IWorkspaceModel? model = null)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -43,12 +55,19 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void OnWorkspacesChanged() => Reproject();
 
+    /// <summary>
+    /// Does nothing. The protocol does not show the members of a workspace.
+    /// </summary>
     public void OnWorkspaceMembersChanged()
     {
     }
 
+    /// <summary>
+    /// Stops observing the model and the outputs, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_model is { } live)
@@ -259,6 +278,11 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
     private static bool SameCoordinates(uint[]? current, uint[]? next) =>
         current is null ? next is null : next is not null && current.AsSpan().SequenceEqual(next);
 
+    /// <summary>
+    /// Creates a group and announces it to every bound client.
+    /// </summary>
+    /// <param name="clientsCanCreateWorkspaces">Whether the group advertises the create-workspace capability.</param>
+    /// <returns>The new group. It has no outputs until <see cref="WorkspaceGroup.AddOutput"/>.</returns>
     public WorkspaceGroup CreateGroup(bool clientsCanCreateWorkspaces = false)
     {
         var group = new WorkspaceGroup(this, clientsCanCreateWorkspaces);
@@ -415,6 +439,9 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         }
     }
 
+    /// <summary>
+    /// Represents a workspace group that clients see. Changes go to every bound client at once, followed by <c>done</c>.
+    /// </summary>
     public sealed class WorkspaceGroup
     {
         private readonly WorkspaceManager _owner;
@@ -425,12 +452,22 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             ClientsCanCreateWorkspaces = clientsCanCreateWorkspaces;
         }
 
+        /// <summary>
+        /// Gets a value indicating whether clients can ask the group for a new workspace.
+        /// </summary>
         public bool ClientsCanCreateWorkspaces { get; }
 
         internal List<OutputGlobal> Outputs { get; } = [];
 
+        /// <summary>
+        /// Occurs when a client commits a request for a new workspace in the group. The argument is the requested name. The consumer decides whether to create it.
+        /// </summary>
         public event Action<string>? CreateWorkspaceRequested;
 
+        /// <summary>
+        /// Adds an output to the group and sends <c>output_enter</c> to every bound client.
+        /// </summary>
+        /// <param name="output">The output to add.</param>
         public void AddOutput(OutputGlobal output)
         {
             Outputs.Add(output);
@@ -447,6 +484,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Removes an output from the group and sends <c>output_leave</c> to every bound client.
+        /// </summary>
+        /// <param name="output">The output to remove.</param>
         public void RemoveOutput(OutputGlobal output)
         {
             Outputs.Remove(output);
@@ -463,6 +504,14 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             _owner.UnwatchOutput(output);
         }
 
+        /// <summary>
+        /// Creates a workspace in the group and announces it to every bound client.
+        /// </summary>
+        /// <param name="name">The name that clients see.</param>
+        /// <param name="id">A stable id that clients can keep across sessions, or <see langword="null"/>.</param>
+        /// <param name="state">The initial state flags.</param>
+        /// <param name="coordinates">The position in a grid of workspaces, or <see langword="null"/>.</param>
+        /// <returns>The new workspace.</returns>
         public Workspace CreateWorkspace(string name, string? id = null, WorkspaceState state = 0, uint[]? coordinates = null)
         {
             var workspace = new Workspace(_owner, this, name, id, state, coordinates);
@@ -470,6 +519,9 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             return workspace;
         }
 
+        /// <summary>
+        /// Removes the group and sends <c>removed</c> to every bound client. Its workspaces keep their group reference.
+        /// </summary>
         public void Remove()
         {
             _owner._groups.Remove(this);
@@ -485,14 +537,29 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
         internal void RaiseCreateRequested(string name) => CreateWorkspaceRequested?.Invoke(name);
     }
 
+    /// <summary>
+    /// Lists the state flags of a workspace, with the protocol's values. A workspace can have more than one flag at a time.
+    /// </summary>
     [Flags]
     public enum WorkspaceState : uint
     {
+        /// <summary>
+        /// The workspace is shown.
+        /// </summary>
         Active = 1,
+        /// <summary>
+        /// The workspace needs attention.
+        /// </summary>
         Urgent = 2,
+        /// <summary>
+        /// Clients must not show the workspace in a workspace switcher.
+        /// </summary>
         Hidden = 4,
     }
 
+    /// <summary>
+    /// Represents a workspace that clients see. Changes go to every bound client at once, followed by <c>done</c>.
+    /// </summary>
     public sealed class Workspace
     {
         private readonly WorkspaceManager _owner;
@@ -507,24 +574,55 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             Coordinates = coordinates;
         }
 
+        /// <summary>
+        /// Gets the group that holds the workspace, or <see langword="null"/> after <see cref="Remove"/>.
+        /// </summary>
         public WorkspaceGroup? Group { get; private set; }
 
+        /// <summary>
+        /// Gets the name that clients see.
+        /// </summary>
         public string Name { get; private set; }
 
+        /// <summary>
+        /// Gets the stable id that clients can keep across sessions, or <see langword="null"/>.
+        /// </summary>
         public string? Id { get; }
 
+        /// <summary>
+        /// Gets the state flags that clients see.
+        /// </summary>
         public WorkspaceState State { get; private set; }
 
+        /// <summary>
+        /// Gets the position in a grid of workspaces, or <see langword="null"/>.
+        /// </summary>
         public uint[]? Coordinates { get; private set; }
 
+        /// <summary>
+        /// Occurs when a client commits a request to activate the workspace. The consumer decides whether to act.
+        /// </summary>
         public event Action? ActivateRequested;
 
+        /// <summary>
+        /// Occurs when a client commits a request to deactivate the workspace. The consumer decides whether to act.
+        /// </summary>
         public event Action? DeactivateRequested;
 
+        /// <summary>
+        /// Occurs when a client commits a request to remove the workspace. The consumer decides whether to act.
+        /// </summary>
         public event Action? RemoveRequested;
 
+        /// <summary>
+        /// Occurs when a client commits a request to move the workspace to another group. The argument is the target group.
+        /// </summary>
         public event Action<WorkspaceGroup>? AssignRequested;
 
+        /// <summary>
+        /// Sets the state flags and sends them to every bound client.
+        /// </summary>
+        /// <param name="state">The new state flags.</param>
         public void SetState(WorkspaceState state)
         {
             State = state;
@@ -537,6 +635,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Sets the name and sends it to every bound client.
+        /// </summary>
+        /// <param name="name">The new name.</param>
         public void SetName(string name)
         {
             Name = name;
@@ -549,6 +651,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Sets the grid position. Only a non-null value goes to the bound clients.
+        /// </summary>
+        /// <param name="coordinates">The new position, or <see langword="null"/> to clear it locally.</param>
         public void SetCoordinates(uint[]? coordinates)
         {
             Coordinates = coordinates;
@@ -566,6 +672,10 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Moves the workspace to another group and sends <c>workspace_leave</c> and <c>workspace_enter</c> to every bound client.
+        /// </summary>
+        /// <param name="group">The new group.</param>
         public void AssignTo(WorkspaceGroup group)
         {
             var previous = Group;
@@ -589,6 +699,9 @@ public sealed class WorkspaceManager : IWorkspaceObserver, IDisposable
             });
         }
 
+        /// <summary>
+        /// Removes the workspace from its group and sends <c>removed</c> to every bound client.
+        /// </summary>
         public void Remove()
         {
             _owner._workspaces.Remove(this);

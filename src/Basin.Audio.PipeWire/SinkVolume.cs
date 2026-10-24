@@ -7,8 +7,14 @@ using static PipeWire.Native.Pipewire;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Reads and writes the volume and mute of the default sink. It writes through the output route of the sink device when that route has channel volumes, else through the node props.
+/// </summary>
 public sealed class SinkVolume : IDisposable
 {
+    /// <summary>
+    /// The largest cubic volume that <see cref="SetVolume"/> writes.
+    /// </summary>
     public const float MaxVolume = 1.5f;
 
     private const string DefaultSinkKey = "default.audio.sink";
@@ -31,6 +37,11 @@ public sealed class SinkVolume : IDisposable
     private bool _nodeRead;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SinkVolume"/> class. It binds the current default sink at once when the session has seen it.
+    /// </summary>
+    /// <param name="session">The session to watch and write through.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     public SinkVolume(AudioSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -45,24 +56,60 @@ public sealed class SinkVolume : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the <c>node.name</c> of the default sink, or <see langword="null"/> when no default sink is set.
+    /// </summary>
     public string? SinkName { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether a default sink is bound and its volume is read. The setters return false while it is false.
+    /// </summary>
     public bool IsAvailable { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the volume goes through the output route of the device instead of the node props.
+    /// </summary>
     public bool UsesRoute { get; private set; }
 
+    /// <summary>
+    /// Gets the cubic volume that wpctl and pavucontrol show. It is the cube root of <see cref="LinearVolume"/>, and 0 while not available.
+    /// </summary>
     public float Volume { get; private set; }
 
+    /// <summary>
+    /// Gets the average linear gain of the channels, as the daemon holds it, or 0 while not available.
+    /// </summary>
     public float LinearVolume { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the sink is muted, as the daemon holds it. It is false while not available.
+    /// </summary>
     public bool Muted { get; private set; }
 
+    /// <summary>
+    /// Occurs when the daemon reports a new volume or mute, when the path changes, or when the default sink changes or goes away.
+    /// </summary>
     public event Action<SinkVolume>? Changed;
 
+    /// <summary>
+    /// Converts a linear gain to the cubic volume scale.
+    /// </summary>
+    /// <param name="linear">The linear gain.</param>
+    /// <returns>The cube root of <paramref name="linear"/>, or 0 when it is 0 or less.</returns>
     public static float ToCubic(float linear) => linear <= 0 ? 0 : MathF.Cbrt(linear);
 
+    /// <summary>
+    /// Converts a cubic volume to a linear gain.
+    /// </summary>
+    /// <param name="cubic">The cubic volume.</param>
+    /// <returns>The cube of <paramref name="cubic"/>, or 0 when it is 0 or less.</returns>
     public static float ToLinear(float cubic) => cubic <= 0 ? 0 : cubic * cubic * cubic;
 
+    /// <summary>
+    /// Writes the same gain to every channel, which removes a balance between them. The properties do not change until the daemon reports the new value.
+    /// </summary>
+    /// <param name="volume">The cubic volume, clamped to 0 through <see cref="MaxVolume"/>.</param>
+    /// <returns><see langword="true"/> when the write was sent. <see langword="false"/> when the object is disposed, not available, or <paramref name="volume"/> is NaN.</returns>
     public bool SetVolume(float volume)
     {
         if (_disposed || !IsAvailable || _node is null || float.IsNaN(volume))
@@ -76,6 +123,11 @@ public sealed class SinkVolume : IDisposable
         return Apply(volumes, mute: null);
     }
 
+    /// <summary>
+    /// Writes only the mute, so the level stays. The properties do not change until the daemon reports the new value.
+    /// </summary>
+    /// <param name="muted"><see langword="true"/> to mute the sink.</param>
+    /// <returns><see langword="true"/> when the write was sent. <see langword="false"/> when the object is disposed or not available.</returns>
     public bool SetMuted(bool muted)
     {
         if (_disposed || !IsAvailable || _node is null)
@@ -86,6 +138,9 @@ public sealed class SinkVolume : IDisposable
         return Apply([], muted);
     }
 
+    /// <summary>
+    /// Stops following the session and destroys the sink and device proxies. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

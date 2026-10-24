@@ -3,11 +3,19 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// The params of one call over their raw JSON bytes. A getter that finds a missing key or a wrong type sets <c>invalid_params</c> on the reply.
+/// </summary>
 public ref struct IpcParams
 {
     private readonly ReadOnlySpan<byte> _json;
     private readonly IpcReply _reply;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcParams"/> struct.
+    /// </summary>
+    /// <param name="json">The raw JSON of the params. Empty means no params.</param>
+    /// <param name="reply">The reply that takes the errors.</param>
     public IpcParams(ReadOnlySpan<byte> json, IpcReply reply)
     {
         ArgumentNullException.ThrowIfNull(reply);
@@ -15,12 +23,29 @@ public ref struct IpcParams
         _reply = reply;
     }
 
+    /// <summary>
+    /// Gets the raw JSON of the params. It is <c>{}</c> when the call had no params.
+    /// </summary>
     public readonly ReadOnlySpan<byte> Raw => _json.IsEmpty ? "{}"u8 : _json;
 
+    /// <summary>
+    /// Gets a value indicating whether the reply already carries an error. A handler checks it before it acts.
+    /// </summary>
     public readonly bool Failed => _reply.IsError;
 
+    /// <summary>
+    /// Tells whether a key is present with a value that is not <c>null</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns><see langword="true"/> when the key has a value.</returns>
     public readonly bool Has(string name) => Find(name, out _);
 
+    /// <summary>
+    /// Deserializes the params into a params contract. On a missing required key or a wrong type, it sets <c>invalid_params</c> on the reply.
+    /// </summary>
+    /// <typeparam name="T">The params contract type.</typeparam>
+    /// <param name="info">The source-generated metadata of <typeparamref name="T"/>.</param>
+    /// <returns>The params, or <see langword="null"/> on an error. Library params are reused, so a deferred handler copies what it needs.</returns>
     public readonly T? Read<T>(JsonTypeInfo<T> info)
         where T : class, IIpcParams
     {
@@ -48,9 +73,20 @@ public ref struct IpcParams
         return null;
     }
 
+    /// <summary>
+    /// Reads a required string. When the key is absent or not a string, it sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns>The value, or an empty string on an error.</returns>
     public readonly string GetString(string name) =>
         TryGetString(name, out var value) ? value : Missing<string>(name, string.Empty);
 
+    /// <summary>
+    /// Reads an optional string. An absent or <c>null</c> key is not an error. A value of another type sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">The value, or an empty string when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds a string.</returns>
     public readonly bool TryGetString(string name, out string value)
     {
         value = string.Empty;
@@ -68,8 +104,19 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Reads a required integer. When the key is absent or not an integer, it sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns>The value, or 0 on an error.</returns>
     public readonly long GetInt(string name) => TryGetInt(name, out var value) ? value : Missing(name, 0L);
 
+    /// <summary>
+    /// Reads an optional integer. An absent or <c>null</c> key is not an error. A value that is not a 64-bit integer sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">The value, or 0 when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds an integer.</returns>
     public readonly bool TryGetInt(string name, out long value)
     {
         value = 0;
@@ -86,8 +133,19 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Reads a required unsigned integer, as a number or as a string of its decimal digits. When the key is absent or not valid, it sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns>The value, or 0 on an error.</returns>
     public readonly ulong GetUlong(string name) => TryGetUlong(name, out var value) ? value : Missing(name, 0UL);
 
+    /// <summary>
+    /// Reads an optional unsigned integer, as a number or as a string of its decimal digits. A string lets a JavaScript client send an id above 2^53.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">The value, or 0 when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds a valid value. An invalid value sets <c>invalid_params</c>.</returns>
     public readonly bool TryGetUlong(string name, out ulong value)
     {
         value = 0;
@@ -116,8 +174,19 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Reads a required finite number. When the key is absent or not valid, it sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns>The value, or 0 on an error.</returns>
     public readonly double GetDouble(string name) => TryGetDouble(name, out var value) ? value : Missing(name, 0d);
 
+    /// <summary>
+    /// Reads an optional finite number. An absent or <c>null</c> key is not an error. Another type sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">The value, or 0 when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds a finite number.</returns>
     public readonly bool TryGetDouble(string name, out double value)
     {
         value = 0;
@@ -134,8 +203,19 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Reads a required boolean. When the key is absent or not a boolean, it sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns>The value, or <see langword="false"/> on an error.</returns>
     public readonly bool GetBool(string name) => TryGetBool(name, out var value) ? value : Missing(name, false);
 
+    /// <summary>
+    /// Reads an optional boolean. An absent or <c>null</c> key is not an error. Another type sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">The value, or <see langword="false"/> when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds a boolean.</returns>
     public readonly bool TryGetBool(string name, out bool value)
     {
         value = false;
@@ -153,9 +233,20 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Reads a required array of strings. When the key is absent or not valid, it sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <returns>A new array, or an empty array on an error.</returns>
     public readonly string[] GetStringArray(string name) =>
         TryGetStringArray(name, out var value) ? value : Missing(name, Array.Empty<string>());
 
+    /// <summary>
+    /// Reads an optional array of strings. An absent or <c>null</c> key is not an error. Another shape sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">A new array, or an empty array when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds an array of strings.</returns>
     public readonly bool TryGetStringArray(string name, out string[] value)
     {
         value = [];
@@ -184,6 +275,12 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Reads an optional object whose values are strings. An absent or <c>null</c> key is not an error. Another shape sets <c>invalid_params</c>.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">A new dictionary with ordinal keys. It can hold some entries when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the key holds an object of strings.</returns>
     public readonly bool TryGetStringMap(string name, out Dictionary<string, string> value)
     {
         value = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -212,6 +309,12 @@ public ref struct IpcParams
         return true;
     }
 
+    /// <summary>
+    /// Finds the raw JSON of a value, of any type. A <c>null</c> value is found as <c>null</c>. It never sets an error.
+    /// </summary>
+    /// <param name="name">The key.</param>
+    /// <param name="value">The raw JSON of the value, a slice of the params.</param>
+    /// <returns><see langword="true"/> when the key is present.</returns>
     public readonly bool TryGetRaw(string name, out ReadOnlySpan<byte> value)
     {
         value = default;
@@ -242,6 +345,10 @@ public ref struct IpcParams
         return false;
     }
 
+    /// <summary>
+    /// Sets <c>invalid_params</c> on the reply. The first error on a reply wins.
+    /// </summary>
+    /// <param name="message">The error text.</param>
     public readonly void Invalid(string message) => _reply.Error(IpcErrorCodes.InvalidParams, message);
 
     private readonly T Missing<T>(string name, T fallback)

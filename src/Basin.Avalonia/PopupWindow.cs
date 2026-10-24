@@ -7,6 +7,9 @@ using Basin.Shell.Xdg;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// An Avalonia popup that shows one client popup surface against its parent host window.
+/// </summary>
 public sealed class PopupWindow
 {
     private readonly ToplevelWindows _manager;

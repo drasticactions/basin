@@ -2,12 +2,22 @@ using System.Text;
 
 namespace Basin.Freedesktop;
 
+/// <summary>
+/// Converts between the <c>Exec</c> value of a desktop entry and an argument vector, by the quoting rules of the Desktop Entry specification.
+/// </summary>
 public static class ExecLine
 {
     private const string FieldCodes = "fFuUdDnNickvm";
 
     private const string Reserved = " \t\n\"'\\><~|&;$*?#()`";
 
+    /// <summary>
+    /// Splits an <c>Exec</c> value into arguments on unquoted spaces and decodes the escapes inside double quotes.
+    /// Field codes are removed and <c>%%</c> becomes <c>%</c>. An unquoted argument that only field codes made is dropped.
+    /// </summary>
+    /// <param name="exec">The raw <c>Exec</c> value.</param>
+    /// <returns>A new array of arguments. It is empty for an empty line.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="exec"/> is <see langword="null"/>.</exception>
     public static string[] Split(string exec)
     {
         ArgumentNullException.ThrowIfNull(exec);
@@ -70,6 +80,12 @@ public static class ExecLine
         return [.. argv];
     }
 
+    /// <summary>
+    /// Joins arguments into one line that is a valid <c>Exec</c> value and a valid <c>sh -c</c> line.
+    /// An argument that is empty or holds a reserved character is put in double quotes. A percent sign stays literal.
+    /// </summary>
+    /// <param name="argv">The arguments to join.</param>
+    /// <returns>The arguments separated by single spaces.</returns>
     public static string Join(ReadOnlySpan<string> argv)
     {
         var builder = new StringBuilder();
@@ -103,6 +119,10 @@ public static class ExecLine
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Finds a terminal command for <see cref="DesktopEntry.LaunchArgv(IReadOnlyList{string})"/> from the environment.
+    /// </summary>
+    /// <returns><c>$TERMINAL</c> split like an <c>Exec</c> line with <c>-e</c> added, then <c>xdg-terminal-exec</c> when it is on <c>PATH</c>, otherwise <see langword="null"/>.</returns>
     public static string[]? TerminalFromEnvironment()
     {
         var terminal = Environment.GetEnvironmentVariable("TERMINAL");

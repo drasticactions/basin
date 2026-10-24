@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's track mouse effect. While it is held, two half rings turn in opposite directions around the cursor.
+/// </summary>
 public sealed class TrackMouseEffect : IMeshSource
 {
     private const int Segments = 64;
@@ -16,16 +19,36 @@ public sealed class TrackMouseEffect : IMeshSource
     private double _angle;
     private bool _held;
 
+    /// <summary>
+    /// Gets or sets the radius of the outer ring, in pixels. The inner ring is 0.6 times as large. The default is 24.
+    /// </summary>
     public double Radius { get; set; } = 24;
 
+    /// <summary>
+    /// Gets or sets the line width, in pixels. The default is 3.
+    /// </summary>
     public double LineWidth { get; set; } = 3;
 
+    /// <summary>
+    /// Gets or sets the ring color. The default is white.
+    /// </summary>
     public RenderColor Color { get; set; } = new(1f, 1f, 1f, 1f);
 
+    /// <summary>
+    /// Gets a value indicating whether the rings show.
+    /// </summary>
     public bool IsActive => _held;
 
+    /// <summary>
+    /// Gets the turn of the outer ring, in radians. One full turn takes four seconds.
+    /// </summary>
     public double Angle => _angle;
 
+    /// <summary>
+    /// Claims a mesh in the feedback overlay and draws into it from now on.
+    /// </summary>
+    /// <param name="overlay">The feedback overlay of the output.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Attach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -33,6 +56,11 @@ public sealed class TrackMouseEffect : IMeshSource
         _mesh = overlay.Claim(this, this);
     }
 
+    /// <summary>
+    /// Releases the mesh in the feedback overlay and hides the rings.
+    /// </summary>
+    /// <param name="overlay">The overlay that <see cref="Attach"/> received.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Detach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -42,6 +70,10 @@ public sealed class TrackMouseEffect : IMeshSource
         _held = false;
     }
 
+    /// <summary>
+    /// Shows or hides the rings, for example while a modifier chord is held.
+    /// </summary>
+    /// <param name="held"><see langword="true"/> to show the rings.</param>
     public void SetHeld(bool held)
     {
         _thread.Assert();
@@ -49,6 +81,11 @@ public sealed class TrackMouseEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Moves the center of the rings.
+    /// </summary>
+    /// <param name="x">The horizontal cursor position, in the coordinates of the overlay.</param>
+    /// <param name="y">The vertical cursor position, in the coordinates of the overlay.</param>
     public void SetCursor(double x, double y)
     {
         _thread.Assert();
@@ -57,6 +94,11 @@ public sealed class TrackMouseEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Turns the rings to the angle for the tick time.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the rings show.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -71,8 +113,10 @@ public sealed class TrackMouseEffect : IMeshSource
         return true;
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds) => _held ? Arcs * FeedbackShapes.RingVertexCount(Segments) : 0;
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into)
     {
         if (!_held)

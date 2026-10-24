@@ -3,26 +3,54 @@ using System.Text;
 
 namespace Basin.Freedesktop;
 
+/// <summary>
+/// The home trash of the freedesktop.org Trash specification. It moves files in and out and keeps the <c>directorysizes</c> cache.
+/// </summary>
 public sealed class FreedesktopTrash
 {
     private const string InfoExtension = ".trashinfo";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FreedesktopTrash"/> class. No directory is created until the first <see cref="Trash(string, DateTime?)"/>.
+    /// </summary>
+    /// <param name="root">The trash directory, or <see langword="null"/> for <c>Trash</c> under <see cref="XdgDirectories.DataHome"/>.</param>
     public FreedesktopTrash(string? root = null)
     {
         Root = root ?? Path.Combine(XdgDirectories.DataHome, "Trash");
     }
 
+    /// <summary>
+    /// Gets the trash directory that holds <c>files</c>, <c>info</c> and <c>directorysizes</c>.
+    /// </summary>
     public string Root { get; }
 
+    /// <summary>
+    /// Gets the directory that holds the trashed files and directories.
+    /// </summary>
     public string FilesDirectory => Path.Combine(Root, "files");
 
+    /// <summary>
+    /// Gets the directory that holds one <c>.trashinfo</c> file per item.
+    /// </summary>
     public string InfoDirectory => Path.Combine(Root, "info");
 
     private string SizesFile => Path.Combine(Root, "directorysizes");
 
+    /// <summary>
+    /// Gets a value indicating whether the info directory holds no <c>.trashinfo</c> file. Each read asks the file system.
+    /// </summary>
     public bool IsEmpty =>
         !Directory.Exists(InfoDirectory) || !Directory.EnumerateFiles(InfoDirectory, "*" + InfoExtension).Any();
 
+    /// <summary>
+    /// Moves a file or directory into the trash. The info file is created exclusively, so two processes cannot take the same name.
+    /// A name that is taken gets a number, for example <c>notes.2.txt</c>. When the move fails, the info file is removed again.
+    /// </summary>
+    /// <param name="path">The file or directory to move. A relative path is resolved against the current directory.</param>
+    /// <param name="now">The deletion time to record, or <see langword="null"/> for the local time now.</param>
+    /// <returns>The new item.</returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is null or empty.</exception>
+    /// <exception cref="FileNotFoundException">Nothing exists at <paramref name="path"/>.</exception>
     public TrashItem Trash(string path, DateTime? now = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -55,6 +83,10 @@ public sealed class FreedesktopTrash
         return new TrashItem(name, full, deleted, target, info);
     }
 
+    /// <summary>
+    /// Lists the items in the trash. An info file whose file is gone, or which does not parse, is skipped.
+    /// </summary>
+    /// <returns>A new list, newest deletion first.</returns>
     public IReadOnlyList<TrashItem> Items()
     {
         var items = new List<TrashItem>();
@@ -82,6 +114,10 @@ public sealed class FreedesktopTrash
         return items;
     }
 
+    /// <summary>
+    /// Counts the items and adds up their sizes. A directory size comes from <c>directorysizes</c> when its line is current, otherwise it is computed.
+    /// </summary>
+    /// <returns>The item count and the total size in bytes.</returns>
     public TrashSummary Summary()
     {
         var sizes = ReadDirectorySizes();
@@ -104,6 +140,13 @@ public sealed class FreedesktopTrash
         return new TrashSummary(count, bytes);
     }
 
+    /// <summary>
+    /// Moves an item back to its original path and removes its info file and its size line. Missing parent directories are created.
+    /// </summary>
+    /// <param name="item">The item to restore.</param>
+    /// <returns>The original path that the item now has again.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="item"/> is <see langword="null"/>.</exception>
+    /// <exception cref="IOException">Something already exists at the original path.</exception>
     public string Restore(TrashItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -123,6 +166,11 @@ public sealed class FreedesktopTrash
         return item.OriginalPath;
     }
 
+    /// <summary>
+    /// Deletes one item permanently, with its info file and its size line.
+    /// </summary>
+    /// <param name="item">The item to delete.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="item"/> is <see langword="null"/>.</exception>
     public void Delete(TrashItem item)
     {
         ArgumentNullException.ThrowIfNull(item);
@@ -131,6 +179,9 @@ public sealed class FreedesktopTrash
         RemoveDirectorySize(item.Name);
     }
 
+    /// <summary>
+    /// Deletes every item that <see cref="Items"/> lists, with its info file, and deletes the <c>directorysizes</c> file.
+    /// </summary>
     public void Empty()
     {
         foreach (var item in Items())
@@ -145,6 +196,11 @@ public sealed class FreedesktopTrash
         }
     }
 
+    /// <summary>
+    /// Measures a file, or a directory recursively. Symbolic links and entries that cannot be read are skipped.
+    /// </summary>
+    /// <param name="path">The file or directory to measure.</param>
+    /// <returns>The total size in bytes.</returns>
     public static long SizeOf(string path)
     {
         if (File.Exists(path))

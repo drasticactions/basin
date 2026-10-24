@@ -4,6 +4,10 @@ using Wayland.Server;
 
 namespace Basin.Shell.River;
 
+/// <summary>
+/// The river-layer-shell-v1 global. It sends each output's area that is left after exclusive zones, records the default output for unplaced layer surfaces, and carries the layer focus handshake.
+/// A window manager that binds it tells the compositor that layer surfaces can map.
+/// </summary>
 public sealed class RiverLayerShell : IDisposable
 {
     private readonly RiverWindowManager _manager;
@@ -19,10 +23,21 @@ public sealed class RiverLayerShell : IDisposable
         _global = display.CreateGlobal(RiverLayerShellV1.Interface, 1, OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a window manager holds a live binding to this global.
+    /// When it is <see langword="false"/>, the compositor must not map layer surfaces.
+    /// </summary>
     public bool IsSupported => _resource is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets the output that the window manager chose for layer surfaces that name no output.
+    /// It is <see langword="null"/> before the manager chooses one, after that output is removed, and after the manager unbinds.
+    /// </summary>
     public IOutput? DefaultOutput { get; private set; }
 
+    /// <summary>
+    /// Forgets every output and seat, and removes the global. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -36,6 +51,13 @@ public sealed class RiverLayerShell : IDisposable
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Sends the area of an output that is left after the exclusive zones of layer surfaces.
+    /// After this call the area stops following the output's own box. Nothing is sent when the area did not change.
+    /// </summary>
+    /// <param name="output">The output that the area belongs to.</param>
+    /// <param name="area">The usable area in logical layout coordinates.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public void SetNonExclusiveArea(IOutput output, Box area)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -72,6 +94,12 @@ public sealed class RiverLayerShell : IDisposable
         _manager.MarkManageDirty();
     }
 
+    /// <summary>
+    /// Tells whether a layer surface holds exclusive keyboard focus on a seat.
+    /// </summary>
+    /// <param name="seat">The seat to check.</param>
+    /// <returns><see langword="true"/> when the last focus set on the seat is <see cref="LayerFocus.Exclusive"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public bool HasExclusiveFocus(Basin.Seat.Seat seat)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -80,8 +108,22 @@ public sealed class RiverLayerShell : IDisposable
             state.Focus == LayerFocus.Exclusive;
     }
 
+    /// <summary>
+    /// Reports the layer focus of a seat without the surface that holds it.
+    /// </summary>
+    /// <param name="seat">The seat whose focus changed.</param>
+    /// <param name="focus">The new layer focus.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public void SetLayerFocus(Basin.Seat.Seat seat, LayerFocus focus) => SetLayerFocus(seat, focus, null);
 
+    /// <summary>
+    /// Reports which layer surface has keyboard focus on a seat. The window manager hears the mode at once.
+    /// The surface gets focus at the end of the next manage sequence, by the ordering rule for <paramref name="focus"/>.
+    /// </summary>
+    /// <param name="seat">The seat whose focus changed.</param>
+    /// <param name="focus">The new layer focus.</param>
+    /// <param name="surface">The layer surface to focus. It is ignored when <paramref name="focus"/> is <see cref="LayerFocus.None"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> is <see langword="null"/>.</exception>
     public void SetLayerFocus(Basin.Seat.Seat seat, LayerFocus focus, Surface? surface)
     {
         ArgumentNullException.ThrowIfNull(seat);

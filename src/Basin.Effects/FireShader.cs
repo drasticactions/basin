@@ -1,7 +1,13 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// The pixel shader for the GPU path of <see cref="FireEffect"/>.
+/// </summary>
 public static class FireShader
 {
+    /// <summary>
+    /// The uniforms of the fire shader: time, reveal, seed, content rectangle and tint, in the order that <see cref="IPixelShader.SetUniforms"/> takes them.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("time", PixelShaderUniformType.Float),
@@ -52,6 +58,9 @@ public static class FireShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the GLSL, SkSL and SPIR-V dialects of the fire shader: time, reveal, seed, content rectangle and tint. The first read loads the SPIR-V from an embedded resource.
+    /// </summary>
     public static PixelShaderSource Source => new()
     {
         Glsl = Body,

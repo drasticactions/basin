@@ -5,6 +5,9 @@ using static Basin.Seat.SeatLog;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Types text as key events into an <see cref="IKeySink"/>, with the modifier keys that each character needs in a keymap.
+/// </summary>
 public sealed class KeySynthesizer
 {
     private readonly IKeySink _sink;
@@ -13,12 +16,19 @@ public sealed class KeySynthesizer
     private uint _layout;
     private uint[]? _modifierKeys;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KeySynthesizer"/> class.
+    /// </summary>
+    /// <param name="sink">The sink that receives the key events. When it is an <see cref="IKeymapOverride"/>, characters outside the keymap can be typed too.</param>
     public KeySynthesizer(IKeySink sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
         _sink = sink;
     }
 
+    /// <summary>
+    /// Gets or sets the keymap used to find keys. A change clears the lookup cache. The caller keeps ownership.
+    /// </summary>
     public XkbKeymap? Keymap
     {
         get => _keymap;
@@ -34,6 +44,9 @@ public sealed class KeySynthesizer
         }
     }
 
+    /// <summary>
+    /// Gets or sets the layout index in the keymap. A change clears the lookup cache.
+    /// </summary>
     public uint Layout
     {
         get => _layout;
@@ -49,6 +62,12 @@ public sealed class KeySynthesizer
         }
     }
 
+    /// <summary>
+    /// Types text. When a character has no key, the whole text goes to <see cref="IKeySink.TryCommitText"/> first. Characters that still cannot be typed are dropped with a warning.
+    /// </summary>
+    /// <param name="text">The text to type.</param>
+    /// <param name="timeMs">The event time in milliseconds for the key events.</param>
+    /// <returns>The number of characters typed or committed.</returns>
     public int Type(ReadOnlySpan<char> text, uint timeMs)
     {
         _typer ??= new TextTyper(new Lookup(this), _sink as IKeymapOverride) { SkipUntypable = true };
@@ -106,6 +125,13 @@ public sealed class KeySynthesizer
         }
     }
 
+    /// <summary>
+    /// Finds a key and a modifier mask that produce a keysym. Only masks whose modifiers a key in the keymap can hold are used. Results are cached.
+    /// </summary>
+    /// <param name="keysym">The keysym.</param>
+    /// <param name="keycode">The Linux evdev keycode.</param>
+    /// <param name="modifiers">The modifier mask to hold.</param>
+    /// <returns><see langword="false"/> when there is no keymap or no key produces the keysym.</returns>
     public bool TryResolve(uint keysym, out uint keycode, out uint modifiers)
     {
         if (_cache.TryGetValue(keysym, out var cached))

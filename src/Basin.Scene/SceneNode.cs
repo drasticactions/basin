@@ -3,12 +3,19 @@ using Pixman;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// The base of every scene graph node. A node has a position relative to its parent, an optional clip, and a lifetime that ends with <see cref="Destroy"/>.
+/// </summary>
 public abstract class SceneNode
 {
     private bool _destroyed;
     private bool _enabled = true;
     private Box _clipBox;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneNode"/> class and appends it to the top of the parent's children.
+    /// </summary>
+    /// <param name="parent">The tree to add the node to, or <see langword="null"/> for a detached root.</param>
     protected SceneNode(SceneTree? parent)
     {
         Parent = parent;
@@ -16,8 +23,14 @@ public abstract class SceneNode
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the tree that holds this node. It is <see langword="null"/> for a root and after <see cref="Destroy"/>.
+    /// </summary>
     public SceneTree? Parent { get; private set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the node and its subtree draw and take input. A change damages the area that the subtree covers.
+    /// </summary>
     public bool Enabled
     {
         get => _enabled;
@@ -34,14 +47,29 @@ public abstract class SceneNode
 
     internal void SetEnabledForCapture(bool value) => _enabled = value;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether screen capture must leave out this node and its subtree.
+    /// </summary>
     public bool ExcludedFromCapture { get; set; }
 
+    /// <summary>
+    /// Gets or sets the name that scene dumps show for this node. It has no effect on rendering.
+    /// </summary>
     public string? DebugName { get; set; }
 
+    /// <summary>
+    /// Gets the horizontal offset from the parent's origin, in logical pixels.
+    /// </summary>
     public int X { get; private set; }
 
+    /// <summary>
+    /// Gets the vertical offset from the parent's origin, in logical pixels.
+    /// </summary>
     public int Y { get; private set; }
 
+    /// <summary>
+    /// Gets the sum of the offsets of this node and its ancestors. It ignores the matrix of any <see cref="SceneTransform"/> on the path.
+    /// </summary>
     public (int X, int Y) ScenePosition
     {
         get
@@ -58,6 +86,9 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Gets or sets the clip rectangle in the node's local coordinates. An empty box turns clipping off.
+    /// </summary>
     public Box ClipBox
     {
         get => _clipBox;
@@ -74,12 +105,26 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="ClipBox"/> has a positive width and height.
+    /// </summary>
     public bool IsClipped => _clipBox.Width > 0 && _clipBox.Height > 0;
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Destroy"/> has run.
+    /// </summary>
     public bool IsDestroyed => _destroyed;
 
+    /// <summary>
+    /// Occurs once, at the end of <see cref="Destroy"/>, after the node leaves its parent.
+    /// </summary>
     public event Action? Destroyed;
 
+    /// <summary>
+    /// Moves the node relative to its parent and damages the old and new areas.
+    /// </summary>
+    /// <param name="x">The horizontal offset, in logical pixels.</param>
+    /// <param name="y">The vertical offset, in logical pixels.</param>
     public void SetPosition(int x, int y)
     {
         if (x == X && y == Y)
@@ -93,6 +138,11 @@ public abstract class SceneNode
         DamageSubtree();
     }
 
+    /// <summary>
+    /// Moves the node to the top of another tree's children. It does nothing when the tree is already the parent.
+    /// </summary>
+    /// <param name="newParent">The tree to move the node into.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="newParent"/> is this node or one of its descendants.</exception>
     public void Reparent(SceneTree newParent)
     {
         if (ReferenceEquals(newParent, Parent))
@@ -115,6 +165,9 @@ public abstract class SceneNode
         DamageSubtree();
     }
 
+    /// <summary>
+    /// Moves the node above all of its siblings. It does nothing for a root or for a node that is already on top.
+    /// </summary>
     public void RaiseToTop()
     {
         if (Parent is { } parent &&
@@ -127,6 +180,9 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Moves the node below all of its siblings. It does nothing for a root or for a node that is already at the bottom.
+    /// </summary>
     public void LowerToBottom()
     {
         if (Parent is { } parent &&
@@ -139,16 +195,29 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Moves the node directly above a sibling in the stacking order.
+    /// </summary>
+    /// <param name="sibling">A different node with the same parent.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="sibling"/> is this node or has a different parent.</exception>
     public void PlaceAbove(SceneNode sibling)
     {
         MoveRelativeTo(sibling, offset: 1);
     }
 
+    /// <summary>
+    /// Moves the node directly below a sibling in the stacking order.
+    /// </summary>
+    /// <param name="sibling">A different node with the same parent.</param>
+    /// <exception cref="InvalidOperationException"><paramref name="sibling"/> is this node or has a different parent.</exception>
     public void PlaceBelow(SceneNode sibling)
     {
         MoveRelativeTo(sibling, offset: 0);
     }
 
+    /// <summary>
+    /// Damages the node's area, runs <see cref="OnDestroy"/>, removes the node from its parent and raises <see cref="Destroyed"/>. A second call does nothing.
+    /// </summary>
     public void Destroy()
     {
         if (_destroyed)
@@ -165,6 +234,9 @@ public abstract class SceneNode
         BasinCounters.Untrack();
     }
 
+    /// <summary>
+    /// Gets the size of the node's own content, in logical pixels. The default is zero, which gives the node no bounds and no damage.
+    /// </summary>
     protected virtual (int Width, int Height) ContentSize => (0, 0);
 
     internal virtual Box SubtreeBounds()
@@ -181,6 +253,14 @@ public abstract class SceneNode
 
     internal virtual Box UntransformedSubtreeBounds() => SubtreeBounds();
 
+    /// <summary>
+    /// Maps a scene point into this node's local coordinates, through the offsets and transforms of every ancestor.
+    /// </summary>
+    /// <param name="sceneX">The horizontal scene coordinate, in logical pixels.</param>
+    /// <param name="sceneY">The vertical scene coordinate, in logical pixels.</param>
+    /// <param name="localX">The horizontal local coordinate, or 0 on failure.</param>
+    /// <param name="localY">The vertical local coordinate, or 0 on failure.</param>
+    /// <returns><see langword="false"/> when a transform on the path cannot be inverted or a mesh deformation does not cover the point.</returns>
     public bool TryMapSceneToLocal(double sceneX, double sceneY, out double localX, out double localY)
     {
         if (!TryMapSceneToParentSpace(sceneX, sceneY, out var x, out var y))
@@ -283,6 +363,11 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Maps a box in this node's local coordinates to scene coordinates. A transform on the path gives the bounding box of the transformed area.
+    /// </summary>
+    /// <param name="local">The box in local logical pixels.</param>
+    /// <returns>The box in scene logical pixels. It is empty when a transform cannot map it.</returns>
     public Box MapToScene(in Box local)
     {
         var box = local;
@@ -393,6 +478,9 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Damages the whole area that this node and its subtree cover on screen and raises <see cref="Scene.StructureChanged"/>. It does nothing when the node is not visible in a scene.
+    /// </summary>
     protected internal void DamageSubtree() => DamageSubtree(structural: true);
 
     private void DamageSubtree(bool structural)
@@ -445,6 +533,10 @@ public abstract class SceneNode
         }
     }
 
+    /// <summary>
+    /// Damages part of the node's content. It does nothing when the node is not visible in a scene.
+    /// </summary>
+    /// <param name="region">The damaged region in local logical pixels. It is clipped to <see cref="ContentSize"/> and <see cref="ClipBox"/>.</param>
     protected void DamageLocal(PixmanRegion32 region)
     {
         if (!ComposeToRoot(
@@ -483,6 +575,9 @@ public abstract class SceneNode
     private Box ClipToOwn(in Box box, int sceneX, int sceneY) =>
         IsClipped ? box.Intersect(_clipBox.Translated(sceneX, sceneY)) : box;
 
+    /// <summary>
+    /// Releases the node's own resources. <see cref="Destroy"/> calls it once, before the node leaves its parent.
+    /// </summary>
     protected virtual void OnDestroy()
     {
     }

@@ -3,8 +3,17 @@ using System.Text;
 
 namespace Basin.Session;
 
+/// <summary>
+/// The helper side of <see cref="PamCheck"/>. A program calls it from its entry point to authenticate one user with libpam.
+/// </summary>
 public static unsafe class PamHelper
 {
+    /// <summary>
+    /// Reads one password line from stdin, runs PAM authentication and account management, and writes "1" or "0" to stdout.
+    /// </summary>
+    /// <param name="service">The PAM service name, for example "login".</param>
+    /// <param name="user">The name of the user to authenticate.</param>
+    /// <returns>The process exit code: 0 on success, and 1 on failure or when libpam is not available.</returns>
     public static int Run(string service, string user)
     {
         var password = ReadLine(Console.OpenStandardInput());

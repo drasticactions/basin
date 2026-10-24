@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Stretches a nine-patch <see cref="DropShadowTexture"/> around a window box with eight buffer nodes. The consumer owns the textures and decides which windows get a shadow.
+/// </summary>
 public sealed class DropShadowEffect : IDisposable
 {
     private const int MinimumSize = 5;
@@ -18,6 +21,11 @@ public sealed class DropShadowEffect : IDisposable
     private bool _visible = true;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DropShadowEffect"/> class. Its tree goes to the bottom of the parent and stays disabled until it has a texture and a geometry.
+    /// </summary>
+    /// <param name="parent">The window tree that the shadow draws under.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="parent"/> is <see langword="null"/>.</exception>
     public DropShadowEffect(SceneTree parent)
     {
         ArgumentNullException.ThrowIfNull(parent);
@@ -35,8 +43,14 @@ public sealed class DropShadowEffect : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the tree that holds the shadow cells and the glow tree.
+    /// </summary>
     public SceneTree Tree => _tree;
 
+    /// <summary>
+    /// Gets or sets the shadow texture. The effect does not own it, so the caller must keep it alive while it is set.
+    /// </summary>
     public DropShadowTexture? Texture
     {
         get => _texture;
@@ -52,6 +66,9 @@ public sealed class DropShadowEffect : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the glow texture that draws above the shadow at <see cref="GlowOpacity"/>. The effect does not own it.
+    /// </summary>
     public DropShadowTexture? GlowTexture
     {
         get => _glowTexture;
@@ -67,6 +84,9 @@ public sealed class DropShadowEffect : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the alpha of the glow, from 0 to 1. At 0 the glow tree is disabled. The setter clamps values outside the range.
+    /// </summary>
     public double GlowOpacity
     {
         get => _glowOpacity;
@@ -88,6 +108,9 @@ public sealed class DropShadowEffect : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the consumer wants the shadow shown. It is <see langword="true"/> by default.
+    /// </summary>
     public bool Visible
     {
         get => _visible;
@@ -103,8 +126,15 @@ public sealed class DropShadowEffect : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the window box that the shadow surrounds, in the coordinates of the parent tree.
+    /// </summary>
     public Box Geometry => _geometry;
 
+    /// <summary>
+    /// Sets the window box and lays out the cells again. A box smaller than 5 pixels on either side hides the shadow.
+    /// </summary>
+    /// <param name="outer">The window box in the coordinates of the parent tree.</param>
     public void SetGeometry(in Box outer)
     {
         if (_geometry == outer)
@@ -116,6 +146,9 @@ public sealed class DropShadowEffect : IDisposable
         Layout();
     }
 
+    /// <summary>
+    /// Detaches the textures and destroys the tree. It does not dispose the textures. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

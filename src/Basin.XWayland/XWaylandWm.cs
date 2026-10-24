@@ -7,6 +7,9 @@ using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// The X11 window manager of one Xwayland server. It pairs each X window with its Wayland surface, reads window properties, and publishes the display settings.
+/// </summary>
 public sealed unsafe class XWaylandWm : IDisposable
 {
     private const byte EventFocusIn = 9;
@@ -40,16 +43,45 @@ public sealed unsafe class XWaylandWm : IDisposable
 
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XWaylandWm"/> class with the default <see cref="XWaylandWmOptions"/>.
+    /// </summary>
+    /// <param name="wmFd">The window manager socket that Xwayland got with <c>-wm</c>. The window manager owns it and closes it on dispose.</param>
+    /// <param name="loop">The loop that reads the X connection.</param>
+    /// <param name="shell">The shell global that pairs serials with surfaces.</param>
+    /// <param name="seat">The seat for keyboard focus and the clipboard bridge, or <see langword="null"/> for neither.</param>
+    /// <exception cref="InvalidOperationException">The X connection on <paramref name="wmFd"/> fails.</exception>
     public XWaylandWm(int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat = null)
         : this(wmFd, loop, shell, seat, new XWaylandWmOptions())
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XWaylandWm"/> class with no known Xwayland client, so serials match a surface of any client.
+    /// </summary>
+    /// <param name="wmFd">The window manager socket that Xwayland got with <c>-wm</c>. The window manager owns it and closes it on dispose.</param>
+    /// <param name="loop">The loop that reads the X connection.</param>
+    /// <param name="shell">The shell global that pairs serials with surfaces.</param>
+    /// <param name="seat">The seat for keyboard focus and the clipboard bridge, or <see langword="null"/> for neither.</param>
+    /// <param name="options">The display settings to publish.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The X connection on <paramref name="wmFd"/> fails.</exception>
     public XWaylandWm(int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat, XWaylandWmOptions options)
         : this(wmFd, loop, shell, seat, options, null)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XWaylandWm"/> class. It takes the <c>WM_S0</c> selection, and the XSETTINGS selection when <paramref name="options"/> asks for it.
+    /// </summary>
+    /// <param name="wmFd">The window manager socket that Xwayland got with <c>-wm</c>. The window manager owns it and closes it on dispose.</param>
+    /// <param name="loop">The loop that reads the X connection.</param>
+    /// <param name="shell">The shell global that pairs serials with surfaces.</param>
+    /// <param name="seat">The seat for keyboard focus and the clipboard bridge, or <see langword="null"/> for neither.</param>
+    /// <param name="options">The display settings to publish.</param>
+    /// <param name="client">The Wayland client of the Xwayland process, which limits the serial lookup to its surfaces, or <see langword="null"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The X connection on <paramref name="wmFd"/> fails.</exception>
     public XWaylandWm(
         int wmFd, ICompositorEventLoop loop, XwaylandShellGlobal shell, Seat.Seat? seat, XWaylandWmOptions options, WlClient? client)
     {
@@ -119,24 +151,56 @@ public sealed unsafe class XWaylandWm : IDisposable
         _source = loop.AddFd(fd, FdReadiness.Readable, (_, _) => Pump());
     }
 
+    /// <summary>
+    /// Occurs when a managed window is mapped in X and has its surface. Each map raises it once.
+    /// </summary>
     public event Action<XWaylandWindow>? WindowMapped;
 
+    /// <summary>
+    /// Occurs at the end of <see cref="Dispose"/>. The argument is this window manager.
+    /// </summary>
     public event Action<XWaylandWm>? Disposed;
 
+    /// <summary>
+    /// Gets the Wayland client of the Xwayland process, or <see langword="null"/> when the constructor got none.
+    /// </summary>
     public WlClient? Client => _client;
 
+    /// <summary>
+    /// Occurs when an override-redirect window is mapped in X and has its surface. Each map raises it once.
+    /// </summary>
     public event Action<XWaylandWindow>? OverrideRedirectMapped;
 
+    /// <summary>
+    /// Gets every X window that exists now, mapped or not, by X11 window id.
+    /// </summary>
     public IReadOnlyDictionary<uint, XWaylandWindow> Windows => _windows;
 
+    /// <summary>
+    /// Gets the current X11 scale. X11 coordinates are logical coordinates times this value.
+    /// </summary>
     public double Scale => _scale;
 
+    /// <summary>
+    /// Gets the options of the last <see cref="UpdateOptions"/> call, or of the constructor. <see cref="SetScale"/> does not change them.
+    /// </summary>
     public XWaylandWmOptions Options => _options;
 
+    /// <summary>
+    /// Gets the XSETTINGS publisher, or <see langword="null"/> when the options turned XSETTINGS off.
+    /// </summary>
     public XSettingsManager? XSettings { get; }
 
+    /// <summary>
+    /// Gets the DPI that the window manager publishes for the current scale and DPI buckets.
+    /// </summary>
     public int Dpi => XWaylandDpi.For(_scale, _options.DpiBuckets);
 
+    /// <summary>
+    /// Changes the X11 scale. It configures each mapped window again at its logical geometry and publishes the new DPI, cursor size and XSETTINGS.
+    /// </summary>
+    /// <param name="scale">The new scale. It must be positive and finite.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is not positive or not finite.</exception>
     public void SetScale(double scale)
     {
         if (!double.IsFinite(scale) || scale <= 0)
@@ -171,6 +235,11 @@ public sealed unsafe class XWaylandWm : IDisposable
         Flush();
     }
 
+    /// <summary>
+    /// Applies new options. A new scale goes through <see cref="SetScale"/>. Otherwise it publishes the DPI, the resource database and the root cursor again.
+    /// </summary>
+    /// <param name="options">The new options.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
     public void UpdateOptions(XWaylandWmOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -305,6 +374,9 @@ public sealed unsafe class XWaylandWm : IDisposable
         return size;
     }
 
+    /// <summary>
+    /// Stops the clipboard bridge, closes the X connection and raises <see cref="Disposed"/>. The windows get no destroyed event. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -848,8 +920,14 @@ public sealed unsafe class XWaylandWm : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when a client sends <c>_NET_ACTIVE_WINDOW</c>, or when a toplevel request asks to activate the window. With a handler, a toplevel request does not activate the window by itself.
+    /// </summary>
     public event Action<XWaylandWindow>? ActivationRequested;
 
+    /// <summary>
+    /// Gets or sets the policy filter for a configure request of a mapped managed window. It gets the requested logical box and returns <see langword="false"/> to refuse it.
+    /// </summary>
     public Func<XWaylandWindow, Box, bool>? ConfigureRequest { get; set; }
 
     private void HandleStateMessage(XWaylandWindow window, uint action, uint first, uint second)

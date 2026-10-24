@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// The framebuffer that a previous compositor left on an output, exported as a dmabuf. The caller owns it and must dispose it.
+/// </summary>
 public sealed class InheritedFrame : IDisposable
 {
     private const ulong DmaBufIoctlSync = 0x40086200;
@@ -25,26 +28,59 @@ public sealed class InheritedFrame : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the name of the output that showed the frame.
+    /// </summary>
     public string Output { get; }
 
+    /// <summary>
+    /// Gets the framebuffer width in pixels.
+    /// </summary>
     public int Width => _attributes.Width;
 
+    /// <summary>
+    /// Gets the framebuffer height in pixels.
+    /// </summary>
     public int Height => _attributes.Height;
 
+    /// <summary>
+    /// Gets the width of the part that the plane showed, in pixels. It is never larger than <see cref="Width"/>.
+    /// </summary>
     public int SourceWidth { get; }
 
+    /// <summary>
+    /// Gets the height of the part that the plane showed, in pixels. It is never larger than <see cref="Height"/>.
+    /// </summary>
     public int SourceHeight { get; }
 
+    /// <summary>
+    /// Gets the pixel format of the framebuffer.
+    /// </summary>
     public DrmFormat Format => _attributes.Format;
 
+    /// <summary>
+    /// Gets the format modifier, or <see cref="DrmFormatSet.ModifierInvalid"/> when the framebuffer has none.
+    /// </summary>
     public ulong Modifier => _attributes.Modifier;
 
+    /// <summary>
+    /// Gets the dmabuf that wraps the framebuffer. The frame owns it.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The frame is disposed.</exception>
     public DmabufBuffer Dmabuf => _dmabuf ?? throw new ObjectDisposedException(nameof(InheritedFrame));
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="CopyToMemory"/> can read the frame: one plane with a linear or no modifier.
+    /// </summary>
     public bool CpuReadable =>
         _attributes.PlaneCount == 1 &&
         _attributes.Modifier is DrmFormatSet.ModifierLinear or DrmFormatSet.ModifierInvalid;
 
+    /// <summary>
+    /// Copies the shown part of the frame into memory through a read-only mapping of the dmabuf.
+    /// </summary>
+    /// <returns>A new buffer of <see cref="SourceWidth"/> by <see cref="SourceHeight"/> pixels, which the caller owns. It is <see langword="null"/> when the frame is not CPU readable or the mapping fails.</returns>
+    /// <exception cref="ObjectDisposedException">The frame is disposed.</exception>
     public MemoryBuffer? CopyToMemory()
     {
         ObjectDisposedException.ThrowIf(_dmabuf is null, this);
@@ -101,6 +137,9 @@ public sealed class InheritedFrame : IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys the dmabuf. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_dmabuf is null)

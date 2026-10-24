@@ -2,6 +2,11 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Decorates an <see cref="IOutputConfiguration"/> with the color state of each output: HDR, ICC
+/// profiles, SDR white, gamut wideness, brightness, EDR and looks. It runs on the compositor thread
+/// only.
+/// </summary>
 public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLooks
 {
     private const OutputConfigurationFeatures ColorMask =
@@ -18,28 +23,60 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
     private readonly Dictionary<IOutput, OutputGammaRamps> _routedGamma = [];
     private string? _failure;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ColorOutputConfiguration"/> class. It forwards
+    /// layout and mode changes to the inner configuration.
+    /// </summary>
+    /// <param name="inner">The configuration that applies everything that is not color.</param>
     public ColorOutputConfiguration(IOutputConfiguration inner)
     {
         ArgumentNullException.ThrowIfNull(inner);
         _inner = inner;
     }
 
+    /// <summary>
+    /// Occurs once after each successful <see cref="Apply"/>, with the entries that went in after
+    /// adjustment.
+    /// </summary>
     public event Action<IReadOnlyList<OutputConfigurationEntry>>? Applied;
 
+    /// <summary>
+    /// Gets or sets the hardware brightness devices. When a device serves an output, brightness goes to
+    /// the device and EDR becomes possible. When it is <see langword="null"/>, brightness is a software
+    /// CTM.
+    /// </summary>
     public IOutputBrightness? Brightness { get; set; }
 
+    /// <summary>
+    /// Occurs when the EDR headroom of an output changes, after the backlight is set.
+    /// </summary>
     public event Action<IOutput>? EdrChanged;
 
+    /// <summary>
+    /// Occurs when something that <see cref="DescriptionOf"/> reads changes outside <see
+    /// cref="Apply"/>: the panel entry, the look, the inverse tone mapping, or HDR on demand.
+    /// </summary>
     public event Action<IOutput>? DescriptionChanged;
 
     private readonly Dictionary<IOutput, bool> _hdrDemand = [];
 
+    /// <summary>
+    /// Gets the last HDR demand that <see cref="SetHdrDemand"/> reported for an output.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns><see langword="false"/> when nothing was reported.</returns>
     public bool HdrDemandOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _hdrDemand.GetValueOrDefault(output);
     }
 
+    /// <summary>
+    /// Records whether a window on an output needs HDR. When HDR on demand is set and the output
+    /// supports HDR, it applies the HDR mode and raises <see cref="DescriptionChanged"/>.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="demand">Whether a visible window has an HDR description.</param>
     public void SetHdrDemand(IOutput output, bool demand)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -59,18 +96,35 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
 
     private readonly Dictionary<IOutput, PanelEntry> _panels = [];
 
+    /// <summary>
+    /// Gets the panel table entry that <see cref="SetPanel"/> attached to an output.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The entry, or <see langword="null"/> when none is attached.</returns>
     public PanelEntry? PanelOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _panels.GetValueOrDefault(output);
     }
 
+    /// <summary>
+    /// Gets the colorimetry of an output, with the panel entry's corrections applied over the EDID
+    /// values.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The colorimetry, or <see langword="null"/> when the output reports none and no panel entry adds any.</returns>
     public OutputColorimetry? ColorimetryOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _panels.TryGetValue(output, out var panel) ? panel.Apply(output.Colorimetry) : output.Colorimetry;
     }
 
+    /// <summary>
+    /// Attaches or removes the panel table entry of an output. A change raises <see
+    /// cref="DescriptionChanged"/>.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="panel">The entry, or <see langword="null"/> to remove it.</param>
     public void SetPanel(IOutput output, PanelEntry? panel)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -95,6 +149,12 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         DescriptionChanged?.Invoke(output);
     }
 
+    /// <summary>
+    /// Sets whether HDR follows <see cref="SetHdrDemand"/> on an output. Turning it on applies the
+    /// current demand at once.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="onDemand">Whether HDR follows the demand.</param>
     public void SetHdrOnDemand(IOutput output, bool onDemand)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -111,6 +171,12 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         }
     }
 
+    /// <summary>
+    /// Sets the SDR to HDR expansion that the output description carries while HDR is on. A change
+    /// raises <see cref="DescriptionChanged"/>.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="mapping">The expansion, or <see langword="null"/> for none.</param>
     public void SetInverseToneMapping(IOutput output, InverseToneMapping? mapping)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -126,12 +192,20 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
 
     private readonly Dictionary<IOutput, string> _lookPaths = [];
 
+    /// <inheritdoc/>
     public string? LookOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _lookPaths.GetValueOrDefault(output);
     }
 
+    /// <summary>
+    /// Loads a <c>.cube</c> file as the look of an output. On failure the current look stays.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="path">The file path, or <see langword="null"/> to remove the look.</param>
+    /// <param name="error">The path and the reason when the file does not load, otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="false"/> when the file cannot be read or parsed.</returns>
     public bool SetLook(IOutput output, string? path, out string? error)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -159,6 +233,11 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         return true;
     }
 
+    /// <summary>
+    /// Sets the look table of an output. A different table raises <see cref="DescriptionChanged"/>.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="look">The table, or <see langword="null"/> to remove the look.</param>
     public void SetLook(IOutput output, ColorLut3D? look)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -177,12 +256,23 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
     private readonly Dictionary<IOutput, double> _edrDemand = [];
     private readonly Dictionary<IOutput, double> _edrHeadroom = [];
 
+    /// <summary>
+    /// Gets the EDR headroom in effect on an output, as the ratio of peak to SDR white.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The headroom, which is 1 when EDR is off.</returns>
     public double EdrHeadroomOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _edrHeadroom.GetValueOrDefault(output, 1.0);
     }
 
+    /// <summary>
+    /// Records the headroom that the content on an output asks for. The headroom in effect is clamped
+    /// by the brightness and the panel, and only applies while the EDR policy is always.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="demand">The largest ratio of peak to reference luminance among the visible surfaces. 1 means no demand.</param>
     public void SetEdrDemand(IOutput output, double demand)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -236,8 +326,15 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         _ = control.Set(output, (uint)Math.Round(effective * control.Max(output)));
     }
 
+    /// <inheritdoc/>
     public string? LastFailureReason => _failure ?? _inner.LastFailureReason;
 
+    /// <summary>
+    /// Gets the properties that an output can set. It adds the color features that the output reports,
+    /// brightness, DDC/CI and EDR, and the panel entry's HDR override.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The available properties.</returns>
     public OutputConfigurationFeatures Supported(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -262,6 +359,11 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         return features;
     }
 
+    /// <summary>
+    /// Checks that every named ICC profile reads and validates, then tests the inner configuration.
+    /// </summary>
+    /// <param name="entries">The configuration to check.</param>
+    /// <returns><see langword="true"/> when every entry can commit. <see cref="LastFailureReason"/> tells why one cannot.</returns>
     public bool Test(IReadOnlyList<OutputConfigurationEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -277,6 +379,12 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         return _inner.Test(entries);
     }
 
+    /// <summary>
+    /// Applies a configuration through the inner configuration, then commits the color state of each
+    /// entry. The accuracy power tradeoff clears the ABM level of an entry first.
+    /// </summary>
+    /// <param name="entries">The configuration to apply.</param>
+    /// <returns><see langword="true"/> when the configuration is in effect. <see cref="Applied"/> is raised then.</returns>
     public bool Apply(IReadOnlyList<OutputConfigurationEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -317,6 +425,13 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         return true;
     }
 
+    /// <summary>
+    /// Reads the committed configuration of an output, with the recorded color state over what the
+    /// inner configuration reports.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="state">The configuration. Without inner state, it holds the output and its enabled flag plus the color state.</param>
+    /// <returns>Always <see langword="true"/>.</returns>
     public bool TryRead(IOutput output, out OutputConfigurationEntry state)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -349,6 +464,12 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         }
     }
 
+    /// <summary>
+    /// Records a color state for an output without committing anything or raising an event. Use it to
+    /// restore saved settings before the first apply.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="state">The state to record.</param>
     public void Seed(IOutput output, OutputColorState state)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -356,12 +477,23 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         Record(output, state);
     }
 
+    /// <summary>
+    /// Gets the recorded color state of an output.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The state, or a default <see cref="OutputColorState"/> when nothing is recorded.</returns>
     public OutputColorState StateOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _states.GetValueOrDefault(output) ?? new OutputColorState();
     }
 
+    /// <summary>
+    /// Builds the image description that an output displays now, from its color state, colorimetry,
+    /// panel entry, EDR headroom and look. The renderer converts surfaces into it.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>A new description. HDR gives PQ, an ICC source gives the profile, and otherwise it is SDR with the selected primaries.</returns>
     public ImageDescription DescriptionOf(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -427,12 +559,24 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         return state.Look is null ? sdr : sdr with { Look = state.Look };
     }
 
+    /// <summary>
+    /// Tells whether the output transform of an output runs in the CRTC color pipeline instead of
+    /// surface tables.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns><see langword="true"/> after a successful <see cref="RouteKmsPipeline"/> until a refused one.</returns>
     public bool IsKmsRouted(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _routedCtm.ContainsKey(output);
     }
 
+    /// <summary>
+    /// Tries to move the output transform into the CRTC degamma, CTM and gamma stages, and commits
+    /// them. A refusal removes any earlier route.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns><see langword="false"/> when the output has no such pipeline, the description is HDR or needs a table, the stages cannot express it, or the commit fails.</returns>
     public bool RouteKmsPipeline(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -495,6 +639,13 @@ public sealed class ColorOutputConfiguration : IOutputConfiguration, IOutputLook
         return false;
     }
 
+    /// <summary>
+    /// Gets the encode ramps that the route committed to an output, scaled per channel when multipliers
+    /// are given.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="multipliers">The per-channel scale, for example for night light, or <see langword="null"/> for the ramps as committed.</param>
+    /// <returns>New ramps when scaled, the committed ramps otherwise, or <see langword="null"/> when the output is not routed.</returns>
     public OutputGammaRamps? RoutedEncodeRamps(IOutput output, (double R, double G, double B)? multipliers = null)
     {
         ArgumentNullException.ThrowIfNull(output);

@@ -3,10 +3,21 @@ using Basin.Diagnostics;
 
 namespace Basin.Freedesktop;
 
+/// <summary>
+/// Parses desktop entry files into <see cref="DesktopEntry"/> values. Only the first <c>[Desktop Entry]</c> group and the action groups that it names are read.
+/// </summary>
 public static class DesktopEntryReader
 {
     private static readonly BasinLogger Log = BasinLog.For("freedesktop");
 
+    /// <summary>
+    /// Reads and parses one desktop entry file.
+    /// </summary>
+    /// <param name="path">The file to read. It becomes <see cref="DesktopEntry.Path"/>.</param>
+    /// <param name="id">The desktop file id that the caller computed.</param>
+    /// <param name="locale">The locale that selects the localized keys.</param>
+    /// <returns>The entry, or <see langword="null"/> when the file cannot be read, has <c>Hidden=true</c>, or has no <c>Name</c>.</returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> or <paramref name="id"/> is null or empty.</exception>
     public static DesktopEntry? Parse(string path, string id, DesktopLocale locale)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -14,6 +25,16 @@ public static class DesktopEntryReader
         return KeyFile.Read(path) is { } groups ? Build(groups, path, id, locale) : null;
     }
 
+    /// <summary>
+    /// Parses desktop entry text with the same rules as <see cref="Parse(string, string, DesktopLocale)"/>, without opening a file.
+    /// </summary>
+    /// <param name="text">The file contents.</param>
+    /// <param name="path">The path to record in <see cref="DesktopEntry.Path"/> and in log messages. It is not opened.</param>
+    /// <param name="id">The desktop file id that the caller computed.</param>
+    /// <param name="locale">The locale that selects the localized keys.</param>
+    /// <returns>The entry, or <see langword="null"/> when the text has <c>Hidden=true</c> or has no <c>Name</c>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> or <paramref name="id"/> is null or empty.</exception>
     public static DesktopEntry? ParseText(string text, string path, string id, DesktopLocale locale)
     {
         ArgumentNullException.ThrowIfNull(text);

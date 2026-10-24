@@ -3,6 +3,9 @@ using System.Globalization;
 
 namespace Basin.Themes.MsStyles;
 
+/// <summary>
+/// Holds one variant of a Windows visual style: its classes, images, system metrics and documentation. It reads PACKTHEM format 3 (XP) and format 4 (Vista and later).
+/// </summary>
 public sealed class MsStylesTheme
 {
     private static readonly string[] KnownTypes =
@@ -28,38 +31,97 @@ public sealed class MsStylesTheme
         Format = format;
     }
 
+    /// <summary>
+    /// Gets the PACKTHEM format of the file. It is 3 for XP and 4 for Vista and later.
+    /// </summary>
     public int Format { get; }
 
+    /// <summary>
+    /// Gets the resources of the theme file.
+    /// </summary>
     public PeResources Resources { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the theme has a language resource (<c>.mui</c>) file for its strings.
+    /// </summary>
     public bool HasMui => _mui is not null;
 
+    /// <summary>
+    /// Gets the descriptive text of the theme. Format 3 falls back to the string table when the <c>documentation</c> class does not set a value.
+    /// </summary>
     public MsStylesDocumentation Documentation { get; private set; } = new();
 
+    /// <summary>
+    /// Gets the names of the color schemes in the file, in file order.
+    /// </summary>
     public IReadOnlyList<string> ColorSchemes { get; private set; } = [];
 
+    /// <summary>
+    /// Gets the names of the sizes in the file, in file order.
+    /// </summary>
     public IReadOnlyList<string> Sizes { get; private set; } = [];
 
+    /// <summary>
+    /// Gets the name of the color scheme that this object holds.
+    /// </summary>
     public string Color { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Gets the name of the size that this object holds.
+    /// </summary>
     public string Size { get; private set; } = string.Empty;
 
+    /// <summary>
+    /// Gets the full path of the theme file. It is <see langword="null"/> for a theme from <see cref="Parse"/>.
+    /// </summary>
     public string? Path { get; private set; }
 
+    /// <summary>
+    /// Gets the counts of the items that the reader skipped or did not recognize.
+    /// </summary>
     public MsStylesDiagnostics Diagnostics { get; } = new();
 
+    /// <summary>
+    /// Gets every class of the variant, in file order.
+    /// </summary>
     public IReadOnlyList<MsStylesClass> Classes => _classOrder;
 
+    /// <summary>
+    /// Gets the images that the reader loaded for image properties.
+    /// </summary>
     public IReadOnlyCollection<MsStylesImage> Images => _images.Values;
 
+    /// <summary>
+    /// Gets the system colors, sizes and fonts of the theme. The object is created on first use.
+    /// </summary>
     public MsStylesSysMetrics SysMetrics => _sysMetrics ??= new MsStylesSysMetrics(FindClass(string.Empty, "sysmetrics"));
 
+    /// <summary>
+    /// Gets the raw bytes of the <c>BCMAP</c> resource. It is empty for format 3 or when the resource is absent.
+    /// </summary>
     public ReadOnlyMemory<byte> BaseClassMap { get; private set; }
 
+    /// <summary>
+    /// Gets the raw bytes of the <c>RMAP</c> resource. It is empty for format 3 or when the resource is absent.
+    /// </summary>
     public ReadOnlyMemory<byte> ResourceMap { get; private set; }
 
+    /// <summary>
+    /// Gets the raw bytes of the <c>AMAP</c> resource. It is empty for format 3 or when the resource is absent.
+    /// </summary>
     public ReadOnlyMemory<byte> AnimationMap { get; private set; }
 
+    /// <summary>
+    /// Reads a theme file and its language resource file, which <see cref="FindMui"/> finds. The whole file stays in memory.
+    /// </summary>
+    /// <param name="path">The path of the <c>.msstyles</c> file.</param>
+    /// <param name="color">The color scheme to read, matched without case, or <see langword="null"/> for the first one.</param>
+    /// <param name="size">The size to read, matched without case, or <see langword="null"/> for the first one.</param>
+    /// <returns>The theme, with <see cref="Path"/> set.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException">The theme has no color scheme or size with the given name.</exception>
+    /// <exception cref="MsStylesFormatException">The file is not a visual style, or its format is not 3 or 4.</exception>
+    /// <exception cref="IOException">The file cannot be read.</exception>
     public static MsStylesTheme Load(string path, string? color = null, string? size = null)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -75,6 +137,16 @@ public sealed class MsStylesTheme
         return theme;
     }
 
+    /// <summary>
+    /// Reads a theme from bytes. The theme keeps references to <paramref name="file"/> and <paramref name="mui"/> and does not copy them.
+    /// </summary>
+    /// <param name="file">The bytes of the <c>.msstyles</c> file.</param>
+    /// <param name="color">The color scheme to read, matched without case, or <see langword="null"/> for the first one.</param>
+    /// <param name="size">The size to read, matched without case, or <see langword="null"/> for the first one.</param>
+    /// <param name="mui">The bytes of the language resource file, or empty when there is none.</param>
+    /// <returns>The theme, with <see cref="Path"/> <see langword="null"/>.</returns>
+    /// <exception cref="ArgumentException">The theme has no color scheme or size with the given name.</exception>
+    /// <exception cref="MsStylesFormatException">The bytes are not a visual style, or its format is not 3 or 4.</exception>
     public static MsStylesTheme Parse(ReadOnlyMemory<byte> file, string? color = null, string? size = null, ReadOnlyMemory<byte> mui = default)
     {
         var resources = PeResources.Read(file);
@@ -111,6 +183,11 @@ public sealed class MsStylesTheme
         return theme;
     }
 
+    /// <summary>
+    /// Finds the language resource file of a theme. It tries the subdirectory named for the current UI culture, then <c>en-US/</c>, then the directory of the theme.
+    /// </summary>
+    /// <param name="path">The path of the <c>.msstyles</c> file.</param>
+    /// <returns>The path of the first file that exists, named as the theme file with <c>.mui</c> added, or <see langword="null"/> when none exists.</returns>
     public static string? FindMui(string path)
     {
         var directory = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(path)) ?? ".";
@@ -132,14 +209,36 @@ public sealed class MsStylesTheme
         return null;
     }
 
+    /// <summary>
+    /// Gets the name that a user sees for a color scheme.
+    /// </summary>
+    /// <param name="color">The color scheme name, matched without case.</param>
+    /// <returns>The display name, or <paramref name="color"/> when the theme has no display name for it.</returns>
     public string DisplayNameOfColor(string color) =>
         _colorDisplayNames.TryGetValue(color, out var name) ? name : color;
 
+    /// <summary>
+    /// Gets the name that a user sees for a size.
+    /// </summary>
+    /// <param name="size">The size name, matched without case.</param>
+    /// <returns>The display name, or <paramref name="size"/> when the theme has no display name for it.</returns>
     public string DisplayNameOfSize(string size) =>
         _sizeDisplayNames.TryGetValue(size, out var name) ? name : size;
 
+    /// <summary>
+    /// Finds the first class in a list, as <c>OpenThemeData</c> does. This overload calls <see cref="OpenClass(ReadOnlySpan{char}, string?)"/>.
+    /// </summary>
+    /// <param name="classList">The class names, separated by semicolons. An entry can have an <c>app::</c> prefix.</param>
+    /// <param name="app">The application prefix to try first, or <see langword="null"/> for none.</param>
+    /// <returns>The first class that exists, or <see langword="null"/> when none exists.</returns>
     public MsStylesClass? OpenClass(string classList, string? app = null) => OpenClass(classList.AsSpan(), app);
 
+    /// <summary>
+    /// Finds the first class in a list, as <c>OpenThemeData</c> does. For each entry it tries <c>app::class</c>, then the class without a prefix. Names match without case.
+    /// </summary>
+    /// <param name="classList">The class names, separated by semicolons. An entry can have an <c>app::</c> prefix.</param>
+    /// <param name="app">The application prefix to try first, or <see langword="null"/> for none.</param>
+    /// <returns>The first class that exists, or <see langword="null"/> when none exists. It is also <see langword="null"/> when <paramref name="app"/> is set and the search reaches an entry with an <c>app::</c> prefix.</returns>
     public MsStylesClass? OpenClass(ReadOnlySpan<char> classList, string? app = null)
     {
         while (true)

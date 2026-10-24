@@ -3,8 +3,18 @@ using Basin.Ipc;
 
 namespace Basin.Inspector.Ipc;
 
+/// <summary>
+/// The <c>inspector/*</c> control methods and their stdin words. Each method answers with an <c>INSPECTOR</c> line or an <c>ERR</c> line.
+/// </summary>
 public static class InspectorIpc
 {
+    /// <summary>
+    /// Adds the <c>inspector/open</c>, <c>close</c>, <c>toggle</c>, <c>move</c>, <c>panel</c> and <c>state</c> methods, each with its stdin word.
+    /// </summary>
+    /// <param name="methods">The registry that receives the methods.</param>
+    /// <param name="report">The report that prints the answer lines and registers the stdin words.</param>
+    /// <param name="options">The overlay and the outputs that the methods act on.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public static void Register(IpcMethodRegistry methods, IpcLineReport report, InspectorIpcOptions options)
     {
         ArgumentNullException.ThrowIfNull(methods);
@@ -119,6 +129,12 @@ public static class InspectorIpc
         return (overlay, view);
     }
 
+    /// <summary>
+    /// Makes the <c>INSPECTOR</c> line that tells the open state, the output, the host and the shown panels.
+    /// </summary>
+    /// <param name="overlay">The overlay, or <see langword="null"/> when there is none.</param>
+    /// <param name="declined">The reason why there is no overlay. It is used only when <paramref name="overlay"/> is <see langword="null"/>.</param>
+    /// <returns>The line without a line break. This call allocates.</returns>
     public static string Describe(InspectorOverlay? overlay, string? declined)
     {
         if (overlay is null)

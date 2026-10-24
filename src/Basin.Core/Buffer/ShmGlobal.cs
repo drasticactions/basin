@@ -6,6 +6,9 @@ using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
+/// <summary>
+/// The <c>wl_shm</c> global. It uses libwayland's implementation on a libwayland transport with local clients, and <see cref="ManagedShmGlobal"/> otherwise or when <c>BASIN_MANAGED_SHM</c> asks for it.
+/// </summary>
 public sealed class ShmGlobal : IDisposable
 {
     private static int _advertisedVersion;
@@ -14,6 +17,16 @@ public sealed class ShmGlobal : IDisposable
     private readonly WlServerDisplay _display;
     private readonly HashSet<DrmFormat> _libwaylandFormats = [DrmFormat.Argb8888, DrmFormat.Xrgb8888];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ShmGlobal"/> class and selects the implementation.
+    /// </summary>
+    /// <param name="display">The display that gets the global.</param>
+    /// <param name="extraFormats">The formats to advertise beyond ARGB8888 and XRGB8888.</param>
+    /// <param name="buffers">The registry for managed buffers. The managed implementation requires it.</param>
+    /// <param name="limits">The per-client caps for the managed implementation, or <see langword="null"/> for the defaults.</param>
+    /// <param name="policy">The managed access policy, or <see langword="null"/> to read it from <c>BASIN_MANAGED_SHM</c>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The managed implementation is selected and <paramref name="buffers"/> is <see langword="null"/>.</exception>
     public ShmGlobal(
         WlServerDisplay display,
         ReadOnlySpan<DrmFormat> extraFormats = default,
@@ -48,8 +61,13 @@ public sealed class ShmGlobal : IDisposable
         Log.Debug($"wl_shm: managed implementation selected ({_managed.Policy})");
     }
 
+    /// <summary>Gets the managed implementation, or <see langword="null"/> when libwayland's implementation is in use.</summary>
     public ManagedShmGlobal? Managed => _managed;
 
+    /// <summary>
+    /// Adds formats to the advertised list of the selected implementation.
+    /// </summary>
+    /// <param name="formats">The formats to add. Duplicates are ignored.</param>
     public void Advertise(ReadOnlySpan<DrmFormat> formats)
     {
         if (_managed is not null)
@@ -67,6 +85,11 @@ public sealed class ShmGlobal : IDisposable
         }
     }
 
+    /// <summary>
+    /// Adds formats to the advertised list of the selected implementation.
+    /// </summary>
+    /// <param name="formats">The list of formats to add. Duplicates are ignored.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="formats"/> is <see langword="null"/>.</exception>
     public void Advertise(IReadOnlyList<DrmFormat> formats)
     {
         ArgumentNullException.ThrowIfNull(formats);
@@ -76,8 +99,14 @@ public sealed class ShmGlobal : IDisposable
         }
     }
 
+    /// <summary>
+    /// Disposes the managed implementation. The libwayland global lives as long as the display.
+    /// </summary>
     public void Dispose() => _managed?.Dispose();
 
+    /// <summary>
+    /// Gets the <c>wl_shm</c> version that a new <see cref="ShmGlobal"/> will advertise. The environment selection decides it, not the transport.
+    /// </summary>
     public static int AdvertisedVersion
     {
         get

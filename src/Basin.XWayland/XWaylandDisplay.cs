@@ -3,6 +3,9 @@ using System.Globalization;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Joins one Xwayland server to its window manager, its output scale and its toplevel source. It creates a new <see cref="XWaylandWm"/> each time the server starts.
+/// </summary>
 public sealed class XWaylandDisplay : IDisposable
 {
     private readonly ICompositorEventLoop _loop;
@@ -40,24 +43,55 @@ public sealed class XWaylandDisplay : IDisposable
         server.Exited += OnExited;
     }
 
+    /// <summary>
+    /// Gets the density class of this server, native or low density.
+    /// </summary>
     public X11Density Density { get; }
 
+    /// <summary>
+    /// Gets the server process that this display owns and disposes.
+    /// </summary>
     public XWaylandServer Server { get; }
 
+    /// <summary>
+    /// Gets the output scale tracker, or <see langword="null"/> when the compositor has no output layout.
+    /// </summary>
     public XWaylandOutputs? Outputs { get; }
 
+    /// <summary>
+    /// Gets the window manager of the running server. It is <see langword="null"/> before the server is ready and after it exits.
+    /// </summary>
     public XWaylandWm? WindowManager { get; private set; }
 
+    /// <summary>
+    /// Gets the toplevel source of the running server. It has the same lifetime as <see cref="WindowManager"/>.
+    /// </summary>
     public XWaylandToplevelSource? Toplevels { get; private set; }
 
+    /// <summary>
+    /// Gets the X display name, for example <c>:1</c>.
+    /// </summary>
     public string DisplayName => Server.DisplayName;
 
+    /// <summary>
+    /// Gets the scale that X11 clients render at. Without <see cref="Outputs"/>, it is the fixed server scale, or 1 when the scale is automatic.
+    /// </summary>
     public double Scale => Outputs?.Scale ?? (Server.X11Scale.IsAuto ? 1.0 : Server.X11Scale.Value);
 
+    /// <summary>
+    /// Occurs after each server start, when the new window manager and toplevel source exist.
+    /// </summary>
     public event Action<XWaylandWm>? WindowManagerReady;
 
+    /// <summary>
+    /// Occurs after the server process exits and the window manager is gone. The next X client starts the server again.
+    /// </summary>
     public event Action? Exited;
 
+    /// <summary>
+    /// Builds the cursor variables that an X11 child process needs to match the compositor cursor.
+    /// </summary>
+    /// <returns>A new map with <c>XCURSOR_SIZE</c> at the X11 scale, and <c>XCURSOR_THEME</c> when a theme is set.</returns>
     public IReadOnlyDictionary<string, string> ChildEnvironment()
     {
         var values = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -72,6 +106,9 @@ public sealed class XWaylandDisplay : IDisposable
         return values;
     }
 
+    /// <summary>
+    /// Disposes the window manager, the toplevel source, the output tracker and the server. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

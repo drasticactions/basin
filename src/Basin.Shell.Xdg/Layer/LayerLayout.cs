@@ -4,8 +4,21 @@ using Wayland.Server;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// The layer-shell arrangement math for one output. It places surfaces by anchors, margins and exclusive zones in output-local logical pixels, and has no state.
+/// </summary>
 public static class LayerLayout
 {
+    /// <summary>
+    /// The layer state of one surface, as <see cref="Arrange(Box, ReadOnlySpan{LayerSpec})"/> reads it.
+    /// </summary>
+    /// <param name="Layer">The stacking layer.</param>
+    /// <param name="Anchor">The anchored edges.</param>
+    /// <param name="ExclusiveZone">The exclusive zone in logical pixels. A positive value reserves space, 0 avoids reserved space, and a negative value ignores it.</param>
+    /// <param name="Margin">The margins in logical pixels.</param>
+    /// <param name="DesiredWidth">The requested width in logical pixels. A value of 0 fills the bounds between the margins.</param>
+    /// <param name="DesiredHeight">The requested height in logical pixels. A value of 0 fills the bounds between the margins.</param>
+    /// <param name="ExclusiveEdge">The edge that the exclusive zone belongs to, or <see cref="LayerAnchor.None"/> to deduce it from the anchors.</param>
     public readonly record struct LayerSpec(
         LayerKind Layer,
         LayerAnchor Anchor,
@@ -15,8 +28,19 @@ public static class LayerLayout
         int DesiredHeight,
         LayerAnchor ExclusiveEdge = LayerAnchor.None);
 
+    /// <summary>
+    /// The box that the arrangement gives one surface.
+    /// </summary>
+    /// <param name="Index">The index of the surface in the input list.</param>
+    /// <param name="Box">The box in output-local logical pixels.</param>
     public readonly record struct Placement(int Index, Box Box);
 
+    /// <summary>
+    /// Arranges live layer surfaces from the state of their last valid commit. Mapped and unmapped surfaces are both included.
+    /// </summary>
+    /// <param name="outputBox">The output box. Only its size is used.</param>
+    /// <param name="surfaces">The layer surfaces on the output.</param>
+    /// <returns>A placement for each surface, and the area that the exclusive zones leave, both in output-local logical pixels.</returns>
     public static (List<Placement> Placements, Box UsableArea) Arrange(Box outputBox, IReadOnlyList<LayerSurface> surfaces)
     {
         var specs = new LayerSpec[surfaces.Count];
@@ -30,6 +54,12 @@ public static class LayerLayout
         return Arrange(outputBox, specs);
     }
 
+    /// <summary>
+    /// Arranges surfaces in two passes. Surfaces with a positive exclusive zone go first and reserve their strips, from the overlay layer down. The other surfaces go next in the area that remains.
+    /// </summary>
+    /// <param name="outputBox">The output box. Only its size is used.</param>
+    /// <param name="specs">The layer state of each surface.</param>
+    /// <returns>A placement for each surface in arrangement order, and the area that the exclusive zones leave, both in output-local logical pixels.</returns>
     public static (List<Placement> Placements, Box UsableArea) Arrange(Box outputBox, ReadOnlySpan<LayerSpec> specs)
     {
         var placements = new List<Placement>(specs.Length);

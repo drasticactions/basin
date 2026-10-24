@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's glide open and close animation on one window. The window tilts about an edge in perspective, moves back and fades, through a transform node on its <see cref="TransformStack"/>.
+/// </summary>
 public sealed class GlideEffect
 {
     private const string NodeName = "glide";
@@ -13,15 +16,36 @@ public sealed class GlideEffect
     private bool _hiding;
     private SceneTransform? _node;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlideEffect"/> class.
+    /// </summary>
+    /// <param name="options">The animation shape. The default value uses the default <see cref="GlideOptions"/>.</param>
     public GlideEffect(GlideOptions options = default) =>
         _options = options == default ? new GlideOptions() : options;
 
+    /// <summary>
+    /// Gets the options that the effect uses.
+    /// </summary>
     public GlideOptions Options => _options;
 
+    /// <summary>
+    /// Gets a value indicating whether an animation has a live node that <see cref="Step"/> still drives.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets a value indicating whether the current or last animation is a close.
+    /// </summary>
     public bool IsHiding => _hiding;
 
+    /// <summary>
+    /// Starts an animation that is anchored at a given tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="hiding"><see langword="true"/> for a close, <see langword="false"/> for an open.</param>
+    /// <param name="now">The tick that the animation starts at.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled, and then nothing starts.</returns>
     public bool Begin(TransformStack stack, bool hiding, in FrameTick now, AnimationDuration duration)
     {
         if (!Begin(stack, hiding, duration))
@@ -33,6 +57,14 @@ public sealed class GlideEffect
         return true;
     }
 
+    /// <summary>
+    /// Starts an animation and applies its first pose. The first <see cref="Step"/> anchors the start one refresh interval before its tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="hiding"><see langword="true"/> for a close, <see langword="false"/> for an open.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled, and then nothing starts.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Begin(TransformStack stack, bool hiding, AnimationDuration duration)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -50,6 +82,10 @@ public sealed class GlideEffect
         return true;
     }
 
+    /// <summary>
+    /// Changes an open into a close or a close into an open, and continues from the current pose.
+    /// </summary>
+    /// <param name="now">The tick of the change.</param>
     public void Reverse(in FrameTick now)
     {
         _thread.Assert();
@@ -58,6 +94,12 @@ public sealed class GlideEffect
         _timeline.RestartPreservingProgress(now);
     }
 
+    /// <summary>
+    /// Applies the pose for a tick. When an open ends, the node is removed. When a close ends, the node keeps the last pose until <see cref="End"/>.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the animation runs, and <see langword="false"/> when it ended or no animation runs.</returns>
     public bool Step(TransformStack stack, in FrameTick tick)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -82,6 +124,10 @@ public sealed class GlideEffect
         return false;
     }
 
+    /// <summary>
+    /// Removes the transform node at once, whatever the progress.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
     public void End(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);

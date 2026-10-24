@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_color_manager_v1</c> global. It tracks the image description of each surface and of each output, and tells clients the supported features.
+/// </summary>
 public sealed class ColorManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 2;
 
     private const uint ManagerErrorUnsupportedFeature = 0;
@@ -44,30 +50,53 @@ public sealed class ColorManager : IDisposable
     private readonly List<(WpColorManagementOutputV1Resource Resource, OutputGlobal Output)> _outputResources = [];
     private readonly List<(WpColorManagementSurfaceFeedbackV1Resource Resource, Surface Surface)> _feedback = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ColorManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces get color state.</param>
     public ColorManager(WlServerDisplay display, CompositorGlobal compositor)
     {
         _compositor = compositor;
         _global = display.CreateGlobal(WpColorManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a surface commit applies a description with different content. The description is <see langword="null"/> when the client removed it.
+    /// </summary>
     public event Action<Surface, ImageDescription?>? SurfaceDescriptionChanged;
 
+    /// <summary>
+    /// Gets the profile service. Clients can create ICC-based descriptions only when it reports <see cref="ColorFeatures.IccProfiles"/>.
+    /// </summary>
     public IColorProfileService? Profiles { get; init; }
 
+    /// <summary>
+    /// Gets the resolver that converts surface content. It sets <see cref="CanConvert"/>.
+    /// </summary>
     public IColorTransformResolver? Resolver { get; init; }
 
+    /// <summary>
+    /// Gets or sets the transfer functions that the global advertises. Unless set, the list is the convertible set, or gamma 2.2 only, plus each output's named function.
+    /// </summary>
     public IReadOnlyList<ColorTransferFunction> SupportedTransferFunctions
     {
         get => _declaredTransferFunctions ?? (_derivedTransferFunctions ??= DeriveTransferFunctions());
         set => _declaredTransferFunctions = value;
     }
 
+    /// <summary>
+    /// Gets or sets the primaries that the global advertises. Unless set, the list is sRGB plus the named primaries of each output.
+    /// </summary>
     public IReadOnlyList<ColorPrimaries> SupportedPrimaries
     {
         get => _declaredPrimaries ?? (_derivedPrimaries ??= DerivePrimaries());
         set => _declaredPrimaries = value;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the <see cref="Resolver"/> can convert content between descriptions.
+    /// </summary>
     public bool CanConvert => Resolver is { Capability: not ColorTransformCapability.None };
 
     private IReadOnlyList<ColorTransferFunction> DeriveTransferFunctions()
@@ -107,8 +136,16 @@ public sealed class ColorManager : IDisposable
         return primaries;
     }
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Gets the description that the surface's last applied commit set.
+    /// </summary>
+    /// <param name="surface">The surface to look up.</param>
+    /// <returns>The current description, or <see cref="ImageDescription.SdrDefault"/> when the surface has none.</returns>
     public ImageDescription DescriptionOf(Surface surface) =>
         _surfaces.TryGetValue(surface, out var entry) && entry.Current is { } description
             ? description
@@ -177,15 +214,34 @@ public sealed class ColorManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when <see cref="SetOutputDescription"/> sets a description whose content differs from the previous one.
+    /// </summary>
     public event Action<OutputGlobal, ImageDescription>? OutputDescriptionChanged;
 
+    /// <summary>
+    /// Occurs when <see cref="RemoveOutputDescription"/> removes a known output.
+    /// </summary>
     public event Action<OutputGlobal>? OutputDescriptionRemoved;
 
+    /// <summary>
+    /// Gets the current description of every output that has one.
+    /// </summary>
     public IEnumerable<ImageDescription> OutputDescriptions => _outputs.Values;
 
+    /// <summary>
+    /// Finds the description of an output.
+    /// </summary>
+    /// <param name="output">The output's global.</param>
+    /// <param name="description">The description, or <see langword="null"/> when the output has none.</param>
+    /// <returns><see langword="true"/> when the output has a description.</returns>
     public bool TryGetOutputDescription(OutputGlobal output, [NotNullWhen(true)] out ImageDescription? description) =>
         _outputs.TryGetValue(output, out description);
 
+    /// <summary>
+    /// Removes the description of an output and resets the derived supported lists. It does nothing for an unknown output.
+    /// </summary>
+    /// <param name="output">The output's global.</param>
     public void RemoveOutputDescription(OutputGlobal output)
     {
         if (_outputs.Remove(output))
@@ -196,6 +252,11 @@ public sealed class ColorManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sets the description of an output. It notifies the bound output and feedback resources each time, and raises <see cref="OutputDescriptionChanged"/> only on a content change.
+    /// </summary>
+    /// <param name="output">The output's global.</param>
+    /// <param name="description">The new description.</param>
     public void SetOutputDescription(OutputGlobal output, ImageDescription description)
     {
         var changed = !_outputs.TryGetValue(output, out var previous) ||
@@ -461,12 +522,34 @@ public sealed class ColorManager : IDisposable
         };
     }
 
+    /// <summary>
+    /// Tests whether a protocol version deprecates a transfer function. From version 2, sRGB and extended sRGB are deprecated.
+    /// </summary>
+    /// <param name="transfer">The transfer function to test.</param>
+    /// <param name="version">The bound protocol version.</param>
+    /// <returns><see langword="true"/> when the client must not get the value at that version.</returns>
     public static bool IsDeprecatedAt(ColorTransferFunction transfer, uint version) =>
         version >= 2 && Array.IndexOf(DeprecatedTransferFunctions, transfer) >= 0;
 
+    /// <summary>
+    /// Tests whether a protocol version deprecates a set of primaries. No primaries are deprecated now.
+    /// </summary>
+    /// <param name="primaries">The primaries to test.</param>
+    /// <param name="version">The bound protocol version.</param>
+    /// <returns><see langword="true"/> when the client must not get the value at that version.</returns>
     public static bool IsDeprecatedAt(ColorPrimaries primaries, uint version) =>
         version >= 2 && Array.IndexOf(DeprecatedPrimaries, primaries) >= 0;
 
+    /// <summary>
+    /// Creates an image description reference resource that other color requests can resolve to <paramref name="description"/>.
+    /// </summary>
+    /// <param name="client">The client that owns the new resource.</param>
+    /// <param name="version">The resource version.</param>
+    /// <param name="id">The new object id.</param>
+    /// <param name="description">The description that the reference names.</param>
+    /// <param name="allowInformation">Whether a description created from the reference can answer <c>get_information</c>.</param>
+    /// <returns>The new resource. It stays registered until the client destroys it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="description"/> is <see langword="null"/>.</exception>
     public static WpImageDescriptionReferenceV1Resource CreateReference(
         WlClient client,
         uint version,

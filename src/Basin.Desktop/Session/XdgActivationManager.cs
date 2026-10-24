@@ -5,14 +5,27 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>xdg_activation_v1</c> global. It mints tokens and redeems them through <see cref="IActivationTokens"/>.
+/// </summary>
 public sealed class XdgActivationManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
     private readonly IActivationTokens? _tokens;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XdgActivationManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces.</param>
+    /// <param name="tokens">The token store, or <see langword="null"/> to hand out empty tokens and refuse every activation.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public XdgActivationManager(WlServerDisplay display, CompositorGlobal compositor, IActivationTokens? tokens)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -21,8 +34,14 @@ public sealed class XdgActivationManager : IDisposable
         _global = display.CreateGlobal(XdgActivationV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a client activates a surface with a token that the store redeems. The consumer decides whether to focus the surface.
+    /// </summary>
     public event Action<Surface>? ActivationRequested;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

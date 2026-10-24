@@ -4,6 +4,9 @@ using SkiaSharp;
 
 namespace Basin.Frames.Metacity;
 
+/// <content>
+/// The window menu: marco's menu entries, filtered by the window's capabilities and drawn from the palette.
+/// </content>
 public sealed partial class MetacityFrameRenderer
 {
     private const int MenuPad = 3;
@@ -37,12 +40,14 @@ public sealed partial class MetacityFrameRenderer
     private int _menuHeight;
     private int _menuItemHeight;
 
+    /// <inheritdoc/>
     public UISurfaceSize MeasureMenu(in FrameState state, double scale)
     {
         LayoutMenu(in state);
         return new UISurfaceSize(_menuWidth, _menuHeight, scale);
     }
 
+    /// <inheritdoc/>
     public void DrawMenu(IUISurface surface, in FrameState state, int hotItem)
     {
         _painter = PainterFor(state.ColorScheme);
@@ -102,6 +107,7 @@ public sealed partial class MetacityFrameRenderer
         }
     }
 
+    /// <inheritdoc/>
     public int MenuItemAt(double x, double y, in FrameState state, double scale)
     {
         LayoutMenu(in state);
@@ -125,6 +131,7 @@ public sealed partial class MetacityFrameRenderer
         return -1;
     }
 
+    /// <inheritdoc/>
     public FrameAction? MenuItemAction(int item, in FrameState state)
     {
         LayoutMenu(in state);

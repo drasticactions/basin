@@ -3,10 +3,18 @@ using System.Net.Sockets;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// Reads the endpoint strings that a waypipe channel listens on or connects to.
+/// </summary>
 public static class WaypipeEndpoint
 {
     private const string VsockPrefix = "vsock:";
 
+    /// <summary>
+    /// Tells whether an endpoint is a WebSocket URL.
+    /// </summary>
+    /// <param name="endpoint">The endpoint text.</param>
+    /// <returns><see langword="true"/> when the text starts with "ws://" or "wss://", without regard to case.</returns>
     public static bool IsWebSocket(string endpoint)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
@@ -14,6 +22,14 @@ public static class WaypipeEndpoint
             endpoint.StartsWith("wss://", StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Reads a listening endpoint: "vsock:PORT", an IP "ADDRESS:PORT", or else a unix socket path. A file that already exists at the path is deleted.
+    /// </summary>
+    /// <param name="endpoint">The endpoint text.</param>
+    /// <returns>A <see cref="VsockEndPoint"/>, an <see cref="IPEndPoint"/> or a <see cref="UnixDomainSocketEndPoint"/>.</returns>
+    /// <exception cref="ArgumentException">A vsock endpoint names a context id, has no port, or has a port that is not valid.</exception>
+    /// <exception cref="FormatException">An IP endpoint does not parse.</exception>
+    /// <exception cref="PlatformNotSupportedException">A vsock endpoint on a platform other than Linux and Windows.</exception>
     [System.Runtime.Versioning.UnsupportedOSPlatform("browser")]
     public static EndPoint ForListening(string endpoint)
     {
@@ -71,6 +87,13 @@ public static class WaypipeEndpoint
         return new VsockEndPoint(value);
     }
 
+    /// <summary>
+    /// Connects to a waypipe peer: a "ws://" or "wss://" URL opens a WebSocket, and "host:port" opens TCP where the host has descriptors.
+    /// </summary>
+    /// <param name="endpoint">The endpoint text.</param>
+    /// <param name="cancellation">Cancels the connection attempt.</param>
+    /// <returns>A task that completes with the connected stream, which the caller owns.</returns>
+    /// <exception cref="PlatformNotSupportedException">The host has no descriptors and the endpoint is not a WebSocket URL.</exception>
     public static Task<Stream> OpenAsync(string endpoint, CancellationToken cancellation = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(endpoint);

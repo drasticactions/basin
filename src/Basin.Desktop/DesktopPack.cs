@@ -3,13 +3,27 @@ using Basin.Capabilities.Defaults;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Builds the protocol packs for a full desktop compositor. The packs list modules only. A consumer must register the capabilities that the modules call.
+/// </summary>
 public static class DesktopPack
 {
+    /// <summary>
+    /// Gets the core, seat, xdg-shell and desktop modules, with no session store for session management.
+    /// </summary>
     public static ProtocolPack Default => For(null);
 
+    /// <summary>
+    /// Builds the core, seat, xdg-shell and desktop modules. A non-null <paramref name="appName"/> seeds a <see cref="FileSessionStore"/> for session management.
+    /// </summary>
+    /// <param name="appName">The application name that names the session store directory, or <see langword="null"/> for no default store.</param>
+    /// <returns>A new pack that holds every desktop module.</returns>
     public static ProtocolPack For(string? appName) =>
         CorePack.Default + Seat.SeatPack.For() + Shell.Xdg.XdgPack.Default + DesktopFor(appName);
 
+    /// <summary>
+    /// Gets the desktop modules only, without the core, seat and xdg-shell modules. The syncobj module is in the pack only when the platform supports DRM sync objects.
+    /// </summary>
     public static ProtocolPack Desktop => DesktopFor(null);
 
     private static ProtocolPack DesktopFor(string? appName)

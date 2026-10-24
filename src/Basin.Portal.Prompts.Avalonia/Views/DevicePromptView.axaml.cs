@@ -4,8 +4,14 @@ using Avalonia.Markup.Xaml;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// The Avalonia view of a <see cref="DevicePromptModel"/>. Escape cancels and Enter accepts.
+/// </summary>
 public sealed partial class DevicePromptView : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DevicePromptView"/> class. The view takes keyboard focus when it attaches.
+    /// </summary>
     public DevicePromptView()
     {
         AvaloniaXamlLoader.Load(this);

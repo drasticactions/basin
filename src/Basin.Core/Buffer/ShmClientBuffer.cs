@@ -3,6 +3,9 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// Wraps a libwayland <c>wl_shm</c> buffer and sends <c>wl_buffer.release</c> when the last lock goes. The pixels stay readable after the client destroys the resource while a lock holds them.
+/// </summary>
 public sealed class ShmClientBuffer : BufferBase
 {
     private const uint WlBufferReleaseOpcode = 0;
@@ -10,6 +13,7 @@ public sealed class ShmClientBuffer : BufferBase
     private readonly nint _resourceHandle;
     private readonly DrmFormat _format;
 
+    /// <inheritdoc/>
     public override DrmFormat Format => _format;
     private WlForeignDestroyListener? _destroyListener;
     private WlShmBufferRef _shm;
@@ -29,14 +33,21 @@ public sealed class ShmClientBuffer : BufferBase
         Released += SendRelease;
     }
 
+    /// <summary>Gets the native <c>wl_buffer</c> handle, or zero after the client destroyed the resource.</summary>
     public nint ResourceHandle => _resourceAlive ? _resourceHandle : 0;
 
+    /// <summary>
+    /// Wraps a libwayland shm buffer resource.
+    /// </summary>
+    /// <param name="bufferResourceHandle">The native handle of the <c>wl_buffer</c> resource.</param>
+    /// <returns>A new wrapper, or <see langword="null"/> when the resource is not a libwayland shm buffer.</returns>
     public static ShmClientBuffer? FromResource(nint bufferResourceHandle)
     {
         var shm = LibWaylandShm.FromResource(bufferResourceHandle);
         return shm is { } value ? new ShmClientBuffer(bufferResourceHandle, value) : null;
     }
 
+    /// <inheritdoc/>
     protected override bool TryMap(BufferDataAccess access, out BufferDataView view)
     {
         if (!_resourceAlive)
@@ -62,6 +73,7 @@ public sealed class ShmClientBuffer : BufferBase
         return true;
     }
 
+    /// <inheritdoc/>
     protected override void Unmap()
     {
         if (_resourceAlive)
@@ -80,6 +92,7 @@ public sealed class ShmClientBuffer : BufferBase
 
     private bool _bracketed;
 
+    /// <inheritdoc/>
     protected override void OnFreeStorage()
     {
         _destroyListener?.Dispose();

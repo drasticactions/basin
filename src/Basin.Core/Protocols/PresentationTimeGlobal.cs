@@ -4,31 +4,64 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// Serves <c>wp_presentation</c> and sends feedback for the content that each surface had when an output presented a frame.
+/// </summary>
 public sealed class PresentationTimeGlobal : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 2;
+    /// <summary>
+    /// The clock ID of <c>CLOCK_MONOTONIC</c>.
+    /// </summary>
     public const uint ClockMonotonic = 1;
+    /// <summary>
+    /// The clock ID of <c>CLOCK_REALTIME</c>.
+    /// </summary>
     public const uint ClockRealtime = 0;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
     private readonly Dictionary<Surface, SurfaceFeedback> _surfaces = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PresentationTimeGlobal"/> class.
+    /// </summary>
+    /// <param name="display">The display that the global belongs to.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces and records presented sets.</param>
     public PresentationTimeGlobal(WlServerDisplay display, CompositorGlobal compositor)
     {
         _compositor = compositor;
         _global = display.CreateGlobal(WpPresentation.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Destroys the global.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Gets or sets the clock that the global announces to clients that bind after the change. The default is <see cref="ClockMonotonic"/>.
+    /// </summary>
     public uint ClockId { get; set; } = ClockMonotonic;
 
+    /// <summary>
+    /// Gets or sets the clients that receive wall-clock times instead of monotonic times, or <see langword="null"/> for none.
+    /// </summary>
     public WireClockClients? WireClock { get; set; }
 
+    /// <summary>
+    /// Gets the current time of the clock that <see cref="ClockId"/> names, in nanoseconds.
+    /// </summary>
     public ulong NowNanoseconds =>
         (ulong)(ClockId == ClockRealtime ? RealtimeClock.Nanos : MonotonicClock.Nanos);
 
+    /// <summary>
+    /// Latches the feedback of a surface: the content that it has now is the content that the next presentation shows.
+    /// </summary>
+    /// <param name="surface">The surface whose content was sampled.</param>
     public void Sampled(Surface surface)
     {
         if (_surfaces.TryGetValue(surface, out var feedback))
@@ -37,6 +70,9 @@ public sealed class PresentationTimeGlobal : IDisposable
         }
     }
 
+    /// <summary>
+    /// Latches the feedback of every surface. After the first call, the automatic sampling on output commits stops, and the consumer owns sampling.
+    /// </summary>
     public void SampleAll()
     {
         ConsumerSamples = true;
@@ -53,6 +89,15 @@ public sealed class PresentationTimeGlobal : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends <c>presented</c> for the latched feedback of one surface. The refresh is raised to the pacing interval of the surface when that is longer.
+    /// </summary>
+    /// <param name="surface">The surface that was presented.</param>
+    /// <param name="output">The output that showed the surface, or <see langword="null"/>.</param>
+    /// <param name="timeNanoseconds">The presentation time on the clock of the global.</param>
+    /// <param name="refreshNanoseconds">The refresh period of the output, or 0 when it is unknown.</param>
+    /// <param name="sequence">The vertical retrace counter, or 0 when it is unknown.</param>
+    /// <param name="flags">The presentation flags.</param>
     public void Presented(
         Surface surface,
         IOutput? output,
@@ -80,6 +125,14 @@ public sealed class PresentationTimeGlobal : IDisposable
         shown?.SendPresented(output, timeNanoseconds, refreshNanoseconds, sequence, flags);
     }
 
+    /// <summary>
+    /// Sends <c>presented</c> for the latched feedback of every surface. After the first call, the automatic presentation from output events stops, and the consumer owns presentation.
+    /// </summary>
+    /// <param name="output">The output that showed the frame, or <see langword="null"/>.</param>
+    /// <param name="timeNanoseconds">The presentation time on the clock of the global.</param>
+    /// <param name="refreshNanoseconds">The refresh period of the output, or 0 when it is unknown.</param>
+    /// <param name="sequence">The vertical retrace counter, or 0 when it is unknown.</param>
+    /// <param name="flags">The presentation flags.</param>
     public void PresentAll(
         IOutput? output,
         ulong timeNanoseconds,
@@ -91,6 +144,10 @@ public sealed class PresentationTimeGlobal : IDisposable
         PresentAllCore(output, timeNanoseconds, refreshNanoseconds, sequence, flags);
     }
 
+    /// <summary>
+    /// Sends <c>presented</c> for every surface with the current time and the refresh of the output mode. Like <see cref="PresentAll"/>, it stops the automatic presentation.
+    /// </summary>
+    /// <param name="output">The output that showed the frame.</param>
     public void PresentAllNow(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -216,6 +273,9 @@ public sealed class PresentationTimeGlobal : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends <c>discarded</c> for the feedback of every surface. Like <see cref="PresentAll"/>, it stops the automatic presentation.
+    /// </summary>
     public void DiscardAll()
     {
         ConsumerPresents = true;
@@ -230,6 +290,10 @@ public sealed class PresentationTimeGlobal : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sends <c>discarded</c> for every pending feedback of a surface.
+    /// </summary>
+    /// <param name="surface">The surface whose content was not shown.</param>
     public void Discarded(Surface surface)
     {
         if (_surfaces.TryGetValue(surface, out var feedback))

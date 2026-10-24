@@ -2,24 +2,48 @@ using Basin.Scene;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Puts each mapped X11 window into the scene as a <see cref="SceneSurface"/>, follows its geometry and its X Shape, and removes it on unmap. The consumer supplies the parent trees.
+/// </summary>
 public sealed class XWaylandSceneDriver : IDisposable
 {
     private readonly List<Entry> _entries = [];
     private readonly List<XWaylandWm> _wms = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Gets or sets the function that chooses the parent tree of a managed window. A <see langword="null"/> function or result leaves the window out of the scene.
+    /// </summary>
     public Func<XWaylandWindow, SceneTree?>? ManagedParent { get; set; }
 
+    /// <summary>
+    /// Gets or sets the function that chooses the parent tree of an override-redirect window. A <see langword="null"/> function or result leaves the window out of the scene.
+    /// </summary>
     public Func<XWaylandWindow, SceneTree?>? OverrideRedirectParent { get; set; }
 
+    /// <summary>
+    /// Gets or sets the function that gives the area, in layout coordinates, to center a managed window in when it maps at 0,0. <see langword="null"/> keeps the position.
+    /// </summary>
     public Func<Box>? CenterArea { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether each new window gets a <see cref="SceneFit"/>. The fit scales or letterboxes a buffer of the wrong size.
+    /// </summary>
     public bool Letterbox { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the driver moves the tree of a managed window to its X11 position. Override-redirect windows are always positioned.
+    /// </summary>
     public bool PositionsManagedWindows { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the renderer that draws the bounding shape mask. When it is <see langword="null"/>, a shaped window shows its full buffer but still takes input only inside the shape.
+    /// </summary>
     public IRenderer? ShapeRenderer { get; set; }
 
+    /// <summary>
+    /// Gets or sets the allocator for the mask buffers. When it is <see langword="null"/>, the masks use memory buffers.
+    /// </summary>
     public IAllocator? ShapeAllocator { get; set; }
 
     private static void Reshape(Entry entry, IRenderer? renderer, IAllocator? allocator)
@@ -54,12 +78,31 @@ public sealed class XWaylandSceneDriver : IDisposable
         window.Surface is { IsDestroyed: false } surface && surface.Current.Buffer is { } buffer
         && (buffer.Width != window.X11Bounds.Width || buffer.Height != window.X11Bounds.Height);
 
+    /// <summary>
+    /// Finds the fit node of an adopted window.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The fit, or <see langword="null"/> when the window is not adopted or was adopted without <see cref="Letterbox"/>.</returns>
     public SceneFit? FitOf(XWaylandWindow window) => Find(window)?.Fit;
 
+    /// <summary>
+    /// Finds the parent tree that an adopted window was put in.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The parent, or <see langword="null"/> when the window is not adopted.</returns>
     public SceneTree? ParentOf(XWaylandWindow window) => Find(window)?.Parent;
 
+    /// <summary>
+    /// Finds the outermost tree of an adopted window: the fit root, or else the surface tree. Move this tree to move the window.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The tree, or <see langword="null"/> when the window is not adopted.</returns>
     public SceneTree? OuterOf(XWaylandWindow window) => Find(window) is { } entry ? entry.Fit?.Root ?? entry.Scene.Tree : null;
 
+    /// <summary>
+    /// Updates the fit of an adopted window again, for example after its letterbox policy changes. An unknown window is ignored.
+    /// </summary>
+    /// <param name="window">The window.</param>
     public void Refit(XWaylandWindow window)
     {
         if (Find(window) is { } entry)
@@ -134,14 +177,31 @@ public sealed class XWaylandSceneDriver : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Occurs after a window enters the scene. The arguments are the window, its scene surface, and <see langword="true"/> for a managed window.
+    /// </summary>
     public event Action<XWaylandWindow, SceneSurface, bool>? Adopted;
 
+    /// <summary>
+    /// Occurs after an adopted window unmaps or is destroyed and its scene nodes are destroyed. <see cref="Dispose"/> does not raise it.
+    /// </summary>
     public event Action<XWaylandWindow, SceneSurface>? Removed;
 
+    /// <summary>
+    /// Occurs when a window of an attached window manager asks for activation, for example through <c>_NET_ACTIVE_WINDOW</c>.
+    /// </summary>
     public event Action<XWaylandWindow>? ActivationRequested;
 
+    /// <summary>
+    /// Gets the number of windows in the scene.
+    /// </summary>
     public int Count => _entries.Count;
 
+    /// <summary>
+    /// Starts to adopt the windows that <paramref name="wm"/> maps from now on. The driver detaches by itself when the window manager is disposed. A second call does nothing.
+    /// </summary>
+    /// <param name="wm">The window manager.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="wm"/> is <see langword="null"/>.</exception>
     public void Attach(XWaylandWm wm)
     {
         ArgumentNullException.ThrowIfNull(wm);
@@ -157,6 +217,11 @@ public sealed class XWaylandSceneDriver : IDisposable
         wm.Disposed += Detach;
     }
 
+    /// <summary>
+    /// Stops adopting new windows from <paramref name="wm"/>. Windows already in the scene stay until they unmap.
+    /// </summary>
+    /// <param name="wm">The window manager.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="wm"/> is <see langword="null"/>.</exception>
     public void Detach(XWaylandWm wm)
     {
         ArgumentNullException.ThrowIfNull(wm);
@@ -171,6 +236,11 @@ public sealed class XWaylandSceneDriver : IDisposable
         wm.Disposed -= Detach;
     }
 
+    /// <summary>
+    /// Finds the scene surface of an adopted window by its Wayland surface.
+    /// </summary>
+    /// <param name="surface">The surface, or <see langword="null"/>.</param>
+    /// <returns>The scene surface, or <see langword="null"/> when no adopted window has <paramref name="surface"/>.</returns>
     public SceneSurface? SceneOf(Surface? surface)
     {
         if (surface is null)
@@ -189,6 +259,9 @@ public sealed class XWaylandSceneDriver : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Detaches from every window manager and destroys the scene nodes of every adopted window. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

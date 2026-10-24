@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_fractional_scale_manager_v1</c> global. It follows the scale of the outputs that a surface enters until the consumer announces scales itself.
+/// </summary>
 public sealed class FractionalScaleManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -17,8 +23,17 @@ public sealed class FractionalScaleManager : IDisposable
     private readonly List<Surface> _sweep = [];
     private bool _consumerAnnounces;
 
+    /// <summary>
+    /// Gets or sets the scale for a surface that has entered no output. With 0 or less, the first output with a scale sets it, and then 1.
+    /// </summary>
     public double DefaultScale { get; set; }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FractionalScaleManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces get a scale.</param>
+    /// <param name="layout">The layout whose changes send new scales, or <see langword="null"/>.</param>
     public FractionalScaleManager(WlServerDisplay display, CompositorGlobal compositor, OutputLayout? layout = null)
     {
         _compositor = compositor;
@@ -30,6 +45,9 @@ public sealed class FractionalScaleManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops following the layout and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_layout is { } outputs)
@@ -57,6 +75,11 @@ public sealed class FractionalScaleManager : IDisposable
         _sweep.Clear();
     }
 
+    /// <summary>
+    /// Sends a preferred fractional scale and sets the preferred integer buffer scale to its ceiling. After this call, the manager stops following outputs.
+    /// </summary>
+    /// <param name="surface">The surface to tell.</param>
+    /// <param name="scale">The scale, for example 1.5.</param>
     public void AnnounceScale(Surface surface, double scale)
     {
         _consumerAnnounces = true;
@@ -64,6 +87,11 @@ public sealed class FractionalScaleManager : IDisposable
         surface.SetPreferredBufferScale(OutputScaling.CeilScale(scale));
     }
 
+    /// <summary>
+    /// Sends a preferred fractional scale only. After this call, the manager stops following outputs.
+    /// </summary>
+    /// <param name="surface">The surface to tell.</param>
+    /// <param name="scale">The scale, for example 1.5. It goes on the wire in units of 1/120.</param>
     public void SetPreferredScale(Surface surface, double scale)
     {
         _consumerAnnounces = true;

@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin;
 
+/// <summary>
+/// Sets the soft limit on open files of the compositor process, and restores the original limit around a child spawn.
+/// </summary>
 public static class FileDescriptorLimit
 {
     private const int ResourceOpenFiles = 7;
@@ -19,8 +22,15 @@ public static class FileDescriptorLimit
         public ulong Maximum;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Raise"/> changed the limit.
+    /// </summary>
     public static bool IsRaised => _original is not null;
 
+    /// <summary>
+    /// Sets the soft limit on open files to 4096, or to the hard limit when that is lower. A failure is logged and the system limit stays.
+    /// </summary>
+    /// <param name="log">The logger for the outcome.</param>
     public static void Raise(BasinLogger log)
     {
         if (getrlimit(ResourceOpenFiles, out var original) != 0)
@@ -41,9 +51,17 @@ public static class FileDescriptorLimit
         log.Info($"raised the file descriptor limit of the compositor process to {raised.Current}");
     }
 
+    /// <summary>
+    /// Restores the original soft limit, so that a child does not inherit the higher limit.
+    /// </summary>
+    /// <returns><see langword="true"/> when the original limit was restored. It is false when <see cref="Raise"/> did not change the limit.</returns>
     public static bool LowerForSpawn() =>
         _original is { } original && setrlimit(ResourceOpenFiles, in original) == 0;
 
+    /// <summary>
+    /// Sets the soft limit again after <see cref="LowerForSpawn"/>. It does nothing when <see cref="Raise"/> did not change the limit.
+    /// </summary>
+    /// <param name="log">The logger for a failure.</param>
     public static void RaiseAfterSpawn(BasinLogger log)
     {
         if (_original is not { } original)

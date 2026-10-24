@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_foreign_toplevel_manager_v1</c> global. It reports the toplevels of an <see cref="IToplevelModel"/> and passes requests to change their state back to it.
+/// </summary>
 public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 3;
 
     private static readonly Dictionary<nint, ulong> HandleToplevels = [];
@@ -24,6 +30,12 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
         public ulong SentParentId;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ForeignToplevelManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="model">The toplevels to report, or <see langword="null"/> to report none.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public ForeignToplevelManager(WlServerDisplay display, IToplevelModel? model)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -35,15 +47,26 @@ public sealed class ForeignToplevelManager : IToplevelObserver, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void OnToplevelAdded(ulong toplevelId) => OnAdded(toplevelId);
 
+    /// <inheritdoc/>
     public void OnToplevelChanged(ulong toplevelId) => OnChanged(toplevelId);
 
+    /// <inheritdoc/>
     public void OnToplevelRemoved(ulong toplevelId) => OnRemoved(toplevelId);
 
+    /// <summary>
+    /// Finds the toplevel that a live <c>zwlr_foreign_toplevel_handle_v1</c> resource names.
+    /// </summary>
+    /// <param name="handleResource">The raw handle of the handle resource.</param>
+    /// <returns>The toplevel id, or 0 when the handle is unknown or destroyed.</returns>
     public static ulong ToplevelOf(nint handleResource) =>
         HandleToplevels.GetValueOrDefault(handleResource);
 
+    /// <summary>
+    /// Stops observing the model and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_model is { } live)

@@ -1,7 +1,13 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// The pixel shader that <see cref="DimInactiveEffect"/> drives. It desaturates and darkens a texture by one factor.
+/// </summary>
 public static class DimShader
 {
+    /// <summary>
+    /// The uniforms of the dim shader. The one uniform <c>dim</c> is the brightness factor, in the order that <see cref="IPixelShader.SetUniforms"/> takes them.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("dim", PixelShaderUniformType.Float),
@@ -9,6 +15,9 @@ public static class DimShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the GLSL, SkSL and SPIR-V dialects of the dim shader. The one uniform <c>dim</c> is the brightness factor. The first read loads the SPIR-V from an embedded resource.
+    /// </summary>
     public static PixelShaderSource Source => new()
     {
         SamplesTexture = true,

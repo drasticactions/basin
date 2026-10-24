@@ -4,6 +4,9 @@ using static Basin.SystemStatus.SystemStatusLog;
 
 namespace Basin.SystemStatus;
 
+/// <summary>
+/// One system-bus connection that all status readers share. It connects on first use, and it posts all results to the compositor thread.
+/// </summary>
 public sealed class SystemStatusBus : IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -13,6 +16,12 @@ public sealed class SystemStatusBus : IDisposable
     private string? _failure;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SystemStatusBus"/> class. It does not connect yet. Call it on the compositor thread.
+    /// </summary>
+    /// <param name="loop">The compositor loop that runs the results and the coalescing timers.</param>
+    /// <param name="options">The settings, or <see langword="null"/> for the defaults.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
     public SystemStatusBus(ICompositorEventLoop loop, SystemStatusOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -25,12 +34,24 @@ public sealed class SystemStatusBus : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the D-Bus address from the options, else from <c>DBUS_SYSTEM_BUS_ADDRESS</c>, else the system default. It is <see langword="null"/> when no source gives one.
+    /// </summary>
     public string? Address { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the bus has an address. Without one, no reader can be created.
+    /// </summary>
     public bool HasAddress => Address is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Dispose"/> has run.
+    /// </summary>
     public bool IsDisposed => _disposed;
 
+    /// <summary>
+    /// Gets the compositor loop that the bus posts to.
+    /// </summary>
     public ICompositorEventLoop Loop { get; }
 
     internal int CoalesceMilliseconds { get; }
@@ -59,6 +80,9 @@ public sealed class SystemStatusBus : IDisposable
         }, null);
     }
 
+    /// <summary>
+    /// Closes the connection and drops every result that is not yet applied. Dispose each reader first, and call it on the compositor thread. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -4,17 +4,41 @@ using Tomlyn.Model;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// The emoji set and the names of the emoji pages that a layout with an emoji key gets.
+/// </summary>
 public static class EmojiPages
 {
+    /// <summary>
+    /// The largest number of emoji in one content row of a page.
+    /// </summary>
     public const int MaxPerRow = 10;
 
     private static IReadOnlyList<EmojiCategory>? s_builtIn;
 
+    /// <summary>
+    /// Gets the emoji set embedded in the library, loaded on first use.
+    /// </summary>
     public static IReadOnlyList<EmojiCategory> BuiltIn => s_builtIn ??= Load();
 
+    /// <summary>
+    /// Gives the name of an emoji page. The first page of the first category is <see cref="SoftKeyboardEngine.EmojiPage"/>.
+    /// </summary>
+    /// <param name="category">The category index.</param>
+    /// <param name="chunk">The page index within the category.</param>
+    /// <returns>The page name, for example <c>emoji-2-0</c>.</returns>
     public static string PageName(int category, int chunk) =>
         category == 0 && chunk == 0 ? SoftKeyboardEngine.EmojiPage : $"emoji-{category}-{chunk}";
 
+    /// <summary>
+    /// Parses an emoji set from TOML: an array of <c>category</c> tables with <c>id</c>, <c>icon</c> and <c>emoji</c>. A category without all three is logged and ignored.
+    /// </summary>
+    /// <param name="text">The TOML text.</param>
+    /// <param name="log">The logger for problems in the file, or <see langword="null"/> for the library's logger.</param>
+    /// <param name="source">The file name for messages, or <see langword="null"/>.</param>
+    /// <returns>The categories in file order.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    /// <exception cref="TomlException">The text is not valid TOML.</exception>
     public static IReadOnlyList<EmojiCategory> Parse(string text, BasinLogger? log = null, string? source = null)
     {
         ArgumentNullException.ThrowIfNull(text);

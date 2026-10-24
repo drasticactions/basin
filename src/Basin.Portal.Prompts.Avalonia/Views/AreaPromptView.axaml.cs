@@ -6,11 +6,18 @@ using Avalonia.Input;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// The Avalonia view of an <see cref="AreaPromptModel"/>. A drag selects an area, a click picks a pixel, Escape cancels and Enter selects the whole output.
+/// A selection smaller than 2 by 2 pixels is dropped.
+/// </summary>
 public sealed partial class AreaPromptView : UserControl
 {
     private AvaloniaPoint _start;
     private bool _dragging;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AreaPromptView"/> class. The view takes keyboard focus when it attaches.
+    /// </summary>
     public AreaPromptView()
     {
         InitializeComponent();

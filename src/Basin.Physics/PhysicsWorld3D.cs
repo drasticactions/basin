@@ -4,10 +4,19 @@ using Basin.Kinematics;
 
 namespace Basin.Physics;
 
+/// <summary>
+/// Simulates boxes, cylinders and capsule characters in 3D on one <see cref="PhysicsEngine3D"/>, in meters. It shares the fixed step and the idle rule of <see cref="PhysicsWorld"/>, and it never schedules a frame.
+/// </summary>
 public sealed class PhysicsWorld3D : IDisposable
 {
+    /// <summary>
+    /// The fixed step length, in nanoseconds.
+    /// </summary>
     public const long StepNanos = PhysicsWorld.StepNanos;
 
+    /// <summary>
+    /// The most steps that one <see cref="Step"/> call runs. A larger backlog is dropped.
+    /// </summary>
     public const int MaxStepsPerTick = PhysicsWorld.MaxStepsPerTick;
 
     private const float StepSeconds = 1f / 60f;
@@ -31,6 +40,11 @@ public sealed class PhysicsWorld3D : IDisposable
     private bool _awake;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PhysicsWorld3D"/> class on an engine. The world owns its engine state until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="engine">The engine to run on.</param>
+    /// <param name="gravity">The gravity, in meters per second squared.</param>
     public PhysicsWorld3D(PhysicsEngine3D engine, Vector3 gravity)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -40,8 +54,14 @@ public sealed class PhysicsWorld3D : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the engine that the world runs on.
+    /// </summary>
     public PhysicsEngine3D Engine { get; }
 
+    /// <summary>
+    /// Gets or sets the gravity, in meters per second squared. A set wakes every body.
+    /// </summary>
     public Vector3 Gravity
     {
         get => _gravity;
@@ -53,6 +73,9 @@ public sealed class PhysicsWorld3D : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the approach speed, in meters per second, above which a new contact becomes a <see cref="PhysicsImpact3D"/>. A negative value becomes 0. The default is 1.5.
+    /// </summary>
     public double ImpactThreshold
     {
         get => _impactThreshold;
@@ -63,6 +86,9 @@ public sealed class PhysicsWorld3D : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="Step"/> does nothing. A frozen world keeps its accumulator.
+    /// </summary>
     public bool Frozen
     {
         get => _frozen;
@@ -82,35 +108,103 @@ public sealed class PhysicsWorld3D : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a body moves and the world is not frozen. A dragged body that stays still for 20 steps does not keep the world awake.
+    /// </summary>
     public bool IsAwake => !_frozen && _awake;
 
+    /// <summary>
+    /// Gets or sets the linear speed, in meters per second, below which a body counts as still. A body that stays still for 20 steps goes to sleep.
+    /// </summary>
     public float StopSpeed { get; set; } = 0.03f;
 
+    /// <summary>
+    /// Gets or sets the angular speed, in radians per second, below which a body counts as still.
+    /// </summary>
     public float StopSpin { get; set; } = 0.05f;
 
+    /// <summary>
+    /// Gets the number of live bodies and characters. Static shapes do not count.
+    /// </summary>
     public int Count => _slotCount - _freeCount;
 
+    /// <summary>
+    /// Gets the bodies whose pose changed in the last <see cref="Step"/> or <see cref="StepOnce"/>. The span is valid until the next step.
+    /// </summary>
     public ReadOnlySpan<PhysicsBody3D> Moved => _moved.AsSpan(0, _movedCount);
 
+    /// <summary>
+    /// Gets the impacts of the last <see cref="Step"/> or <see cref="StepOnce"/>. The span is valid until the next step.
+    /// </summary>
     public ReadOnlySpan<PhysicsImpact3D> Impacts => _impacts.AsSpan(0, _impactCount);
 
+    /// <summary>
+    /// Adds an unrotated static box with <see cref="PhysicsMaterial.Default"/>. It does not wake the world.
+    /// </summary>
+    /// <param name="center">The box center in world space.</param>
+    /// <param name="halfExtents">The half size of the box on each axis.</param>
+    /// <returns>The ID that <see cref="RemoveStatic"/> takes.</returns>
     public int AddStaticBox(Vector3 center, Vector3 halfExtents) =>
         _backend.AddStaticBox(center, halfExtents, Quaternion.Identity, PhysicsMaterial.Default);
 
+    /// <summary>
+    /// Adds a static box. It does not wake the world.
+    /// </summary>
+    /// <param name="center">The box center in world space.</param>
+    /// <param name="halfExtents">The half size of the box on each axis.</param>
+    /// <param name="orientation">The rotation of the box.</param>
+    /// <param name="material">The surface values of the box.</param>
+    /// <returns>The ID that <see cref="RemoveStatic"/> takes.</returns>
     public int AddStaticBox(Vector3 center, Vector3 halfExtents, Quaternion orientation, in PhysicsMaterial material) =>
         _backend.AddStaticBox(center, halfExtents, orientation, material);
 
+    /// <summary>
+    /// Adds a static triangle mesh with <see cref="PhysicsMaterial.Default"/>. It does not wake the world.
+    /// </summary>
+    /// <param name="vertices">The mesh vertices in world space.</param>
+    /// <param name="indices">Three vertex indices for each triangle.</param>
+    /// <returns>The ID that <see cref="RemoveStatic"/> takes.</returns>
     public int AddStaticMesh(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<int> indices) =>
         _backend.AddStaticMesh(vertices, indices, PhysicsMaterial.Default);
 
+    /// <summary>
+    /// Removes a static shape.
+    /// </summary>
+    /// <param name="id">The ID that <see cref="AddStaticBox(Vector3, Vector3)"/> or <see cref="AddStaticMesh"/> returned.</param>
     public void RemoveStatic(int id) => _backend.RemoveStatic(id);
 
+    /// <summary>
+    /// Adds a dynamic box body.
+    /// </summary>
+    /// <param name="halfExtents">The half size of the box on each axis, in meters.</param>
+    /// <param name="pose">The initial pose of the box center.</param>
+    /// <param name="material">The material of the body.</param>
+    /// <param name="awake">Whether the body starts awake.</param>
+    /// <returns>The handle of the new body.</returns>
     public PhysicsBody3D AddBox(Vector3 halfExtents, in PhysicsPose3D pose, in PhysicsMaterial material, bool awake = true) =>
         Add(PhysicsShape3D.Box, halfExtents, pose, material, awake);
 
+    /// <summary>
+    /// Adds a dynamic cylinder body along the y axis of its pose.
+    /// </summary>
+    /// <param name="radius">The cylinder radius, in meters.</param>
+    /// <param name="halfHeight">Half the cylinder length, in meters.</param>
+    /// <param name="pose">The initial pose of the cylinder center.</param>
+    /// <param name="material">The material of the body.</param>
+    /// <param name="awake">Whether the body starts awake.</param>
+    /// <returns>The handle of the new body.</returns>
     public PhysicsBody3D AddCylinder(float radius, float halfHeight, in PhysicsPose3D pose, in PhysicsMaterial material, bool awake = true) =>
         Add(PhysicsShape3D.Cylinder, new Vector3(radius, halfHeight, radius), pose, material, awake);
 
+    /// <summary>
+    /// Adds an upright capsule character that a character controller drives. It wakes the world.
+    /// </summary>
+    /// <param name="radius">The capsule radius, in meters.</param>
+    /// <param name="height">The full capsule height, in meters.</param>
+    /// <param name="feet">The position of the bottom of the capsule.</param>
+    /// <param name="mass">The mass, in kilograms.</param>
+    /// <param name="jumpSpeed">The upward speed of a jump, in meters per second.</param>
+    /// <returns>The new character.</returns>
     public PhysicsCharacter3D AddCharacter(float radius, float height, Vector3 feet, float mass = 70, float jumpSpeed = 4.2f)
     {
         var index = AllocateSlot();
@@ -129,6 +223,10 @@ public sealed class PhysicsWorld3D : IDisposable
         return new PhysicsCharacter3D(this, new PhysicsBody3D(this, index, _slots[index].Generation), radius, height);
     }
 
+    /// <summary>
+    /// Removes a body or a character. Every handle to it becomes stale. It does nothing for a handle that is not live in this world.
+    /// </summary>
+    /// <param name="body">The body to remove.</param>
     public void Remove(PhysicsBody3D body)
     {
         if (!IsLive(body))
@@ -141,6 +239,12 @@ public sealed class PhysicsWorld3D : IDisposable
         _free[_freeCount++] = body.Slot;
     }
 
+    /// <summary>
+    /// Sets the pose of a body with no sweep and no blend. Unlike <see cref="PhysicsBody.Teleport"/>, it wakes the body and the world.
+    /// </summary>
+    /// <param name="body">The body to move.</param>
+    /// <param name="pose">The new pose.</param>
+    /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
     public void Teleport(PhysicsBody3D body, in PhysicsPose3D pose)
     {
         ref var slot = ref Checked(body);
@@ -151,6 +255,13 @@ public sealed class PhysicsWorld3D : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Sets the velocity of a body. A nonzero velocity wakes the world.
+    /// </summary>
+    /// <param name="body">The body to change.</param>
+    /// <param name="linear">The linear velocity, in meters per second.</param>
+    /// <param name="angular">The angular velocity, in radians per second.</param>
+    /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
     public void SetVelocity(PhysicsBody3D body, Vector3 linear, Vector3 angular)
     {
         _ = Checked(body);
@@ -158,6 +269,12 @@ public sealed class PhysicsWorld3D : IDisposable
         _awake |= linear != Vector3.Zero || angular != Vector3.Zero;
     }
 
+    /// <summary>
+    /// Starts a drag with soft servos at a grab point. The body stays dynamic, so it collides and swings on the grab point. A character ignores it.
+    /// </summary>
+    /// <param name="body">The body to drag.</param>
+    /// <param name="worldPoint">The grab point in world space.</param>
+    /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
     public void BeginDrag(PhysicsBody3D body, Vector3 worldPoint)
     {
         ref var slot = ref Checked(body);
@@ -176,6 +293,11 @@ public sealed class PhysicsWorld3D : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Moves the target of the grab point. A target equal to the last one does nothing, so a call on each frame does not wake the world.
+    /// </summary>
+    /// <param name="body">The dragged body. A body that is not dragged does nothing.</param>
+    /// <param name="worldPoint">The new target in world space.</param>
     public void DragTo(PhysicsBody3D body, Vector3 worldPoint)
     {
         if (!IsLive(body) || !_slots[body.Slot].Dragging)
@@ -195,6 +317,11 @@ public sealed class PhysicsWorld3D : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Sets the orientation that the angular servo turns the body toward, about the grab point. An orientation equal to the last one does nothing.
+    /// </summary>
+    /// <param name="body">The dragged body. A body that is not dragged does nothing.</param>
+    /// <param name="orientation">The target orientation. The method normalizes it.</param>
     public void DragTurn(PhysicsBody3D body, Quaternion orientation)
     {
         if (!IsLive(body) || !_slots[body.Slot].Dragging)
@@ -215,6 +342,11 @@ public sealed class PhysicsWorld3D : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Ends a drag, removes the servos and sets the linear velocity. The body keeps its angular velocity.
+    /// </summary>
+    /// <param name="body">The dragged body. A body that is not dragged does nothing.</param>
+    /// <param name="velocity">The release velocity, in meters per second.</param>
     public void EndDrag(PhysicsBody3D body, Vector3 velocity)
     {
         if (!IsLive(body) || !_slots[body.Slot].Dragging)
@@ -230,14 +362,30 @@ public sealed class PhysicsWorld3D : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Gets a value that tells whether a drag holds a body.
+    /// </summary>
+    /// <param name="body">The body to test.</param>
+    /// <returns><see langword="true"/> when the body is live and dragged.</returns>
     public bool IsDragging(PhysicsBody3D body) => IsLive(body) && _slots[body.Slot].Dragging;
 
+    /// <summary>
+    /// Gets the grab point of the last drag in world space, at the pose of the last step.
+    /// </summary>
+    /// <param name="body">The body to read.</param>
+    /// <returns>The grab point in world space.</returns>
+    /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
     public Vector3 GrabPoint(PhysicsBody3D body)
     {
         ref var slot = ref Checked(body);
         return slot.Current.ToWorld(slot.GrabLocal);
     }
 
+    /// <summary>
+    /// Advances the world to a frame tick with fixed steps and an accumulator. A tick that does not advance past the last one steps nothing.
+    /// </summary>
+    /// <param name="tick">The frame tick of the output that repaints.</param>
+    /// <returns><see langword="true"/> while the world is still awake and needs another frame.</returns>
     public bool Step(in FrameTick tick)
     {
         _movedCount = 0;
@@ -284,6 +432,9 @@ public sealed class PhysicsWorld3D : IDisposable
         return _awake;
     }
 
+    /// <summary>
+    /// Runs exactly one fixed step, with no clock and no accumulator. It ignores <see cref="Frozen"/> and the idle rule.
+    /// </summary>
     public void StepOnce()
     {
         _movedCount = 0;
@@ -292,6 +443,9 @@ public sealed class PhysicsWorld3D : IDisposable
         RefreshAwake();
     }
 
+    /// <summary>
+    /// Releases the engine state. After it, <see cref="Step"/> does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

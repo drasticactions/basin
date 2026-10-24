@@ -3,10 +3,17 @@ using Wayland.Server;
 
 namespace Basin.AppMenu;
 
+/// <summary>
+/// The <c>gtk_shell1</c> global. It records GMenu addresses in <see cref="AppMenuAddresses"/> and reports the other <c>gtk_surface1</c> requests as events for the compositor to act on.
+/// </summary>
 public sealed class GtkShellManager : IDisposable
 {
+    /// <summary>The version of the global that the manager advertises.</summary>
     public const int Version = 5;
 
+    /// <summary>
+    /// The capability bit that tells GTK the compositor shows a global menu bar. GTK tests the capabilities as a bit mask.
+    /// </summary>
     public const uint GlobalMenuBar = 2;
 
     private readonly WlGlobal _global;
@@ -15,6 +22,13 @@ public sealed class GtkShellManager : IDisposable
     private readonly List<GtkShell1Resource> _shells = [];
     private bool _showsMenuBar;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GtkShellManager"/> class and advertises the global.
+    /// </summary>
+    /// <param name="display">The display that the global is created on.</param>
+    /// <param name="compositor">The compositor global that resolves surface resources.</param>
+    /// <param name="addresses">The table that receives the addresses and supplies <see cref="AppMenuAddresses.ShowsMenuBar"/>.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public GtkShellManager(WlServerDisplay display, CompositorGlobal compositor, AppMenuAddresses addresses)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -24,18 +38,39 @@ public sealed class GtkShellManager : IDisposable
         _global = display.CreateGlobal(GtkShell1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a client asks to present a surface. The arguments are the surface and the event time in milliseconds.
+    /// </summary>
     public event Action<Surface, uint>? PresentRequested;
 
+    /// <summary>
+    /// Occurs when a client asks for focus on a surface. The arguments are the surface and the startup id, which can be <see langword="null"/>.
+    /// </summary>
     public event Action<Surface, string?>? FocusRequested;
 
+    /// <summary>
+    /// Occurs when a client marks a surface modal or not modal. The arguments are the surface and <see langword="true"/> for modal.
+    /// </summary>
     public event Action<Surface, bool>? ModalChanged;
 
+    /// <summary>
+    /// Occurs when a client reports a titlebar gesture on a surface. A gesture outside <see cref="GtkShellGesture"/> is a protocol error and raises nothing.
+    /// </summary>
     public event Action<Surface, GtkShellGesture>? TitlebarGesture;
 
+    /// <summary>
+    /// Occurs when a client rings the system bell. The argument is the surface, or <see langword="null"/> when the request names none.
+    /// </summary>
     public event Action<Surface?>? BellRequested;
 
+    /// <summary>
+    /// Gets the capability mask that clients receive: <see cref="GlobalMenuBar"/> when <see cref="AppMenuAddresses.ShowsMenuBar"/> is set, and 0 otherwise.
+    /// </summary>
     public uint Capabilities => _addresses.ShowsMenuBar ? GlobalMenuBar : 0;
 
+    /// <summary>
+    /// Sends <see cref="Capabilities"/> to every bound client when <see cref="AppMenuAddresses.ShowsMenuBar"/> changed since the last send.
+    /// </summary>
     public void RefreshCapabilities()
     {
         if (_showsMenuBar == _addresses.ShowsMenuBar)
@@ -50,6 +85,7 @@ public sealed class GtkShellManager : IDisposable
         }
     }
 
+    /// <summary>Removes the global.</summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

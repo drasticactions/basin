@@ -2,8 +2,14 @@ using System.Runtime.InteropServices;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// Prepares the environment of the <c>greeter</c> user. Each variable is set in the managed environment and through libc <c>setenv</c>, so native libraries see it too.
+/// </summary>
 public static partial class GreeterEnvironment
 {
+    /// <summary>
+    /// Sets <c>DBUS_SESSION_BUS_ADDRESS</c> to <c>$XDG_RUNTIME_DIR/bus</c> when that socket exists and no address is set. Call it before the toolkit starts.
+    /// </summary>
     public static void PrepareSessionBus()
     {
         if (Environment.GetEnvironmentVariable("DBUS_SESSION_BUS_ADDRESS") is { Length: > 0 } ||
@@ -19,6 +25,10 @@ public static partial class GreeterEnvironment
         }
     }
 
+    /// <summary>
+    /// Sets <c>XDG_CACHE_HOME</c>, <c>XDG_CONFIG_HOME</c> and <c>XDG_DATA_HOME</c> under <paramref name="stateDirectory"/> when <c>HOME</c> is not writable. It keeps a variable that is already set and creates each directory.
+    /// </summary>
+    /// <param name="stateDirectory">A writable directory for the greeter's state. <see langword="null"/>, empty or not writable does nothing.</param>
     public static void PrepareDirectories(string? stateDirectory)
     {
         if (Environment.GetEnvironmentVariable("HOME") is { Length: > 0 } home && Writable(home))

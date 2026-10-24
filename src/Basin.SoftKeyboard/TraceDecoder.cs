@@ -2,9 +2,19 @@ using System.Numerics;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// A shape-writing decoder: it ranks the words of a <see cref="WordList"/> against a traced path by shape, by location and by prior.
+/// Decoding allocates, so it runs once, on release.
+/// </summary>
 public sealed class TraceDecoder
 {
+    /// <summary>
+    /// The number of points that the path and each word's ideal path are resampled to.
+    /// </summary>
     public const int Samples = 64;
+    /// <summary>
+    /// The largest number of candidates that <see cref="Decode"/> returns.
+    /// </summary>
     public const int MaxResults = 8;
 
     private readonly WordList _words;
@@ -18,6 +28,11 @@ public sealed class TraceDecoder
     private readonly HashSet<char> _starts = [];
     private readonly HashSet<char> _ends = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TraceDecoder"/> class. It indexes the words by first and last letter.
+    /// </summary>
+    /// <param name="words">The word list.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="words"/> is <see langword="null"/>.</exception>
     public TraceDecoder(WordList words)
     {
         ArgumentNullException.ThrowIfNull(words);
@@ -41,17 +56,42 @@ public sealed class TraceDecoder
         }
     }
 
+    /// <summary>
+    /// Gets the word list that the decoder ranks.
+    /// </summary>
     public WordList Words => _words;
 
+    /// <summary>
+    /// Gets or sets the spread of the shape distance in the score. A smaller value makes the shape count more.
+    /// </summary>
     public double ShapeSigma { get; set; } = 0.1;
 
+    /// <summary>
+    /// Gets or sets the spread of the location distance in the score, in key widths. A smaller value makes the location count more.
+    /// </summary>
     public double LocationSigma { get; set; } = 0.15;
 
+    /// <summary>
+    /// Gets or sets the weight of the word's prior in the score.
+    /// </summary>
     public double PriorWeight { get; set; } = 3;
 
+    /// <summary>
+    /// Tests whether a cap is a key that a trace can pass through: a text cap of one letter.
+    /// </summary>
+    /// <param name="cap">The cap, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> for a one-letter text cap.</returns>
     public static bool TracesLetter(KeyCap? cap) =>
         cap is { IsText: true } && cap.Text.Length == 1 && char.IsLetter(cap.Text[0]);
 
+    /// <summary>
+    /// Ranks the words against a path. Ties go to the shorter word.
+    /// </summary>
+    /// <param name="path">The traced points in keyboard coordinates.</param>
+    /// <param name="grid">The grid that the trace was made on.</param>
+    /// <param name="rects">The rect of each cell of <paramref name="grid"/>, by cell index.</param>
+    /// <returns>Up to <see cref="MaxResults"/> candidates, best first. The list is empty for a path of fewer than 2 points or a grid with no letter keys.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="grid"/> is <see langword="null"/>.</exception>
     public IReadOnlyList<TraceCandidate> Decode(ReadOnlySpan<Vector2> path, KeyGrid grid, ReadOnlySpan<KeyRect> rects)
     {
         ArgumentNullException.ThrowIfNull(grid);

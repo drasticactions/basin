@@ -2,6 +2,10 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Resolves conversion tables for one renderer and caches them by description content. Only the
+/// compositor thread can use it.
+/// </summary>
 public sealed class ColorLutCache : IColorTransformResolver, IDisposable
 {
     private bool _disposed;
@@ -9,6 +13,10 @@ public sealed class ColorLutCache : IColorTransformResolver, IDisposable
     private readonly IRenderer _renderer;
     private readonly Dictionary<(ImageDescription Source, ImageDescription Output), IColorLut?> _luts;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ColorLutCache"/> class.
+    /// </summary>
+    /// <param name="renderer">The renderer that imports every table.</param>
     public ColorLutCache(IRenderer renderer)
     {
         ArgumentNullException.ThrowIfNull(renderer);
@@ -16,8 +24,16 @@ public sealed class ColorLutCache : IColorTransformResolver, IDisposable
         _luts = new(PairComparer.Instance);
     }
 
+    /// <inheritdoc/>
     public ColorTransformCapability Capability => _renderer.ColorTransform;
 
+    /// <summary>
+    /// Gets the table that converts content from one description into another. The first call for a
+    /// pair bakes and imports the table, and later calls return the same one.
+    /// </summary>
+    /// <param name="source">The description of the content.</param>
+    /// <param name="output">The description of the space that the content composites into.</param>
+    /// <returns>A table that the cache owns, or <see langword="null"/> when the renderer cannot import tables, the shaders convert directly, or no conversion is necessary.</returns>
     public IColorLut? Resolve(ImageDescription source, ImageDescription output)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -51,6 +67,9 @@ public sealed class ColorLutCache : IColorTransformResolver, IDisposable
         return imported;
     }
 
+    /// <summary>
+    /// Disposes every cached table. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -2,6 +2,9 @@ using System.Runtime.InteropServices;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// Turns SIGHUP into a <see cref="Reload"/> event on the loop thread. The signal handler only writes to a pipe, and the loop asks for a manage sequence.
+/// </summary>
 public sealed class WmReloadSignal : IDisposable
 {
     private readonly RiverWindowManager _wm;
@@ -11,6 +14,11 @@ public sealed class WmReloadSignal : IDisposable
     private readonly int _writeFd = -1;
     private bool _pending;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WmReloadSignal"/> class. It handles SIGHUP in place of the default action. When the pipe cannot be made, the instance does nothing.
+    /// </summary>
+    /// <param name="wm">The manager whose loop watches the pipe.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="wm"/> is <see langword="null"/>.</exception>
     public WmReloadSignal(RiverWindowManager wm)
     {
         ArgumentNullException.ThrowIfNull(wm);
@@ -59,8 +67,14 @@ public sealed class WmReloadSignal : IDisposable
         });
     }
 
+    /// <summary>
+    /// Occurs in <see cref="Process"/> when a SIGHUP arrived since the last call. Several signals in that time give one event.
+    /// </summary>
     public event Action? Reload;
 
+    /// <summary>
+    /// Raises <see cref="Reload"/> when a SIGHUP is pending. A manager calls it from its manage callback.
+    /// </summary>
     public void Process()
     {
         if (!_pending)
@@ -72,6 +86,9 @@ public sealed class WmReloadSignal : IDisposable
         Reload?.Invoke();
     }
 
+    /// <summary>
+    /// Removes the fd watch, restores the signal's default handling and closes the pipe.
+    /// </summary>
     public void Dispose()
     {
         _source?.Remove();

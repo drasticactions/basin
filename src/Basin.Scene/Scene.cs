@@ -3,6 +3,9 @@ using Pixman;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Frame callbacks, surface collection and full rendering for the scene.
+/// </summary>
 public sealed partial class Scene
 {
     private readonly List<RenderEntry> _renderList = [];
@@ -172,6 +175,9 @@ public sealed partial class Scene
         entry.Texture.Dispose();
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Scene"/> class with an empty <see cref="Root"/> tree.
+    /// </summary>
     public Scene()
     {
         Root = new SceneTree(null) { Owner = null! };
@@ -180,20 +186,44 @@ public sealed partial class Scene
 
     private readonly List<Frame> _frames = [];
 
+    /// <summary>
+    /// Gets the root tree. Only nodes under this root belong to the scene and draw.
+    /// </summary>
     public SceneTree Root { get; }
 
+    /// <summary>
+    /// Gets or sets the conversion that a buffer node tries when the renderer cannot import a buffer directly, for example a dmabuf from another GPU.
+    /// </summary>
     public Func<IBuffer, ICrossDeviceConversion?>? CrossDeviceImport { get; set; }
 
+    /// <summary>
+    /// Occurs when a visible part of the scene changes. The box is in scene coordinates, in logical pixels. The node is the source of the damage, if known.
+    /// </summary>
     public event Action<SceneNode?, Box>? Damaged;
 
+    /// <summary>
+    /// Occurs when a visible node moves, resizes, restacks, changes its clip, or is enabled, disabled or destroyed.
+    /// </summary>
     public event Action? StructureChanged;
 
+    /// <summary>
+    /// Occurs when a UI surface node changes the region where it accepts input.
+    /// </summary>
     public event Action? InputRegionChanged;
 
+    /// <summary>
+    /// Occurs when a visible or held surface commits frame callbacks or presentation feedback, or when <see cref="RequestFrame"/> runs.
+    /// </summary>
     public event Action? FrameRequested;
 
+    /// <summary>
+    /// Gets the frames that have attached to this scene, in the order they attached.
+    /// </summary>
     public IReadOnlyList<Frame> Frames => _frames;
 
+    /// <summary>
+    /// Occurs after a frame in this scene draws its chrome.
+    /// </summary>
     public event Action<Frame>? FrameDrawn;
 
     internal void AddFrame(Frame frame)
@@ -218,8 +248,15 @@ public sealed partial class Scene
 
     internal void NotifyFrameRequested() => FrameRequested?.Invoke();
 
+    /// <summary>
+    /// Raises <see cref="FrameRequested"/> so that the outputs schedule a repaint.
+    /// </summary>
     public void RequestFrame() => NotifyFrameRequested();
 
+    /// <summary>
+    /// Sends the frame-done events of every surface on an enabled path in the scene, and of the surfaces that a holder forwards. It does nothing when no surface waits.
+    /// </summary>
+    /// <param name="timestampMs">The frame time, in milliseconds.</param>
     public void SendFrameDone(uint timestampMs)
     {
         var held = _held.Count > 0 && HeldHaveFrameWork();
@@ -340,6 +377,10 @@ public sealed partial class Scene
         }
     }
 
+    /// <summary>
+    /// Lists every live surface on an enabled path with its box in scene coordinates. A transformed surface gets the bounding box of its transformed area.
+    /// </summary>
+    /// <param name="into">The list to fill. The method clears it first.</param>
     public void CollectSurfaces(List<SurfaceBox> into)
     {
         into.Clear();
@@ -452,9 +493,24 @@ public sealed partial class Scene
         _mirrorDepth--;
     }
 
+    /// <summary>
+    /// Repaints the whole scene into a buffer, with no damage tracking.
+    /// </summary>
+    /// <param name="renderer">The renderer that draws.</param>
+    /// <param name="target">The buffer to draw into.</param>
+    /// <param name="background">The color that fills the buffer before the scene draws.</param>
+    /// <param name="scale">The ratio of buffer pixels to logical pixels.</param>
+    /// <returns>The result of <see cref="IRenderPass.Submit"/>.</returns>
     public bool Render(IRenderer renderer, IBuffer target, RenderColor background, double scale = 1.0) =>
         Render(renderer, target, new SceneRenderOptions { Background = background, Scale = scale });
 
+    /// <summary>
+    /// Repaints the whole scene into a buffer, with no damage tracking. This is the reference result that <see cref="SceneOutput"/> commits are tested against.
+    /// </summary>
+    /// <param name="renderer">The renderer that draws.</param>
+    /// <param name="target">The buffer to draw into.</param>
+    /// <param name="options">The background, projection, origin and color settings.</param>
+    /// <returns>The result of <see cref="IRenderPass.Submit"/>.</returns>
     public bool Render(IRenderer renderer, IBuffer target, in SceneRenderOptions options)
     {
         var projection = options.Projection;

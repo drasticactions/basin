@@ -4,6 +4,9 @@ using System.Runtime.Versioning;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// The listener for a host with descriptors: a unix, TCP or vsock socket that the compositor loop watches. It accepts every connection and owns no thread.
+/// </summary>
 [UnsupportedOSPlatform("browser")]
 public sealed class WaypipeListener : IWaypipeListener
 {
@@ -49,8 +52,10 @@ public sealed class WaypipeListener : IWaypipeListener
         Watch();
     }
 
+    /// <inheritdoc/>
     public EndPoint LocalEndPoint { get; }
 
+    /// <inheritdoc/>
     public int Live
     {
         get
@@ -62,12 +67,30 @@ public sealed class WaypipeListener : IWaypipeListener
         }
     }
 
+    /// <inheritdoc/>
     public int Accepted => _accepted;
 
+    /// <summary>
+    /// Occurs on the loop thread for each new channel. A handler can adopt the channel directly. The listener disposes the channel on the loop thread when it ends.
+    /// </summary>
     public event Action<WaypipeChannel>? ChannelAccepted;
 
+    /// <summary>
+    /// Occurs on the loop thread when accept fails with an error that cannot be retried. The listener then stops watching its socket.
+    /// </summary>
     public event Action<Exception>? Failed;
 
+    /// <summary>
+    /// Binds and listens on an endpoint, then registers the socket with the loop.
+    /// </summary>
+    /// <param name="loop">The loop that watches the socket and runs the channel disposal.</param>
+    /// <param name="endpoint">A <see cref="UnixDomainSocketEndPoint"/>, an <see cref="IPEndPoint"/> with an explicit address, or a <see cref="VsockEndPoint"/> on Linux.</param>
+    /// <param name="compression">The compression that every channel expects from its peer.</param>
+    /// <param name="limits">The limits for each channel, or <see langword="null"/> for the defaults.</param>
+    /// <param name="options">The content that each channel accepts, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The bound listener, which the caller owns.</returns>
+    /// <exception cref="ArgumentException">An IP endpoint is a wildcard address, or a vsock endpoint has port 0.</exception>
+    /// <exception cref="PlatformNotSupportedException">The host has no descriptors, or a vsock endpoint is on a platform other than Linux.</exception>
     public static WaypipeListener Bind(
         ICompositorEventLoop loop,
         EndPoint endpoint,
@@ -164,6 +187,9 @@ public sealed class WaypipeListener : IWaypipeListener
         }
     }
 
+    /// <summary>
+    /// Stops the watch, closes the socket, deletes the unix socket file that the listener made, and disposes every live channel. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

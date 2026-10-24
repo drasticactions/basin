@@ -4,8 +4,21 @@ using Lcms2.Native;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Splits an SDR output transform into the three CRTC stages: a degamma ramp, a color matrix and a
+/// gamma ramp. The matrices are row-major in nine elements.
+/// </summary>
 public static class KmsColorPipeline
 {
+    /// <summary>
+    /// Reads a matrix-shaper ICC profile as a CTM from linear sRGB to panel RGB and a gamma ramp of the
+    /// inverse panel curves.
+    /// </summary>
+    /// <param name="iccData">The output ICC profile bytes.</param>
+    /// <param name="gammaSize">The number of entries in each gamma ramp.</param>
+    /// <param name="ctm">The matrix, or an empty array on failure.</param>
+    /// <param name="gamma">The per-channel encode ramps, or the default value on failure.</param>
+    /// <returns><see langword="false"/> when liblcms2 is absent, the profile is not RGB matrix-shaper, prefers a table, or lacks a colorant or curve tag.</returns>
     public static bool TryExtractMatrixShaper(
         byte[] iccData, int gammaSize, out double[] ctm, out OutputGammaRamps gamma)
     {
@@ -65,6 +78,13 @@ public static class KmsColorPipeline
         }
     }
 
+    /// <summary>
+    /// Tells whether the three stages can convert between two parametric SDR descriptions without a
+    /// tone map.
+    /// </summary>
+    /// <param name="source">The description of the content.</param>
+    /// <param name="output">The description that the output displays.</param>
+    /// <returns><see langword="false"/> for ICC data, PQ or HLG, different reference whites, or an output peak below the source peak.</returns>
     public static bool CanExpress(ImageDescription source, ImageDescription output)
     {
         if (source.IccData is not null || output.IccData is not null)
@@ -87,6 +107,13 @@ public static class KmsColorPipeline
         return outputTc.MaxLuminance >= sourceTc.MaxLuminance * 0.999;
     }
 
+    /// <summary>
+    /// Gets the factor that places SDR content below the output peak when the output has more headroom,
+    /// for example under EDR.
+    /// </summary>
+    /// <param name="source">The description of the content.</param>
+    /// <param name="output">The description that the output displays.</param>
+    /// <returns>The source peak over the output peak, or 1 when the output is not brighter.</returns>
     public static double HeadroomScale(ImageDescription source, ImageDescription output)
     {
         var sourceTc = TransferCharacteristics.From(source);
@@ -96,9 +123,22 @@ public static class KmsColorPipeline
             : 1.0;
     }
 
+    /// <summary>
+    /// Builds the gamut matrix from the source primaries to the output primaries, with white
+    /// adaptation.
+    /// </summary>
+    /// <param name="source">The description of the content.</param>
+    /// <param name="output">The description that the output displays.</param>
+    /// <returns>A new matrix that the caller owns.</returns>
     public static double[] GamutCtm(ImageDescription source, ImageDescription output) =>
         Colorimetry.GamutMatrix(Chromaticities.From(source), Chromaticities.From(output));
 
+    /// <summary>
+    /// Builds degamma ramps that decode the source transfer function into linear values from 0 to 1.
+    /// </summary>
+    /// <param name="source">The description whose transfer function the ramps decode.</param>
+    /// <param name="size">The number of entries in each ramp.</param>
+    /// <returns>New ramps with the same curve on every channel.</returns>
     public static OutputGammaRamps DecodeRamps(ImageDescription source, int size)
     {
         var tc = TransferCharacteristics.From(source);
@@ -114,6 +154,13 @@ public static class KmsColorPipeline
         return ramps;
     }
 
+    /// <summary>
+    /// Builds gamma ramps that encode linear values from 0 to 1 with the output transfer function.
+    /// </summary>
+    /// <param name="output">The description whose transfer function the ramps encode.</param>
+    /// <param name="size">The number of entries in each ramp.</param>
+    /// <param name="multipliers">The per-channel scale after encoding, for example for night light, or <see langword="null"/> for none.</param>
+    /// <returns>New ramps.</returns>
     public static OutputGammaRamps EncodeRamps(
         ImageDescription output, int size, (double R, double G, double B)? multipliers = null)
     {

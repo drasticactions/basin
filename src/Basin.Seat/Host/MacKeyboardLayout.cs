@@ -3,6 +3,10 @@ using System.Runtime.Versioning;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Reads the active macOS keyboard input source through <c>UCKeyTranslate</c>.
+/// It polls for a layout change and reads on the main thread when an application runs there.
+/// </summary>
 [SupportedOSPlatform("macos")]
 public sealed class MacKeyboardLayout : IHostKeyboardLayout, IDisposable
 {
@@ -20,8 +24,14 @@ public sealed class MacKeyboardLayout : IHostKeyboardLayout, IDisposable
         _poll = new Timer(_ => RequestRefresh(), null, 0, PollMillis);
     }
 
+    /// <summary>
+    /// The poll interval for a layout change, in milliseconds.
+    /// </summary>
     public const int PollMillis = 500;
 
+    /// <summary>
+    /// Gets the name of the input source of the last read. It is <c>macos</c> before the first read.
+    /// </summary>
     public string Name
     {
         get
@@ -33,8 +43,16 @@ public sealed class MacKeyboardLayout : IHostKeyboardLayout, IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when a read finds a different input source.
+    /// It occurs on the main thread or on a timer thread.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Creates a reader for the current keyboard input source.
+    /// </summary>
+    /// <returns>The reader, or <see langword="null"/> when no source is current or the source carries no Unicode layout data.</returns>
     public static MacKeyboardLayout? TryCreate()
     {
         var source = TISCopyCurrentKeyboardLayoutInputSource();
@@ -58,6 +76,12 @@ public sealed class MacKeyboardLayout : IHostKeyboardLayout, IDisposable
         return data != 0 && CFDataGetBytePtr(data) != 0;
     }
 
+    /// <summary>
+    /// Gets the keymap text of the last read.
+    /// When no read has completed, it reads now if the calling thread can read the input source.
+    /// </summary>
+    /// <param name="xkb">The keymap text, or an empty string when no keymap is available.</param>
+    /// <returns><see langword="false"/> when no read has produced a keymap yet.</returns>
     public bool TryReadKeymapText(out string xkb)
     {
         lock (_gate)
@@ -125,6 +149,9 @@ public sealed class MacKeyboardLayout : IHostKeyboardLayout, IDisposable
         return HostKeymapWriter.Write(name, levels);
     }
 
+    /// <summary>
+    /// Stops the poll timer and releases the input source. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         lock (_gate)

@@ -1,7 +1,19 @@
 namespace Basin.Scene3D;
 
+/// <summary>
+/// The visibility walk over the doorway graph.
+/// </summary>
 public static class WorldVisibility
 {
+    /// <summary>
+    /// Walks the doorways breadth first from the eye's room and adds what <paramref name="view"/> can see to <paramref name="into"/>.
+    /// It does not clear <paramref name="into"/>, and it does not allocate after the lists have grown.
+    /// </summary>
+    /// <param name="world">The world to walk.</param>
+    /// <param name="view">The view that culls rooms, doorways, portals, windows and props.</param>
+    /// <param name="roomDepth">The number of doorways that the walk can pass through from the eye's room.</param>
+    /// <param name="into">The set that receives the result. It keeps an earlier <see cref="WorldVisibleSet.EyeRoom"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="world"/> or <paramref name="into"/> is <see langword="null"/>.</exception>
     public static void Collect(World world, in WorldView view, int roomDepth, WorldVisibleSet into)
     {
         ArgumentNullException.ThrowIfNull(world);

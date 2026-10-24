@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_tearing_control_manager_v1</c> global. It tracks which surfaces prefer async page flips.
+/// </summary>
 public sealed class TearingControlManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorExists = 0;
@@ -17,6 +23,12 @@ public sealed class TearingControlManager : IDisposable
 
     private readonly Basin.Capabilities.Defaults.SurfaceHints? _store;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TearingControlManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces get a hint.</param>
+    /// <param name="hints">The surface hints that receive each hint, or <see langword="null"/>.</param>
     public TearingControlManager(
         WlServerDisplay display, CompositorGlobal compositor, Basin.Capabilities.Defaults.SurfaceHints? hints = null)
     {
@@ -25,10 +37,21 @@ public sealed class TearingControlManager : IDisposable
         _global = display.CreateGlobal(WpTearingControlManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a commit applies a different hint, and with <see langword="false"/> when the client destroys the hint object. The argument is <see langword="true"/> for async.
+    /// </summary>
     public event Action<Surface, bool>? HintChanged;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Tests whether the surface's last applied commit asked for async page flips.
+    /// </summary>
+    /// <param name="surface">The surface to test, or <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when the hint is async, otherwise <see langword="false"/>.</returns>
     public bool PrefersTearing(Surface? surface) =>
         surface is not null && _hints.GetValueOrDefault(surface) == 1;
 

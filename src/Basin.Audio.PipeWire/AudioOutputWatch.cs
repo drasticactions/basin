@@ -7,6 +7,9 @@ using PipeWire.Spa;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Follows <c>default.audio.sink</c> and tells whether that sink plays through headphones or speakers. It reads the form factor of the node and its device, and the active output route.
+/// </summary>
 public sealed class AudioOutputWatch : IDisposable
 {
     private const string DefaultSinkKey = "default.audio.sink";
@@ -25,6 +28,11 @@ public sealed class AudioOutputWatch : IDisposable
     private bool _nodeSeen;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AudioOutputWatch"/> class. It reads the current default sink at once when the session has seen it.
+    /// </summary>
+    /// <param name="session">The session to watch.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
     public AudioOutputWatch(AudioSession session)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -39,18 +47,43 @@ public sealed class AudioOutputWatch : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the <c>node.name</c> of the default sink, or <see langword="null"/> when no default sink is set.
+    /// </summary>
     public string? SinkName { get; private set; }
 
+    /// <summary>
+    /// Gets the name of the active output route of the sink device, or <see langword="null"/> when there is none.
+    /// </summary>
     public string? RouteName { get; private set; }
 
+    /// <summary>
+    /// Gets the <c>port.type</c> of the active output route, for example <c>headphones</c>, or <see langword="null"/>.
+    /// </summary>
     public string? PortType { get; private set; }
 
+    /// <summary>
+    /// Gets the <c>device.form-factor</c> of the sink node, else of its device, or <see langword="null"/>.
+    /// </summary>
     public string? FormFactor => _nodeForm ?? _deviceForm;
 
+    /// <summary>
+    /// Gets the classification of the default sink. It is <see cref="AudioOutputKind.Unknown"/> while no default sink is set or its node has not sent properties. Otherwise it is never Unknown.
+    /// </summary>
     public AudioOutputKind Kind { get; private set; }
 
+    /// <summary>
+    /// Occurs when <see cref="Kind"/>, <see cref="RouteName"/> or <see cref="PortType"/> changes. A change of <see cref="SinkName"/> alone does not raise it.
+    /// </summary>
     public event Action<AudioOutputWatch>? Changed;
 
+    /// <summary>
+    /// Classifies an output from its properties. Headphones when the form factor is headphone, headphones, headset, hands-free or handset, when the port type is headphones, headset or handsfree, or when the route name contains headphone or headset.
+    /// </summary>
+    /// <param name="formFactor">The <c>device.form-factor</c>, or <see langword="null"/>.</param>
+    /// <param name="portType">The <c>port.type</c> of the route, or <see langword="null"/>.</param>
+    /// <param name="routeName">The route name, compared without case, or <see langword="null"/>.</param>
+    /// <returns><see cref="AudioOutputKind.Headphones"/> on a match. <see cref="AudioOutputKind.Unknown"/> when all three are <see langword="null"/>. Else <see cref="AudioOutputKind.Speakers"/>.</returns>
     public static AudioOutputKind Classify(string? formFactor, string? portType, string? routeName)
     {
         if (formFactor is { Length: > 0 } form && Array.IndexOf(HeadphoneForms, form) >= 0)
@@ -72,6 +105,9 @@ public sealed class AudioOutputWatch : IDisposable
         return formFactor is null && portType is null && routeName is null ? AudioOutputKind.Unknown : AudioOutputKind.Speakers;
     }
 
+    /// <summary>
+    /// Stops following the session and destroys the sink and device proxies. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

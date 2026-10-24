@@ -5,6 +5,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// The OpenGL ES renderer of a Quill canvas. It draws the canvas into the target of the current frame of its surface.
+/// </summary>
 public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
 {
     private readonly GL _gl;
@@ -23,6 +26,9 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         _textures = textures;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the renderer can blur the backdrop. It is always <see langword="false"/>.
+    /// </summary>
     public bool SupportsBackdropBlur => false;
 
     internal void SetTarget(uint framebuffer, int width, int height)
@@ -32,6 +38,12 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         _height = Math.Max(1, height);
     }
 
+    /// <summary>
+    /// Creates an RGBA texture in the shared pool. The renderer destroys it in <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="width">The width in texels. A value of 0 becomes 1.</param>
+    /// <param name="height">The height in texels. A value of 0 becomes 1.</param>
+    /// <returns>A <see cref="QuillGlTexture"/>.</returns>
     public object CreateTexture(uint width, uint height)
     {
         var texture = _textures.Create((int)width, (int)height);
@@ -39,10 +51,21 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         return texture;
     }
 
+    /// <summary>
+    /// Gets the size of a texture that a Quill renderer made.
+    /// </summary>
+    /// <param name="texture">The texture.</param>
+    /// <returns>The size in texels, or 0 by 0 for an object that is not a <see cref="QuillTexture"/>.</returns>
     public Int2 GetTextureSize(object texture) => texture is QuillTexture quill
         ? new Int2(quill.Width, quill.Height)
         : new Int2(0, 0);
 
+    /// <summary>
+    /// Copies RGBA pixels into a part of a texture. The copy happens now.
+    /// </summary>
+    /// <param name="texture">The <see cref="QuillGlTexture"/> to write.</param>
+    /// <param name="bounds">The part of the texture, in texels.</param>
+    /// <param name="data">The tightly packed RGBA bytes of the part.</param>
     public void SetTextureData(object texture, IntRect bounds, byte[] data)
     {
         if (texture is not QuillGlTexture quill || data is null)
@@ -54,6 +77,11 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         _textures.Update(quill, box, data);
     }
 
+    /// <summary>
+    /// Draws the vertices and the draw calls of a canvas with premultiplied alpha blending. The call does nothing after <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="canvas">The canvas that owns the vertex and index buffers.</param>
+    /// <param name="drawCalls">The draw calls, in order.</param>
     public void RenderCalls(Canvas canvas, IReadOnlyList<DrawCall> drawCalls)
     {
         if (_disposed || canvas is null || drawCalls is null || drawCalls.Count == 0)
@@ -157,6 +185,9 @@ public sealed unsafe class QuillCanvasRenderer : ICanvasRenderer
         gl.BindTexture(TextureTarget.Texture2D, 0);
     }
 
+    /// <summary>
+    /// Destroys the textures that this renderer made. The shared pool stays.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

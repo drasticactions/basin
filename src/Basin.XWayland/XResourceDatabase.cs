@@ -2,8 +2,18 @@ using System.Text;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Edits the text of the X resource database, as the <c>RESOURCE_MANAGER</c> root property holds it.
+/// </summary>
 public static class XResourceDatabase
 {
+    /// <summary>
+    /// Replaces or appends resource lines. A line whose key is in <paramref name="values"/> is dropped, and the new lines go at the end in order. Empty lines are removed.
+    /// </summary>
+    /// <param name="existing">The current database text, with one <c>key: value</c> line per resource.</param>
+    /// <param name="values">The resources to set, for example <c>Xft.dpi</c>.</param>
+    /// <returns>The new database text. Each line ends with a newline.</returns>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public static string Merge(string existing, IReadOnlyList<(string Key, string Value)> values)
     {
         ArgumentNullException.ThrowIfNull(existing);

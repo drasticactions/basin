@@ -1,5 +1,9 @@
 namespace Basin.Shell.Nested;
 
+/// <summary>
+/// The key names of the chord grammar, mapped to evdev codes.
+/// The shell matches the raw host key code, so the grammar does not need a keymap.
+/// </summary>
 public static class ShellKeyCodes
 {
     private static readonly (string Name, uint Code)[] Keys =
@@ -33,6 +37,13 @@ public static class ShellKeyCodes
 
     private static readonly uint[] DigitCodes = [11, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
+    /// <summary>
+    /// Finds the evdev code of a key name. Names are trimmed and the case is ignored.
+    /// Single letters and digits are valid names.
+    /// </summary>
+    /// <param name="name">The key name, for example <c>tab</c>, <c>f4</c> or <c>a</c>.</param>
+    /// <returns>The evdev code, or zero when the name is unknown.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public static uint CodeFor(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -62,6 +73,11 @@ public static class ShellKeyCodes
         return 0;
     }
 
+    /// <summary>
+    /// Finds the modifier that a key code gives when it is held. The left and right keys give the same modifier.
+    /// </summary>
+    /// <param name="code">An evdev key code.</param>
+    /// <returns>The modifier, or <see cref="ShellModifiers.None"/> when the key is not a modifier.</returns>
     public static ShellModifiers ModifierOf(uint code) => code switch
     {
         42 or 54 => ShellModifiers.Shift,
@@ -71,6 +87,12 @@ public static class ShellKeyCodes
         _ => ShellModifiers.None,
     };
 
+    /// <summary>
+    /// Finds the modifier that a chord token names. It accepts aliases, for example <c>control</c>, <c>option</c> and <c>win</c>.
+    /// </summary>
+    /// <param name="token">The chord token. It is trimmed and the case is ignored.</param>
+    /// <returns>The modifier, or <see langword="null"/> when the token names no modifier.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="token"/> is <see langword="null"/>.</exception>
     public static ShellModifiers? ModifierNamed(string token)
     {
         ArgumentNullException.ThrowIfNull(token);

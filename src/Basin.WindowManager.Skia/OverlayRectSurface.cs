@@ -4,6 +4,9 @@ using Wayland;
 
 namespace Basin.WindowManager.Skia;
 
+/// <summary>
+/// A layer surface that shows one rectangle, for example a drag outline or a drop preview. A move changes only its margin, and it takes no input.
+/// </summary>
 public sealed class OverlayRectSurface : IDisposable
 {
     private readonly ManagerSurface _surface;
@@ -12,6 +15,16 @@ public sealed class OverlayRectSurface : IDisposable
     private bool _started;
     private bool _drawn;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OverlayRectSurface"/> class, anchored to the top-left of the output. Each configure asks the manager for a manage sequence.
+    /// </summary>
+    /// <param name="host">The host that creates the layer surface.</param>
+    /// <param name="wlOutput">The bound output to show the surface on.</param>
+    /// <param name="output">The river output that <paramref name="wlOutput"/> matches.</param>
+    /// <param name="layer">The layer to place the surface in.</param>
+    /// <param name="scope">The namespace that the compositor sees.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="host"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The host's layer shell is not bound.</exception>
     public OverlayRectSurface(
         ManagerSurfaceHost host,
         WlOutput wlOutput,
@@ -26,12 +39,26 @@ public sealed class OverlayRectSurface : IDisposable
         _surface.Configured += host.Manager.RequestManage;
     }
 
+    /// <summary>
+    /// Gets the river output that the surface shows on.
+    /// </summary>
     public WmOutput Output { get; }
 
+    /// <summary>
+    /// Occurs when the surface repaints. The arguments are the canvas in buffer pixels, the logical width and height, and the scale.
+    /// </summary>
     public event Action<SKCanvas, int, int, int>? Paint;
 
+    /// <summary>
+    /// Makes the next <see cref="Show"/> repaint.
+    /// </summary>
     public void Invalidate() => _drawn = false;
 
+    /// <summary>
+    /// Shows the rectangle. The first call only asks for a configure, and calls before the configure only record the rectangle. It repaints when the size or scale changes or after <see cref="Invalidate"/>.
+    /// </summary>
+    /// <param name="rect">The rectangle relative to the output's top-left corner, in logical pixels. An empty rectangle is ignored.</param>
+    /// <param name="scale">The buffer scale. A value under 1 becomes 1.</param>
     public void Show(Rect rect, int scale)
     {
         scale = Math.Max(scale, 1);
@@ -84,5 +111,8 @@ public sealed class OverlayRectSurface : IDisposable
         _surface.Commit();
     }
 
+    /// <summary>
+    /// Disposes the layer surface.
+    /// </summary>
     public void Dispose() => _surface.Dispose();
 }

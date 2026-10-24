@@ -3,6 +3,9 @@ using Wayland;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// A surface that the manager owns and draws itself, for example a bar or a menu, with its own node in the render list.
+/// </summary>
 public sealed class WmShellSurface : IDisposable
 {
     private readonly RiverWindowManager _wm;
@@ -18,10 +21,20 @@ public sealed class WmShellSurface : IDisposable
         _wm.RegisterShellSurface(proxy, this);
     }
 
+    /// <summary>
+    /// Gets the surface that carries the role. The caller attaches buffers to it and keeps ownership of it.
+    /// </summary>
     public WlSurface Surface { get; }
 
+    /// <summary>
+    /// Gets the surface's entry in the render list. The library creates it on first use.
+    /// </summary>
     public WmNode Node => _node ??= new WmNode(_wm, _proxy.GetNode());
 
+    /// <summary>
+    /// Holds the surface's next commit until render finish. The caller must then call <see cref="Commit"/> before the render sequence ends.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage or render sequence is in progress.</exception>
     public void SyncNextCommit()
     {
         _wm.EnsureRender(nameof(SyncNextCommit));
@@ -29,6 +42,9 @@ public sealed class WmShellSurface : IDisposable
         _wm.TrackSyncNextCommit(this);
     }
 
+    /// <summary>
+    /// Commits the surface and clears the obligation that <see cref="SyncNextCommit"/> recorded. Use it in place of a direct surface commit.
+    /// </summary>
     public void Commit()
     {
         WmThreadAffinity.Assert();
@@ -36,6 +52,9 @@ public sealed class WmShellSurface : IDisposable
         _wm.ClearSyncNextCommit(this);
     }
 
+    /// <summary>
+    /// Destroys the node and the role object and drops any open commit obligation. The surface stays with the caller.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -54,6 +73,7 @@ public sealed class WmShellSurface : IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public override string ToString() => $"shell surface {Surface.Id}";
 
     internal RiverShellSurfaceV1 Proxy => _proxy;

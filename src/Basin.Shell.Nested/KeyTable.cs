@@ -1,5 +1,9 @@
 namespace Basin.Shell.Nested;
 
+/// <summary>
+/// The shell actions that are bound to chords, after the configured keys, the defaults and the host chords are resolved.
+/// It is immutable. <see cref="NestedShell.Apply"/> replaces it as a whole.
+/// </summary>
 public sealed class KeyTable
 {
     private readonly Dictionary<(ShellModifiers Modifiers, uint Code), string> _names;
@@ -10,13 +14,33 @@ public sealed class KeyTable
         _names = bindings.ToDictionary(static binding => (binding.Modifiers, binding.Code), static binding => binding.Name);
     }
 
+    /// <summary>
+    /// Gets a table with no bindings. No chord matches it.
+    /// </summary>
     public static KeyTable Empty { get; } = new([]);
 
+    /// <summary>
+    /// Gets the bindings in the order of <see cref="ShellKeyNames.All"/>.
+    /// </summary>
     public IReadOnlyList<ShellKeyBinding> Bindings { get; }
 
+    /// <summary>
+    /// Finds the action bound to a chord. The held modifiers must equal the chord modifiers exactly.
+    /// </summary>
+    /// <param name="held">The modifiers held now.</param>
+    /// <param name="code">The evdev code of the pressed key.</param>
+    /// <returns>The action name, or <see langword="null"/> when no action uses the chord.</returns>
     public string? Match(ShellModifiers held, uint code) =>
         _names.TryGetValue((held, code), out var name) ? name : null;
 
+    /// <summary>
+    /// Builds the table from the default chords of <see cref="ShellKeyNames"/> and the configured keys.
+    /// A chord that does not parse, that the host reserves, or that an earlier action uses is dropped with a logged warning.
+    /// </summary>
+    /// <param name="configured">The configured keys. Each one replaces the default chord of its action, and an unknown name is ignored.</param>
+    /// <param name="reserved">The chords that the host binds. The host keeps each of them.</param>
+    /// <returns>A new table.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="configured"/> or <paramref name="reserved"/> is <see langword="null"/>.</exception>
     public static KeyTable Build(IReadOnlyList<ShellKey> configured, IReadOnlyList<ShellChord> reserved)
     {
         ArgumentNullException.ThrowIfNull(configured);
@@ -80,6 +104,14 @@ public sealed class KeyTable
         return new KeyTable(bindings);
     }
 
+    /// <summary>
+    /// Parses chord text such as <c>Ctrl+Alt+Left</c>. Each token before the last must name a modifier, and the last token must name a key.
+    /// </summary>
+    /// <param name="chord">The chord text. Tokens are separated by <c>+</c>, and the case is ignored.</param>
+    /// <param name="modifiers">The parsed modifiers, valid only when the method returns <see langword="null"/>.</param>
+    /// <param name="code">The evdev key code, or zero when the key name is unknown.</param>
+    /// <returns><see langword="null"/> when the chord is valid, or a message that says what is wrong.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="chord"/> is <see langword="null"/>.</exception>
     public static string? ChordProblem(string chord, out ShellModifiers modifiers, out uint code)
     {
         ArgumentNullException.ThrowIfNull(chord);

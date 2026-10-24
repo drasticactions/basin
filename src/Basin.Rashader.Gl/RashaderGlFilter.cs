@@ -7,6 +7,10 @@ using static Basin.Rashader.Gl.RashaderGlLog;
 
 namespace Basin.Rashader.Gl;
 
+/// <summary>
+/// One librashader filter chain that runs on the GL renderer. Creation, every frame and disposal
+/// must run with the device's context current.
+/// </summary>
 public sealed unsafe class RashaderGlFilter : IGlFilter, IRashaderFilter
 {
     private const uint Rgba8 = 0x8058;
@@ -32,6 +36,15 @@ public sealed unsafe class RashaderGlFilter : IGlFilter, IRashaderFilter
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Compiles a preset into a GL filter chain. Every failure returns <see langword="null"/> with a
+    /// reason, so a bad preset never ends the session.
+    /// </summary>
+    /// <param name="device">The GL device. Its context must be current.</param>
+    /// <param name="presetPath">The path of the <c>.slangp</c> preset.</param>
+    /// <param name="settings">The settings that the filter reads once at creation.</param>
+    /// <param name="whyNot">The reason creation failed, or <see langword="null"/> on success.</param>
+    /// <returns>The filter, which the caller owns and must dispose, or <see langword="null"/> when librashader, the loader or the preset fails.</returns>
     public static RashaderGlFilter? TryCreate(
         GlDevice device, string presetPath, in RashaderFilterSettings settings, out string? whyNot)
     {
@@ -80,14 +93,28 @@ public sealed unsafe class RashaderGlFilter : IGlFilter, IRashaderFilter
         return new RashaderGlFilter(chain, parameters, settings.ContinuousRepaint);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the chain is still live. It becomes <see langword="false"/>
+    /// after a failed frame drops the chain, and after disposal.
+    /// </summary>
     public bool IsSupported => _chain != 0;
 
+    /// <summary>
+    /// Gets a value indicating whether the filter needs the whole frame. It is always <see
+    /// langword="true"/>, because a preset can read history and feedback.
+    /// </summary>
     public bool NeedsFullFrame => true;
 
+    /// <summary>
+    /// Gets a value indicating whether the filter asks for a repaint every frame. It is the <see
+    /// cref="RashaderFilterSettings.ContinuousRepaint"/> value from creation.
+    /// </summary>
     public bool NeedsContinuousRepaint { get; }
 
+    /// <inheritdoc/>
     public IReadOnlyList<RashaderParameter> Parameters => _parameters;
 
+    /// <inheritdoc/>
     public bool TrySetParameter(string name, float value)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -109,6 +136,12 @@ public sealed unsafe class RashaderGlFilter : IGlFilter, IRashaderFilter
         return true;
     }
 
+    /// <summary>
+    /// Runs the chain from the context's source into its target. A librashader error logs the message
+    /// and drops the chain for good.
+    /// </summary>
+    /// <param name="context">The source, the target, the viewport and the frame options.</param>
+    /// <returns><see langword="true"/> when the chain wrote the target.</returns>
     public bool Record(in GlFilterContext context)
     {
         if (_chain == 0)
@@ -167,6 +200,9 @@ public sealed unsafe class RashaderGlFilter : IGlFilter, IRashaderFilter
         return true;
     }
 
+    /// <summary>
+    /// Frees the chain. The device context must be current. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

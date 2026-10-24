@@ -1,5 +1,8 @@
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// A loaded and validated metacity theme. It holds no Skia objects and does not change after a load.
+/// </summary>
 public sealed class MetacityTheme
 {
     private readonly Dictionary<string, int> _intConstants = new(StringComparer.Ordinal);
@@ -19,14 +22,29 @@ public sealed class MetacityTheme
         FormatVersion = formatVersion;
     }
 
+    /// <summary>
+    /// Gets the theme name, by default the name of the folder above <c>metacity-1</c>.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// Gets the folder that holds the theme file. Image paths in the theme resolve against it.
+    /// </summary>
     public string Directory { get; }
 
+    /// <summary>
+    /// Gets the path of the theme file, or <see langword="null"/> for a theme parsed from a stream with no path.
+    /// </summary>
     public string? FilePath { get; }
 
+    /// <summary>
+    /// Gets the format version, 1000 times the file's major number, raised by a satisfied <c>version</c> on the root element.
+    /// </summary>
     public int FormatVersion { get; internal set; }
 
+    /// <summary>
+    /// Gets the theme's <c>info</c> element.
+    /// </summary>
     public MetacityThemeInfo Info { get; internal set; }
 
     internal string? ReadableName { get; set; }
@@ -45,6 +63,13 @@ public sealed class MetacityTheme
 
     internal IReadOnlyDictionary<string, MetacityImageInfo> Images => _images;
 
+    /// <summary>
+    /// Finds and loads a theme as marco does. It tries format 3, then 2, then 1, in each folder of <see cref="MetacityThemes.Directories"/>.
+    /// A file whose root <c>version</c> is not satisfied continues the search.
+    /// </summary>
+    /// <param name="name">The theme name.</param>
+    /// <returns>The theme.</returns>
+    /// <exception cref="MetacityThemeException">No file loads, or a file has an error other than an unsatisfied root version.</exception>
     public static MetacityTheme Load(string name)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -73,6 +98,13 @@ public sealed class MetacityTheme
             $"Failed to find a valid file for theme {name}. Searched: {string.Join(", ", directories)}");
     }
 
+    /// <summary>
+    /// Loads one theme file. The major version comes from the file name.
+    /// </summary>
+    /// <param name="path">The path of a <c>metacity-theme-N.xml</c> file.</param>
+    /// <param name="name">The theme name, or <see langword="null"/> for the name of the folder above the file's folder.</param>
+    /// <returns>The theme.</returns>
+    /// <exception cref="MetacityThemeException">The file is not a valid theme.</exception>
     public static MetacityTheme ParseFile(string path, string? name = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -82,6 +114,16 @@ public sealed class MetacityTheme
         return Parse(stream, directory, MetacityThemes.MajorVersionOf(path), name, path);
     }
 
+    /// <summary>
+    /// Loads a theme from a stream. The stream is read to its end and disposed.
+    /// </summary>
+    /// <param name="stream">The theme XML.</param>
+    /// <param name="directory">The folder that image paths resolve against.</param>
+    /// <param name="majorVersion">The major format version of the file.</param>
+    /// <param name="name">The theme name, or <see langword="null"/> for the name of the folder above <paramref name="directory"/>.</param>
+    /// <param name="filePath">The path to report as <see cref="FilePath"/>.</param>
+    /// <returns>The theme.</returns>
+    /// <exception cref="MetacityThemeException">The text is not a valid theme.</exception>
     public static MetacityTheme Parse(Stream stream, string directory, int majorVersion = 1, string? name = null, string? filePath = null)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -111,6 +153,9 @@ public sealed class MetacityTheme
 
     internal void InsertDrawOpList(string name, MetacityDrawOpList list) => _drawOpLists[name] = list;
 
+    /// <summary>
+    /// Gets a value indicating whether any frame style sets a window background with an alpha below 255.
+    /// </summary>
     public bool HasTranslucentBackground
     {
         get

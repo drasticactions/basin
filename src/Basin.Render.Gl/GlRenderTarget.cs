@@ -3,6 +3,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Render.Gl;
 
+/// <summary>
+/// Wraps a buffer as a GL framebuffer. A dmabuf is drawn in place, and a memory buffer is drawn into a texture that <see cref="ReadInto"/> copies back.
+/// </summary>
 public sealed unsafe class GlRenderTarget
 {
     private byte[]? _readbackScratch;
@@ -19,16 +22,34 @@ public sealed unsafe class GlRenderTarget
     {
     }
 
+    /// <summary>
+    /// Gets the name of the framebuffer to draw into.
+    /// </summary>
     public uint Framebuffer { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the target is a memory buffer that needs <see cref="ReadInto"/> after a pass.
+    /// </summary>
     public bool IsCpuReadback { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the write count of the buffer at the time the target last matched its content. A caller rebuilds a CPU target when the count moved.
+    /// </summary>
     public ulong SeenWrites { get; set; }
 
+    /// <summary>
+    /// Gets the texture that backs a dmabuf target, or 0 for a CPU target.
+    /// </summary>
     public uint ColorTexture => IsCpuReadback ? 0u : _textureOrRenderbuffer;
 
+    /// <summary>
+    /// Gets the texture that is attached to <see cref="Framebuffer"/>, for both kinds of target.
+    /// </summary>
     public uint TargetTexture => _textureOrRenderbuffer;
 
+    /// <summary>
+    /// Gets the dmabuf of a dmabuf target, or the default value for a CPU target.
+    /// </summary>
     public DmabufAttributes Attributes { get; private set; }
 
     private uint _textureOrRenderbuffer;
@@ -36,6 +57,13 @@ public sealed unsafe class GlRenderTarget
     private uint _backdropCopyTexture;
     private uint _backdropCopyFbo;
 
+    /// <summary>
+    /// Gets a texture with the pixels drawn so far. A CPU target copies its framebuffer into a separate texture that it keeps.
+    /// </summary>
+    /// <param name="device">The device whose context is current.</param>
+    /// <param name="width">The width of the target in pixels.</param>
+    /// <param name="height">The height of the target in pixels.</param>
+    /// <returns>The texture name, which the target owns.</returns>
     public uint BackdropTexture(GlDevice device, int width, int height)
     {
         if (ColorTexture != 0)
@@ -63,6 +91,12 @@ public sealed unsafe class GlRenderTarget
         return _backdropCopyTexture;
     }
 
+    /// <summary>
+    /// Wraps a buffer as a framebuffer and copies the current content of a memory buffer in. It throws <see cref="InvalidOperationException"/> when EGL rejects the dmabuf or the framebuffer is incomplete, and <see cref="NotSupportedException"/> for another memory format.
+    /// </summary>
+    /// <param name="device">The device whose context is current.</param>
+    /// <param name="buffer">A dmabuf, or a memory buffer in a 32-bit RGB format or a 16-bit float format.</param>
+    /// <returns>The target, which the caller releases with <see cref="Dispose"/>.</returns>
     public static GlRenderTarget Create(GlDevice device, IBuffer buffer)
     {
         var gl = device.Gl;
@@ -179,6 +213,11 @@ public sealed unsafe class GlRenderTarget
         return target;
     }
 
+    /// <summary>
+    /// Reads the framebuffer of a CPU target back into a memory buffer. It blocks until the GPU finished drawing.
+    /// </summary>
+    /// <param name="device">The device whose context is current.</param>
+    /// <param name="target">The buffer that the target wraps. Nothing is written when it is not CPU-writable.</param>
     public void ReadInto(GlDevice device, IBuffer target)
     {
         if (!target.BeginDataAccess(BufferDataAccess.Write, out var view))
@@ -236,6 +275,10 @@ public sealed unsafe class GlRenderTarget
         }
     }
 
+    /// <summary>
+    /// Deletes the framebuffer, the textures and the EGL image, and raises <see cref="GlDevice.TextureDeleting"/> for each texture that an effect can hold.
+    /// </summary>
+    /// <param name="device">The device that created the target.</param>
     public void Dispose(GlDevice device)
     {
         var gl = device.Gl;

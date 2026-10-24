@@ -3,8 +3,15 @@ using Wayland.Server;
 
 namespace Basin.Shell.River;
 
+/// <summary>
+/// The river-input-management-v1 global. It holds the map from input devices to seat names and reports the changes that the window manager asks for.
+/// It does not open devices or move them itself. The consumer registers its devices and applies the reported settings.
+/// </summary>
 public sealed class RiverInputManager : IDisposable
 {
+    /// <summary>
+    /// The name of the seat that always exists. It takes every device whose seat is destroyed or unknown.
+    /// </summary>
     public const string DefaultSeatName = "default";
 
     private readonly RiverWindowManager _manager;
@@ -23,24 +30,64 @@ public sealed class RiverInputManager : IDisposable
             OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a window manager holds a live binding to this global.
+    /// </summary>
     public bool IsBound => _resource is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets the names of the seats that exist. The list always contains <see cref="DefaultSeatName"/>.
+    /// </summary>
     public IReadOnlyList<string> SeatNames => _seatNames;
 
+    /// <summary>
+    /// Occurs when the window manager creates a seat with a new, non-empty name. The argument is the seat name.
+    /// </summary>
     public event Action<string>? SeatCreated;
 
+    /// <summary>
+    /// Occurs when a seat other than <see cref="DefaultSeatName"/> goes away. The argument is the seat name.
+    /// It fires after the seat's devices move to the default seat, and for each extra seat when a new window manager replaces the old one.
+    /// </summary>
     public event Action<string>? SeatDestroyed;
 
+    /// <summary>
+    /// Occurs when a device moves to a different seat. The arguments are the device handle and the new seat name.
+    /// A request for a seat that does not exist moves the device to <see cref="DefaultSeatName"/>.
+    /// </summary>
     public event Action<object, string>? DeviceAssigned;
 
+    /// <summary>
+    /// Occurs when the window manager sets the key repeat of a device. The arguments are the device handle, the rate in keys per second and the delay in milliseconds.
+    /// Both values are 0 or more.
+    /// </summary>
     public event Action<object, int, int>? RepeatInfoChanged;
 
+    /// <summary>
+    /// Occurs when the window manager sets the scroll factor of a device. The arguments are the device handle and the factor, which is 0 or more.
+    /// </summary>
     public event Action<object, double>? ScrollFactorChanged;
 
+    /// <summary>
+    /// Occurs when the window manager maps a device to an output. The arguments are the device handle and the output.
+    /// The output is <see langword="null"/> when the request clears the map or names an output that the compositor does not know.
+    /// </summary>
     public event Action<object, IOutput?>? MappedToOutput;
 
+    /// <summary>
+    /// Occurs when the window manager maps a device to a rectangle in the logical layout. The arguments are the device handle and the rectangle.
+    /// The width and height of the rectangle are more than 0.
+    /// </summary>
     public event Action<object, Box>? MappedToRectangle;
 
+    /// <summary>
+    /// Registers a device and announces it to the bound window manager. A handle that is already registered does nothing.
+    /// The device starts on <see cref="DefaultSeatName"/>.
+    /// </summary>
+    /// <param name="handle">The consumer's object for the device. The events give it back by reference.</param>
+    /// <param name="name">The device name that the window manager matches its rules on.</param>
+    /// <param name="type">The kind of device.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="handle"/> or <paramref name="name"/> is <see langword="null"/>.</exception>
     public void AddDevice(object handle, string name, InputDeviceType type)
     {
         ArgumentNullException.ThrowIfNull(handle);
@@ -55,6 +102,11 @@ public sealed class RiverInputManager : IDisposable
         Announce(device);
     }
 
+    /// <summary>
+    /// Unregisters a device and tells the window manager that it is gone. An unknown handle does nothing.
+    /// </summary>
+    /// <param name="handle">The handle given to <see cref="AddDevice(object, string, InputDeviceType)"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="handle"/> is <see langword="null"/>.</exception>
     public void RemoveDevice(object handle)
     {
         ArgumentNullException.ThrowIfNull(handle);
@@ -67,12 +119,21 @@ public sealed class RiverInputManager : IDisposable
         device.SendRemoved();
     }
 
+    /// <summary>
+    /// Finds the seat that a device is assigned to.
+    /// </summary>
+    /// <param name="handle">The handle given to <see cref="AddDevice(object, string, InputDeviceType)"/>.</param>
+    /// <returns>The seat name, or <see cref="DefaultSeatName"/> for a handle that is not registered.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="handle"/> is <see langword="null"/>.</exception>
     public string SeatOf(object handle)
     {
         ArgumentNullException.ThrowIfNull(handle);
         return _devices.Find(d => ReferenceEquals(d.Handle, handle))?.SeatName ?? DefaultSeatName;
     }
 
+    /// <summary>
+    /// Forgets every device and every extra seat, and removes the global. It raises no events. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

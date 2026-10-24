@@ -4,6 +4,9 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// The compositor loop over the libwayland event loop of a display. It flushes client buffers before each wait.
+/// </summary>
 public sealed class WaylandEventLoop : ICompositorEventLoop
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -14,11 +17,16 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
     private readonly List<IDisposable> _deferredFreesRunning = [];
     private readonly List<TimerSource> _timers = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WaylandEventLoop"/> class. The thread that calls it becomes the loop thread.
+    /// </summary>
+    /// <param name="display">The display whose event loop runs the sources.</param>
     public WaylandEventLoop(WlServerDisplay display)
     {
         _display = display;
     }
 
+    /// <inheritdoc/>
     public void Dispatch(int timeoutMs)
     {
         _thread.Assert();
@@ -35,6 +43,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         }
     }
 
+    /// <inheritdoc/>
     public IEventSource AddFd(int fd, FdReadiness events, Action<int, FdReadiness> handler)
     {
         _thread.Assert();
@@ -43,6 +52,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         return new Source(inner);
     }
 
+    /// <inheritdoc/>
     public IEventSource AddTimer(Action handler)
     {
         _thread.Assert();
@@ -53,6 +63,9 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         return timer;
     }
 
+    /// <summary>
+    /// Gets the time in milliseconds until the soonest armed timer fires, or -1 when no timer is armed. An outer loop can use it as its wait limit.
+    /// </summary>
     public int NextTimerDelayMs
     {
         get
@@ -73,6 +86,7 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         }
     }
 
+    /// <inheritdoc/>
     public IEventSource AddSignal(int signalNumber, Action<int> handler)
     {
         _thread.Assert();
@@ -87,20 +101,24 @@ public sealed class WaylandEventLoop : ICompositorEventLoop
         return new SignalSource(_display, signalNumber, handler);
     }
 
+    /// <inheritdoc/>
     public void AddIdle(Action handler)
     {
         _thread.Assert();
         _idle.Add(handler);
     }
 
+    /// <inheritdoc/>
     public void DispatchIdle()
     {
         _thread.Assert();
         DrainQueues();
     }
 
+    /// <inheritdoc/>
     public int Fd => _display.EventLoop.Fd;
 
+    /// <inheritdoc/>
     public void DeferDestroy(IDisposable victim)
     {
         _thread.Assert();

@@ -2,8 +2,15 @@ using Wayland;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Runs the core clipboard, the primary selection and drag-and-drop for one seat.
+/// It is the default <see cref="Capabilities.IDragTracker"/>.
+/// </summary>
 public sealed class SeatDataDevice : Capabilities.IDragTracker
 {
+    /// <summary>
+    /// The surface role that a drag icon takes. A surface with a different role cannot be a drag icon.
+    /// </summary>
     public const string IconRole = "dnd_icon";
 
     private readonly Seat _seat;
@@ -15,28 +22,62 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         _seat = seat;
     }
 
+    /// <summary>
+    /// Gets or sets the store that the core data device routes the clipboard through.
+    /// When it is <see langword="null"/>, a client <c>set_selection</c> calls <see cref="SetSelection"/> and a paste reads the source directly.
+    /// </summary>
     public Capabilities.ISelectionStore? Store { get; set; }
 
+    /// <summary>
+    /// Gets the clipboard source, or <see langword="null"/> when the clipboard is empty.
+    /// It becomes <see langword="null"/> when its source is destroyed.
+    /// </summary>
     public DataSource? Selection { get; private set; }
 
+    /// <summary>
+    /// Gets the primary selection source, or <see langword="null"/> when the primary selection is empty.
+    /// It becomes <see langword="null"/> when its source is destroyed.
+    /// </summary>
     public DataSource? PrimarySelection { get; private set; }
 
+    /// <summary>
+    /// Occurs after <see cref="SetSelection"/> changes the clipboard source. The argument is the new source.
+    /// It does not occur when the source is destroyed.
+    /// </summary>
     public event Action<DataSource?>? SelectionChanged;
 
+    /// <summary>
+    /// Occurs after the primary selection changes. The argument is the new source.
+    /// It also occurs with <see langword="null"/> when the source is destroyed.
+    /// </summary>
     public event Action<DataSource?>? PrimarySelectionChanged;
 
+    /// <summary>
+    /// Occurs when a client sends <c>set_selection</c> on its data device. The argument is the source, or <see langword="null"/> to clear.
+    /// When a handler is attached, the request goes to the handler only, and the seat does not change the clipboard.
+    /// </summary>
     public event Action<DataSource?>? SelectionRequested;
 
+    /// <summary>
+    /// Occurs when a drag starts, after the pointer grab is installed and before the first enter.
+    /// </summary>
     public event Action<DragEvent>? DragStarted;
 
+    /// <summary>
+    /// Occurs when a drag ends with any outcome, after the pointer grab is removed.
+    /// </summary>
     public event Action? DragEnded;
 
+    /// <inheritdoc/>
     public DataSource? DraggingSource => _drag?.Source;
 
+    /// <inheritdoc/>
     public Surface? DraggingIcon => _drag is null ? null : _dragIcon;
 
+    /// <inheritdoc/>
     public event Action? DragChanged;
 
+    /// <inheritdoc/>
     public bool StartDrag(DataSource source, Surface? icon = null)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -74,8 +115,14 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         };
     }
 
+    /// <inheritdoc/>
     public void EndDrag(Capabilities.DragOutcome outcome) => _drag?.End(outcome);
 
+    /// <summary>
+    /// Sets the clipboard source and offers it to the client with keyboard focus.
+    /// The old source gets a cancelled event. Setting the current source again does nothing.
+    /// </summary>
+    /// <param name="source">The new source, or <see langword="null"/> to clear the clipboard.</param>
     public void SetSelection(DataSource? source)
     {
         if (Selection == source)
@@ -102,6 +149,11 @@ public sealed class SeatDataDevice : Capabilities.IDragTracker
         SelectionChanged?.Invoke(source);
     }
 
+    /// <summary>
+    /// Sets the primary selection source. The old source gets a cancelled event.
+    /// Setting the current source again does nothing.
+    /// </summary>
+    /// <param name="source">The new source, or <see langword="null"/> to clear the primary selection.</param>
     public void SetPrimarySelection(DataSource? source)
     {
         if (PrimarySelection == source)

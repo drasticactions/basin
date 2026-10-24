@@ -1,5 +1,8 @@
 namespace Basin.Backend.Headless;
 
+/// <summary>
+/// An output with no display. It keeps the last committed buffer and presents on a timer at the mode refresh rate, or on <see cref="StepFrame"/>.
+/// </summary>
 public sealed class HeadlessOutput : OutputBase, IPresentingOutput
 {
     private readonly bool _manualFrameClock;
@@ -24,12 +27,23 @@ public sealed class HeadlessOutput : OutputBase, IPresentingOutput
         Commit(initial.SetEnabled(true).SetMode(mode));
     }
 
+    /// <summary>
+    /// Gets the buffer of the last commit that set one. The output holds a lock on it until the next buffer or destruction.
+    /// </summary>
     public IBuffer? PresentedBuffer => _presented.Buffer;
 
+    /// <summary>
+    /// Gets the number of frames that this output presented. It starts at zero.
+    /// </summary>
     public ulong Sequence => _sequence;
 
+    /// <inheritdoc/>
     public event Action<ulong, uint, ulong>? PresentedOnScreen;
 
+    /// <summary>
+    /// Presents one frame now. It increments <see cref="Sequence"/>, raises <see cref="PresentedOnScreen"/> and then the frame event.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The output was not created with the manual frame clock.</exception>
     public void StepFrame()
     {
         if (!_manualFrameClock)
@@ -40,6 +54,7 @@ public sealed class HeadlessOutput : OutputBase, IPresentingOutput
         Present();
     }
 
+    /// <inheritdoc/>
     protected override bool TestCommitCore(OutputState state)
     {
         var mode = (state.Fields & OutputStateFields.Mode) != 0 ? state.Mode : CurrentMode;
@@ -57,6 +72,7 @@ public sealed class HeadlessOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    /// <inheritdoc/>
     protected override bool CommitCore(OutputState state)
     {
         if ((state.Fields & OutputStateFields.Buffer) != 0)
@@ -74,6 +90,7 @@ public sealed class HeadlessOutput : OutputBase, IPresentingOutput
         return true;
     }
 
+    /// <inheritdoc/>
     protected override void OnDestroy()
     {
         _frameTimer?.Remove();

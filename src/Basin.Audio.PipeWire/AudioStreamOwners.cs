@@ -3,6 +3,9 @@ using Basin.Capabilities;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Matches an <see cref="AudioStream"/> to the toplevel that owns it. It observes the toplevel model to know which window had focus last and which mapped first.
+/// </summary>
 public sealed class AudioStreamOwners : IToplevelObserver, IDisposable
 {
     private const int MaxAncestors = 16;
@@ -16,6 +19,13 @@ public sealed class AudioStreamOwners : IToplevelObserver, IDisposable
     private long _clock;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AudioStreamOwners"/> class. It registers itself as an observer of <paramref name="toplevels"/> until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="toplevels">The windows to match against. A window with no PID never matches.</param>
+    /// <param name="launchGroup">Maps a launch id to the process group of that launch, or returns 0 or less when unknown. With <see langword="null"/>, the launch-tag step never matches.</param>
+    /// <param name="processes">The <c>/proc</c> reader, or <see langword="null"/> for <see cref="AudioProcessTable.Instance"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="toplevels"/> is <see langword="null"/>.</exception>
     public AudioStreamOwners(IToplevelModel toplevels, Func<long, int>? launchGroup = null, IAudioProcessTable? processes = null)
     {
         ArgumentNullException.ThrowIfNull(toplevels);
@@ -33,6 +43,12 @@ public sealed class AudioStreamOwners : IToplevelObserver, IDisposable
         toplevels.AddObserver(this);
     }
 
+    /// <summary>
+    /// Finds the window that owns a stream. The steps run in the order of <see cref="AudioMatchStep"/>, and the first match wins. When one process owns several windows, the window with the most recent focus wins, else the one that mapped first.
+    /// </summary>
+    /// <param name="stream">The stream to match.</param>
+    /// <returns>The owner and the matching step, or the default value when no step matches.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
     public AudioStreamOwner Match(AudioStream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
@@ -86,12 +102,14 @@ public sealed class AudioStreamOwners : IToplevelObserver, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void OnToplevelAdded(ulong toplevelId)
     {
         _mapped[toplevelId] = ++_clock;
         OnToplevelChanged(toplevelId);
     }
 
+    /// <inheritdoc/>
     public void OnToplevelChanged(ulong toplevelId)
     {
         if (!_toplevels.TryGet(toplevelId, out var info))
@@ -112,6 +130,7 @@ public sealed class AudioStreamOwners : IToplevelObserver, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public void OnToplevelRemoved(ulong toplevelId)
     {
         _mapped.Remove(toplevelId);
@@ -119,6 +138,9 @@ public sealed class AudioStreamOwners : IToplevelObserver, IDisposable
         _active.Remove(toplevelId);
     }
 
+    /// <summary>
+    /// Removes the observer from the toplevel model. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

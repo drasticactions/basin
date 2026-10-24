@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// One <c>wl_seat</c> global: the delivery mechanism for one user's pointer, keyboard, touch and selections. The consumer decides focus and calls the notify methods.
+/// </summary>
 public sealed class Seat : IDisposable
 {
+    /// <summary>
+    /// The <c>wl_seat</c> version that the global advertises.
+    /// </summary>
     public const int Version = 11;
 
     private const int SerialHistory = 128;
@@ -23,6 +29,13 @@ public sealed class Seat : IDisposable
     private SeatCapability _capabilities;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Seat"/> class and creates its <c>wl_seat</c> global.
+    /// </summary>
+    /// <param name="display">The display that hosts the global.</param>
+    /// <param name="compositor">The compositor global that resolves surface resources.</param>
+    /// <param name="name">The seat name sent to clients at version 2 and later.</param>
+    /// <param name="capabilities">The capabilities that the seat advertises at the start.</param>
     public Seat(WlServerDisplay display, CompositorGlobal compositor, string name = "seat0", SeatCapability capabilities = SeatCapability.Pointer | SeatCapability.Keyboard)
     {
         Display = display;
@@ -38,34 +51,80 @@ public sealed class Seat : IDisposable
         _global = display.CreateGlobal(WlSeat.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets the display that hosts the global and issues the serials.
+    /// </summary>
     public WlServerDisplay Display { get; }
 
+    /// <summary>
+    /// Gets the compositor global that resolves <c>wl_surface</c> resources for this seat.
+    /// </summary>
     public CompositorGlobal Compositor { get; }
 
+    /// <summary>
+    /// Gets the seat name that clients receive in <c>wl_seat.name</c>.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// Gets the registry name of the seat global as one client sees it.
+    /// </summary>
+    /// <param name="client">The client.</param>
+    /// <returns>The numeric name in that client's registry.</returns>
     public uint NameFor(WlClient client) => _global.NameFor(client);
 
+    /// <summary>
+    /// Finds the seat that a <c>wl_seat</c> resource was bound from.
+    /// </summary>
+    /// <param name="resource">The resource, or <see langword="null"/>.</param>
+    /// <returns>The seat, or <see langword="null"/> when the resource is null, destroyed or from a disposed seat.</returns>
     public static Seat? FromResource(WlSeatResource? resource) =>
         resource is not null && ByResource.TryGetValue(resource, out var seat) ? seat : null;
 
+    /// <summary>
+    /// Gets or sets the sink that virtual pointer and virtual keyboard clients inject into for this seat. When it is null, those managers use their own default.
+    /// </summary>
     public IInputSink? InputSink { get; set; }
 
+    /// <summary>
+    /// Gets or sets the target that <see cref="SeatSyntheticInput"/> drives for this seat, usually the backend's input injector.
+    /// </summary>
     public ISyntheticInput? SyntheticInput { get; set; }
 
     internal Surface? ResolveSurface(Wayland.WlSurfaceResource? resource) => Compositor.ResolveSurface(resource);
 
+    /// <summary>
+    /// Gets the pointer device. It exists whether or not the pointer capability is advertised.
+    /// </summary>
     public SeatPointer Pointer { get; }
 
+    /// <summary>
+    /// Gets the keyboard device. It exists whether or not the keyboard capability is advertised.
+    /// </summary>
     public SeatKeyboard Keyboard { get; }
 
+    /// <summary>
+    /// Gets the touch device. It exists whether or not the touch capability is advertised.
+    /// </summary>
     public SeatTouch Touch { get; }
 
+    /// <summary>
+    /// Gets the data device, which holds the selections and runs drag-and-drop.
+    /// </summary>
     public SeatDataDevice DataDevice { get; }
 
+    /// <summary>
+    /// Adds or removes capabilities. A change sends <c>wl_seat.capabilities</c> to every bound resource.
+    /// </summary>
+    /// <param name="capability">The capabilities to change.</param>
+    /// <param name="present"><see langword="true"/> to add them, <see langword="false"/> to remove them.</param>
     public void SetCapability(SeatCapability capability, bool present) =>
         Capabilities = present ? Capabilities | capability : Capabilities & ~capability;
 
+    /// <summary>
+    /// Counts a virtual device of one capability. The first one adds the capability when the seat does not have it.
+    /// </summary>
+    /// <param name="capability">One of <see cref="SeatCapability.Pointer"/>, <see cref="SeatCapability.Keyboard"/> or <see cref="SeatCapability.Touch"/>. Other values are ignored.</param>
     public void AddVirtualDevice(SeatCapability capability)
     {
         var index = SlotOf(capability);
@@ -81,6 +140,10 @@ public sealed class Seat : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes a count that <see cref="AddVirtualDevice"/> added. The last one removes the capability, but only when a virtual device added it.
+    /// </summary>
+    /// <param name="capability">One of <see cref="SeatCapability.Pointer"/>, <see cref="SeatCapability.Keyboard"/> or <see cref="SeatCapability.Touch"/>. Other values are ignored.</param>
     public void RemoveVirtualDevice(SeatCapability capability)
     {
         var index = SlotOf(capability);
@@ -104,6 +167,9 @@ public sealed class Seat : IDisposable
         _ => -1,
     };
 
+    /// <summary>
+    /// Gets or sets the advertised capabilities. A change sends <c>wl_seat.capabilities</c> to every bound resource.
+    /// </summary>
     public SeatCapability Capabilities
     {
         get => _capabilities;
@@ -122,6 +188,9 @@ public sealed class Seat : IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys the global at once and releases the keyboard state. A second call has no effect. Use <see cref="Retire"/> to remove a seat while clients run.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -140,9 +209,18 @@ public sealed class Seat : IDisposable
         BasinCounters.Untrack();
     }
 
+    /// <summary>
+    /// Withdraws the global from the registry first and disposes the seat after a grace period, so that clients that bind late do not fail.
+    /// </summary>
+    /// <param name="graceMillis">The maximum delay in milliseconds before the dispose.</param>
     public void Retire(int graceMillis = GlobalRetirement.DefaultGraceMillis) =>
         GlobalRetirement.Retire(Display, _global, Dispose, graceMillis);
 
+    /// <summary>
+    /// Issues a new display serial and records its kind for the serial checks. The seat keeps the last 128 serials.
+    /// </summary>
+    /// <param name="kind">The kind of event that the serial goes with.</param>
+    /// <returns>The serial.</returns>
     public uint NextSerial(SerialKind kind)
     {
         var serial = Display.NextSerial();
@@ -150,6 +228,12 @@ public sealed class Seat : IDisposable
         return serial;
     }
 
+    /// <summary>
+    /// Looks up the kind of a serial that this seat issued.
+    /// </summary>
+    /// <param name="serial">The serial.</param>
+    /// <param name="kind">The kind, or <see cref="SerialKind.Other"/> when it is not found.</param>
+    /// <returns><see langword="false"/> when the serial is not among the last 128 serials.</returns>
     public bool TryGetSerial(uint serial, out SerialKind kind)
     {
         var count = Math.Min(_serialCount, SerialHistory);
@@ -166,12 +250,27 @@ public sealed class Seat : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Checks that a serial is a recent button press, key press or touch down, whether or not it is still held. Use it for popup grabs.
+    /// </summary>
+    /// <param name="serial">The serial from the client request.</param>
+    /// <returns><see langword="true"/> when the serial can take a grab.</returns>
     public bool ValidateGrabSerial(uint serial) =>
         TryGetSerial(serial, out var kind) &&
         kind is SerialKind.PointerButtonPress or SerialKind.KeyPress or SerialKind.TouchDown;
 
+    /// <summary>
+    /// Checks that a serial is any recent serial of this seat. Use it for selection requests.
+    /// </summary>
+    /// <param name="serial">The serial from the client request.</param>
+    /// <returns><see langword="true"/> when the seat issued the serial recently.</returns>
     public bool ValidateSelectionSerial(uint serial) => TryGetSerial(serial, out _);
 
+    /// <summary>
+    /// Checks that a serial authorizes a pointer or touch driven grab now. Use it for interactive move, resize and drag start.
+    /// </summary>
+    /// <param name="serial">The serial from the client request.</param>
+    /// <returns><see langword="true"/> for the press of the held implicit pointer grab, a touch down still on the surface, or a recent key press.</returns>
     public bool ValidateImplicitGrabSerial(uint serial) =>
         TryGetSerial(serial, out var kind) && kind switch
         {

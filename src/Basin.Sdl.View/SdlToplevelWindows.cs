@@ -8,8 +8,15 @@ using static Basin.Sdl.SdlViewLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Gives every <c>xdg_toplevel</c> and <c>xdg_popup</c> an SDL window of its own. Each surface sits in a scene cell, so no two can overlap.
+/// Each window is an advertised output that its surface enters.
+/// </summary>
 public sealed class SdlToplevelWindows : IDisposable
 {
+    /// <summary>
+    /// The vertical distance in logical units between two scene cells.
+    /// </summary>
     public const int CellStride = 16384;
 
     private readonly SdlLoop _loop;
@@ -32,6 +39,9 @@ public sealed class SdlToplevelWindows : IDisposable
     private int _nextCell;
     private bool _disposed;
 
+    /// <summary>
+    /// The state of one toplevel or popup and its window.
+    /// </summary>
     public sealed class Entry
     {
         internal Entry(XdgToplevelWindow toplevel, SceneSurface scene, int cell)
@@ -54,31 +64,72 @@ public sealed class SdlToplevelWindows : IDisposable
             Owner = owner;
         }
 
+        /// <summary>
+        /// Gets the toplevel, or the toplevel that owns the popup chain.
+        /// </summary>
         public XdgToplevelWindow Toplevel { get; }
 
+        /// <summary>
+        /// Gets the popup. It is <see langword="null"/> for a toplevel entry.
+        /// </summary>
         public XdgPopupWindow? Popup { get; }
 
+        /// <summary>
+        /// Gets the entry of the parent of a popup. It is <see langword="null"/> for a toplevel entry.
+        /// </summary>
         public Entry? Owner { get; }
 
+        /// <summary>
+        /// Gets the surface of the toplevel or the popup.
+        /// </summary>
         public Surface Surface { get; }
 
+        /// <summary>
+        /// Gets the drop target of a toplevel window. It is <see langword="null"/> for a popup and while no window exists.
+        /// </summary>
         public SdlDrop? Drop { get; internal set; }
 
+        /// <summary>
+        /// Gets the scene node of the surface in its cell.
+        /// </summary>
         public SceneSurface Scene { get; }
 
+        /// <summary>
+        /// Gets the cell index. A cell is reused after its entry goes away.
+        /// </summary>
         public int Cell { get; }
 
+        /// <summary>
+        /// Gets the name of the output of the entry, for example "toplevel-0" or "popup-3".
+        /// </summary>
         public string Key { get; }
 
+        /// <summary>
+        /// Gets the SDL window of the entry. It is <see langword="null"/> before the first map and after the close.
+        /// </summary>
         public SdlOutputWindow? Window { get; internal set; }
 
+        /// <summary>
+        /// Gets a value indicating whether the window is an advertised output and the surface entered it.
+        /// </summary>
         public bool Advertised { get; internal set; }
 
+        /// <summary>
+        /// Gets a value indicating whether the client draws its own frame, so the window is borderless and transparent.
+        /// </summary>
         public bool ClientDecorated { get; internal set; }
 
         internal (int Width, int Height) FollowedSize;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlToplevelWindows"/> class. It follows the new toplevels and popups of the host shell.
+    /// It turns <see cref="SdlFrameLoop.SuspendWhenHidden"/> off, because a hidden window is ordinary in this mode.
+    /// </summary>
+    /// <param name="loop">The SDL loop that delivers the window events.</param>
+    /// <param name="host">The host whose shell makes the toplevels.</param>
+    /// <param name="device">The render device that every window uses.</param>
+    /// <param name="frames">The frame loop that renders the windows.</param>
     public SdlToplevelWindows(SdlLoop loop, BasinCompositorHost host, ISdlRenderDevice device, SdlFrameLoop frames)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -118,18 +169,43 @@ public sealed class SdlToplevelWindows : IDisposable
         host.Session.BeforeDispatch += _followDrag;
     }
 
+    /// <summary>
+    /// Gets the entries of the popups that exist now.
+    /// </summary>
     public IReadOnlyCollection<Entry> Popups => _popups.Values;
 
+    /// <summary>
+    /// Gets a value indicating whether the SDL driver can place a window. It is <see langword="false"/> on the wayland and offscreen drivers.
+    /// </summary>
     public bool CanMoveWindows { get; } = SDL.GetCurrentVideoDriver() is not ("wayland" or "offscreen");
 
+    /// <summary>
+    /// Gets the entries of the toplevels that exist now.
+    /// </summary>
     public IReadOnlyCollection<Entry> Entries => _entries.Values;
 
+    /// <summary>
+    /// Occurs when a toplevel gets its SDL window at its first map. Popups do not raise it.
+    /// </summary>
     public event Action<Entry>? WindowOpened;
 
+    /// <summary>
+    /// Occurs when the window of a toplevel or a popup closes, after the window is disposed.
+    /// </summary>
     public event Action<Entry>? WindowClosed;
 
+    /// <summary>
+    /// Finds the entry of a toplevel.
+    /// </summary>
+    /// <param name="toplevel">The toplevel.</param>
+    /// <returns>The entry, or <see langword="null"/> when the toplevel is unknown.</returns>
     public Entry? EntryOf(XdgToplevelWindow toplevel) => _entries.GetValueOrDefault(toplevel);
 
+    /// <summary>
+    /// Finds the toplevel entry that a window shows. Popup windows are not searched.
+    /// </summary>
+    /// <param name="window">The window.</param>
+    /// <returns>The entry, or <see langword="null"/> when no toplevel uses the window.</returns>
     public Entry? EntryOf(SdlOutputWindow window)
     {
         foreach (var entry in _entries.Values)
@@ -803,6 +879,9 @@ public sealed class SdlToplevelWindows : IDisposable
         entry.Scene.Destroy();
     }
 
+    /// <summary>
+    /// Stops following the shell and closes every popup and toplevel window. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

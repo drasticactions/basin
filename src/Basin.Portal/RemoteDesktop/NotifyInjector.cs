@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Turns the RemoteDesktop <c>Notify*</c> calls into <see cref="IInputSink"/> events. It records pressed buttons, keys and touches, so that <see cref="ReleaseAll"/> can release them.
+/// </summary>
 public sealed class NotifyInjector : IDisposable
 {
     private const uint AxisVertical = 0;
@@ -20,6 +23,13 @@ public sealed class NotifyInjector : IDisposable
     private IInjectedKeyboard? _keyboard;
     private bool _keyboardTried;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="NotifyInjector"/> class.
+    /// </summary>
+    /// <param name="sink">The sink that receives the events.</param>
+    /// <param name="keycodes">The keymap lookup for keysym input, or <see langword="null"/> to ignore keysyms.</param>
+    /// <param name="layout">The layout whose bounds scale the absolute positions.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="sink"/> or <paramref name="layout"/> is <see langword="null"/>.</exception>
     public NotifyInjector(IInputSink sink, IKeymapLookup? keycodes, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -29,20 +39,40 @@ public sealed class NotifyInjector : IDisposable
         _layout = layout;
     }
 
+    /// <summary>
+    /// Gets or sets the function that gives the layout box of a stream from its PipeWire node id. Absolute and touch events for a stream with no box are dropped.
+    /// </summary>
     public Func<uint, Box?>? StreamBox { get; set; }
 
+    /// <summary>
+    /// Gets the number of pointer buttons that are pressed now.
+    /// </summary>
     public int PressedButtons => _pressedButtons.Count;
 
+    /// <summary>
+    /// Gets the number of keys that are pressed now.
+    /// </summary>
     public int PressedKeys => _pressedKeys.Count;
 
     private static uint Now => (uint)(MonotonicClock.Nanos / 1_000_000);
 
+    /// <summary>
+    /// Moves the pointer by a relative amount and sends a frame.
+    /// </summary>
+    /// <param name="dx">The horizontal motion in logical pixels.</param>
+    /// <param name="dy">The vertical motion in logical pixels.</param>
     public void Motion(double dx, double dy)
     {
         _sink.PointerMotion(Now, dx, dy);
         _sink.Frame();
     }
 
+    /// <summary>
+    /// Moves the pointer to a position in a stream and sends a frame. The position is clamped to the stream box.
+    /// </summary>
+    /// <param name="stream">The PipeWire node id of the stream.</param>
+    /// <param name="x">The x position in the stream, in logical pixels.</param>
+    /// <param name="y">The y position in the stream, in logical pixels.</param>
     public void MotionAbsolute(uint stream, double x, double y)
     {
         if (!TryMap(stream, x, y, out var layoutX, out var layoutY))
@@ -55,6 +85,11 @@ public sealed class NotifyInjector : IDisposable
         _sink.Frame();
     }
 
+    /// <summary>
+    /// Presses or releases a pointer button and sends a frame.
+    /// </summary>
+    /// <param name="button">The evdev button code.</param>
+    /// <param name="pressed"><see langword="true"/> to press.</param>
     public void Button(int button, bool pressed)
     {
         var code = unchecked((uint)button);
@@ -71,6 +106,12 @@ public sealed class NotifyInjector : IDisposable
         _sink.Frame();
     }
 
+    /// <summary>
+    /// Sends a finger scroll on each axis that moved, and a frame.
+    /// </summary>
+    /// <param name="dx">The horizontal scroll distance.</param>
+    /// <param name="dy">The vertical scroll distance.</param>
+    /// <param name="finish"><see langword="true"/> to stop the scroll on both axes.</param>
     public void Axis(double dx, double dy, bool finish)
     {
         var time = Now;
@@ -94,6 +135,11 @@ public sealed class NotifyInjector : IDisposable
         _sink.Frame();
     }
 
+    /// <summary>
+    /// Sends wheel steps as a wheel scroll of 15 units per step, and a frame.
+    /// </summary>
+    /// <param name="axis">1 for horizontal. Any other value is vertical.</param>
+    /// <param name="steps">The number of steps, with the sign for the direction.</param>
     public void AxisDiscrete(uint axis, int steps)
     {
         _sink.PointerAxisSource(SourceWheel);
@@ -101,6 +147,11 @@ public sealed class NotifyInjector : IDisposable
         _sink.Frame();
     }
 
+    /// <summary>
+    /// Presses or releases a key on the injected keyboard, which the first key creates.
+    /// </summary>
+    /// <param name="keycode">The evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> to press.</param>
     public void Keycode(int keycode, bool pressed)
     {
         var code = unchecked((uint)keycode);
@@ -117,6 +168,12 @@ public sealed class NotifyInjector : IDisposable
         _sink.Key(_keyboard, Now, code, pressed);
     }
 
+    /// <summary>
+    /// Presses or releases the key that types a keysym. When the keysym needs Shift and Shift is not down, the call wraps the key in a Shift press and release.
+    /// </summary>
+    /// <param name="keysym">The XKB keysym.</param>
+    /// <param name="pressed"><see langword="true"/> to press.</param>
+    /// <returns><see langword="false"/> when no keymap lookup is set or no key types the keysym.</returns>
     public bool Keysym(int keysym, bool pressed)
     {
         if (_keycodes is null || !_keycodes.TryKeycodeForKeysym(unchecked((uint)keysym), out var keycode, out var modifiers))
@@ -150,6 +207,13 @@ public sealed class NotifyInjector : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Starts a touch point at a position in a stream. The position is clamped to the stream box.
+    /// </summary>
+    /// <param name="stream">The PipeWire node id of the stream.</param>
+    /// <param name="slot">The touch slot.</param>
+    /// <param name="x">The x position in the stream, in logical pixels.</param>
+    /// <param name="y">The y position in the stream, in logical pixels.</param>
     public void TouchDown(uint stream, uint slot, double x, double y)
     {
         if (!TryMap(stream, x, y, out var layoutX, out var layoutY))
@@ -165,6 +229,13 @@ public sealed class NotifyInjector : IDisposable
         }
     }
 
+    /// <summary>
+    /// Moves a touch point to a position in a stream. The position is clamped to the stream box.
+    /// </summary>
+    /// <param name="stream">The PipeWire node id of the stream.</param>
+    /// <param name="slot">The touch slot.</param>
+    /// <param name="x">The x position in the stream, in logical pixels.</param>
+    /// <param name="y">The y position in the stream, in logical pixels.</param>
     public void TouchMotion(uint stream, uint slot, double x, double y)
     {
         if (!TryMap(stream, x, y, out var layoutX, out var layoutY))
@@ -179,6 +250,10 @@ public sealed class NotifyInjector : IDisposable
         }
     }
 
+    /// <summary>
+    /// Ends a touch point.
+    /// </summary>
+    /// <param name="slot">The touch slot.</param>
     public void TouchUp(uint slot)
     {
         _touches.Remove((int)slot);
@@ -188,6 +263,9 @@ public sealed class NotifyInjector : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases every pressed button and key, and cancels the touch points.
+    /// </summary>
     public void ReleaseAll()
     {
         var time = Now;
@@ -215,6 +293,9 @@ public sealed class NotifyInjector : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases everything that is pressed and destroys the injected keyboard.
+    /// </summary>
     public void Dispose()
     {
         ReleaseAll();

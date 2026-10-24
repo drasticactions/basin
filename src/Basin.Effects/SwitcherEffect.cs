@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs a cover switcher. The windows fly from their places into a row of turned cards around the selected one, and fly back at the end.
+/// </summary>
 public sealed class SwitcherEffect
 {
     private struct Pose
@@ -35,6 +38,12 @@ public sealed class SwitcherEffect
     private double _camera;
     private EffectTimeline _timeline;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SwitcherEffect"/> class.
+    /// </summary>
+    /// <param name="maxYawRadians">The turn of a card beside the selected one, in radians.</param>
+    /// <param name="flyNanos">The length of the fly in and the fly out, in nanoseconds.</param>
+    /// <param name="retargetNanos">The length of the move after a new selection, in nanoseconds.</param>
     public SwitcherEffect(double maxYawRadians = 0.96, long flyNanos = 260_000_000, long retargetNanos = 170_000_000)
     {
         _maxYaw = maxYawRadians;
@@ -43,14 +52,33 @@ public sealed class SwitcherEffect
         _timeline.Easing = EasingCurve.Sigmoid;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the switcher shows cards.
+    /// </summary>
     public bool IsActive => _count > 0;
 
+    /// <summary>
+    /// Gets the length of the fly in and the fly out, in nanoseconds.
+    /// </summary>
     public long FlyNanos => _flyNanos;
 
+    /// <summary>
+    /// Gets a value indicating whether the cards fly back to their windows.
+    /// </summary>
     public bool IsDismissing => _ending;
 
+    /// <summary>
+    /// Gets the index of the selected card.
+    /// </summary>
     public int Selected => _selected;
 
+    /// <summary>
+    /// Shows the switcher with one card per window, and ends a switcher that runs. A window with empty content gets no card.
+    /// </summary>
+    /// <param name="stacks">The transform stacks of the windows, in card order.</param>
+    /// <param name="area">The output area that the cards fill, in scene coordinates.</param>
+    /// <param name="selected">The index of the selected card, clamped to the list.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stacks"/> is <see langword="null"/>.</exception>
     public void Begin(IReadOnlyList<TransformStack> stacks, in Box area, int selected)
     {
         ArgumentNullException.ThrowIfNull(stacks);
@@ -83,6 +111,10 @@ public sealed class SwitcherEffect
         _timeline.Start(_flyNanos);
     }
 
+    /// <summary>
+    /// Selects a card and moves the row from the current poses. It does nothing during the fly out.
+    /// </summary>
+    /// <param name="index">The index of the card, clamped to the list.</param>
     public void Select(int index)
     {
         if (_count == 0 || _ending)
@@ -100,6 +132,9 @@ public sealed class SwitcherEffect
         _timeline.Start(_retargetNanos);
     }
 
+    /// <summary>
+    /// Starts the fly out, from the current poses back to the windows.
+    /// </summary>
     public void End()
     {
         if (_count == 0 || _ending)
@@ -118,6 +153,11 @@ public sealed class SwitcherEffect
         _timeline.Start(_flyNanos);
     }
 
+    /// <summary>
+    /// Applies the poses for a tick. At the end of the fly out it removes every card node.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the switcher shows, and <see langword="false"/> after the fly out.</returns>
     public bool Step(in FrameTick tick)
     {
         if (_count == 0)

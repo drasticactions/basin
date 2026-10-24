@@ -7,6 +7,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// A Quill surface of a <see cref="QuillUIHost"/>. Each frame starts transparent in a new or spare Argb8888 dmabuf and ends with a write fence. Use it on the thread that created it.
+/// </summary>
 public sealed class QuillUISurface : IQuillUISurface
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -55,6 +58,9 @@ public sealed class QuillUISurface : IQuillUISurface
         _renderer = new QuillCanvasRenderer(device.Gl, program, textures);
     }
 
+    /// <summary>
+    /// Gets the surface canvas. The surface builds it on the first use, on <see cref="Renderer"/> with <see cref="Atlas"/>.
+    /// </summary>
     public Canvas Canvas
     {
         get
@@ -64,10 +70,13 @@ public sealed class QuillUISurface : IQuillUISurface
         }
     }
 
+    /// <inheritdoc/>
     public ICanvasRenderer Renderer => _renderer;
 
+    /// <inheritdoc/>
     public FontAtlasSettings Atlas => _atlas;
 
+    /// <inheritdoc/>
     public UISurfaceSize Size
     {
         get
@@ -77,12 +86,24 @@ public sealed class QuillUISurface : IQuillUISurface
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the surface takes input. It is always <see langword="true"/>.
+    /// </summary>
     public bool AcceptsInput => true;
 
+    /// <inheritdoc/>
     public void AddObserver(IUISurfaceObserver observer) => _observers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(IUISurfaceObserver observer) => _observers.Remove(observer);
 
+    /// <summary>
+    /// Sets the logical size and the scale for the next frame. A change takes a spare buffer or allocates one, and the frame on screen stays valid until the next <see cref="TryAcquire"/>.
+    /// </summary>
+    /// <param name="logicalWidth">The width in logical pixels. It must be positive.</param>
+    /// <param name="logicalHeight">The height in logical pixels. It must be positive.</param>
+    /// <param name="scale">The scale from logical to buffer pixels. The surface snaps it.</param>
+    /// <returns><see langword="false"/> when a value is not valid, the surface is disposed or drawing, or the allocation fails.</returns>
     public bool Configure(int logicalWidth, int logicalHeight, double scale)
     {
         _thread.Assert();
@@ -128,6 +149,11 @@ public sealed class QuillUISurface : IQuillUISurface
         return true;
     }
 
+    /// <summary>
+    /// Starts a frame in the buffer that the next <see cref="TryAcquire"/> shows. It waits for the readers of the buffer and clears it to transparent.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The surface is disposed.</exception>
+    /// <exception cref="InvalidOperationException">A frame is in progress, or <see cref="Configure"/> has not succeeded.</exception>
     public void BeginTarget()
     {
         _thread.Assert();
@@ -166,6 +192,7 @@ public sealed class QuillUISurface : IQuillUISurface
         _canvasFrame = false;
     }
 
+    /// <inheritdoc/>
     public Canvas BeginDraw()
     {
         BeginTarget();
@@ -175,6 +202,10 @@ public sealed class QuillUISurface : IQuillUISurface
         return canvas;
     }
 
+    /// <summary>
+    /// Finishes the frame and publishes a write fence on the dmabuf. Without a fence, it waits for the GPU. When the frame went into the buffer on screen, the observers get damage for the whole surface.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No frame is in progress.</exception>
     public void EndTarget()
     {
         _thread.Assert();
@@ -202,6 +233,10 @@ public sealed class QuillUISurface : IQuillUISurface
         }
     }
 
+    /// <summary>
+    /// Renders the surface canvas and finishes the frame with <see cref="EndTarget"/>.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No frame that <see cref="BeginDraw"/> started is in progress.</exception>
     public void EndDraw()
     {
         _thread.Assert();
@@ -224,6 +259,11 @@ public sealed class QuillUISurface : IQuillUISurface
         EndTarget();
     }
 
+    /// <summary>
+    /// Takes the last drawn frame for display. The frame carries no damage, so the whole buffer counts as changed.
+    /// </summary>
+    /// <param name="frame">The frame. The caller must dispose it to release the buffer lock.</param>
+    /// <returns><see langword="false"/> when the surface is disposed or has not drawn since the last <see cref="Configure"/> that changed the buffer.</returns>
     public bool TryAcquire(out UIFrame frame)
     {
         _thread.Assert();
@@ -244,34 +284,78 @@ public sealed class QuillUISurface : IQuillUISurface
         return true;
     }
 
+    /// <summary>
+    /// Finds whether a point is inside the surface. Every point inside takes input.
+    /// </summary>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
+    /// <returns><see langword="true"/> when the point is inside the logical size and the surface is live.</returns>
     public bool AcceptsInputAt(double x, double y)
     {
         _thread.Assert();
         return !_disposed && x >= 0 && y >= 0 && x < _width && y < _height;
     }
 
+    /// <summary>
+    /// Gets no cursor. The surface leaves the cursor to the compositor.
+    /// </summary>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public string? CursorAt(double x, double y) => null;
 
+    /// <summary>
+    /// Ignores the pointer. The surface has no input handling of its own.
+    /// </summary>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
     public void NotifyPointerEnter(double x, double y)
     {
     }
 
+    /// <summary>
+    /// Ignores the motion.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="x">The surface-local x coordinate in logical pixels.</param>
+    /// <param name="y">The surface-local y coordinate in logical pixels.</param>
     public void NotifyPointerMotion(uint timeMs, double x, double y)
     {
     }
 
+    /// <summary>
+    /// Ignores the button.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="button">The evdev button code.</param>
+    /// <param name="pressed"><see langword="true"/> when the button went down.</param>
     public void NotifyPointerButton(uint timeMs, uint button, bool pressed)
     {
     }
 
+    /// <summary>
+    /// Ignores the scroll.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="dx">The horizontal scroll distance.</param>
+    /// <param name="dy">The vertical scroll distance.</param>
     public void NotifyPointerAxis(uint timeMs, double dx, double dy)
     {
     }
 
+    /// <summary>
+    /// Ignores the leave.
+    /// </summary>
     public void NotifyPointerLeave()
     {
     }
 
+    /// <summary>
+    /// Creates a separate Quill surface of the same host with the size of the anchor box and the scale of this surface. The caller owns the popup and places it.
+    /// </summary>
+    /// <param name="anchor">The anchor box in surface-local logical coordinates. An empty side becomes 1.</param>
+    /// <param name="gravity">The popup direction. The surface ignores it.</param>
+    /// <returns>The popup, or <see langword="null"/> when this surface is disposed or the allocation fails.</returns>
     public IUISurface? CreatePopup(in Box anchor, UIPopupGravity gravity)
     {
         _thread.Assert();
@@ -292,6 +376,9 @@ public sealed class QuillUISurface : IQuillUISurface
         return popup;
     }
 
+    /// <summary>
+    /// Abandons a frame in progress, releases the canvas and the GPU targets, destroys the buffers and tells the observers. A buffer that a frame still locks is destroyed too.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

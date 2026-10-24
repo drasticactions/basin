@@ -1,11 +1,23 @@
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// The Prowl.Quill shaders that both Quill backends use: a GLSL ES 3.00 pair for GL and a SPIR-V pair for Vulkan. The constants name the source.
+/// </summary>
 public static class QuillShaders
 {
+    /// <summary>
+    /// The Prowl.Quill package that the shaders come from.
+    /// </summary>
     public const string SourcePackage = "Prowl.Quill 3.5.6";
 
+    /// <summary>
+    /// The Prowl.Quill commit that the shaders come from.
+    /// </summary>
     public const string SourceCommit = "22c1b948521f21a3334e8387222756e3a40f85af";
 
+    /// <summary>
+    /// The GLSL ES 3.00 vertex shader.
+    /// </summary>
     public const string Vertex = """
         #version 300 es
         precision highp float;
@@ -56,6 +68,9 @@ public static class QuillShaders
         }
         """;
 
+    /// <summary>
+    /// The GLSL ES 3.00 fragment shader. It draws the brush, the text atlas, the scissor and the edge antialiasing.
+    /// </summary>
     public const string Fragment = """
         #version 300 es
         precision highp float;
@@ -243,6 +258,9 @@ public static class QuillShaders
         }
         """;
 
+    /// <summary>
+    /// Gets the SPIR-V bytes of the vertex shader for Vulkan.
+    /// </summary>
     public static ReadOnlySpan<byte> VertexSpirv =>
     [
         0x03, 0x02, 0x23, 0x07, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x28, 0x00, 0x3C, 0x00, 0x00, 0x00,
@@ -378,6 +396,9 @@ public static class QuillShaders
         0x3B, 0x00, 0x00, 0x00, 0x1C, 0x00, 0x00, 0x00, 0xFD, 0x00, 0x01, 0x00, 0x38, 0x00, 0x01, 0x00,
     ];
 
+    /// <summary>
+    /// Gets the SPIR-V bytes of the fragment shader for Vulkan.
+    /// </summary>
     public static ReadOnlySpan<byte> FragmentSpirv =>
     [
         0x03, 0x02, 0x23, 0x07, 0x00, 0x03, 0x01, 0x00, 0x00, 0x00, 0x28, 0x00, 0x0E, 0x02, 0x00, 0x00,

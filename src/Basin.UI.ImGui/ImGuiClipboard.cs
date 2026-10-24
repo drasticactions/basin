@@ -3,6 +3,9 @@ using Basin.Capabilities;
 
 namespace Basin.UI.ImGui;
 
+/// <summary>
+/// Connects the ImGui clipboard callbacks to the compositor clipboard selection. It keeps a UTF-8 copy of the text so that ImGui can read it at any time.
+/// </summary>
 public sealed unsafe class ImGuiClipboard : IDisposable
 {
     private static readonly string[] TextMimeTypes =
@@ -31,6 +34,11 @@ public sealed unsafe class ImGuiClipboard : IDisposable
     private int _length;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImGuiClipboard"/> class. It starts to read the current clipboard text and follows each later change of the clipboard.
+    /// </summary>
+    /// <param name="store">The selection store that holds the clipboard.</param>
+    /// <param name="loop">The loop that reads the selection pipe without blocking.</param>
     public ImGuiClipboard(ISelectionStore store, ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -43,10 +51,17 @@ public sealed unsafe class ImGuiClipboard : IDisposable
         Refresh();
     }
 
+    /// <summary>
+    /// Gets the UTF-8 clipboard text, without a terminator. It is empty while a read is in progress, or when the clipboard offers no text type.
+    /// </summary>
     public ReadOnlySpan<byte> Text => _text is null ? default : new ReadOnlySpan<byte>(_text, _length);
 
     internal byte* NativeText => _text;
 
+    /// <summary>
+    /// Sets the clipboard selection to a copy of the text. The selection offers the usual text MIME types. The call does nothing after <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="utf8">The UTF-8 text, without a terminator.</param>
     public void SetText(ReadOnlySpan<byte> utf8)
     {
         if (_disposed)
@@ -68,6 +83,9 @@ public sealed unsafe class ImGuiClipboard : IDisposable
         _store.SetSelection(SelectionKind.Clipboard, source, SelectionSerial.Unchecked);
     }
 
+    /// <summary>
+    /// Stops following the clipboard, closes a read in progress and frees the text copy. A selection that <see cref="SetText"/> set stays in the store.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

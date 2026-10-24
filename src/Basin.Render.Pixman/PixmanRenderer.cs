@@ -2,23 +2,37 @@ using Pixman;
 
 namespace Basin.Render.Pixman;
 
+/// <summary>
+/// The software reference renderer. It draws into CPU-accessible shm buffers through pixman.
+/// It applies color transforms through a 3D LUT and never signals a render fence.
+/// </summary>
 public sealed class PixmanRenderer : IRenderer
 {
     private readonly Dictionary<IBuffer, TargetEntry> _targets = [];
     private readonly PixmanRenderPass _pass = new();
 
+    /// <inheritdoc/>
     public ITexture? ImportTexture(IBuffer buffer) => Supports(buffer.Format) ? new PixmanTexture(buffer) : null;
 
+    /// <inheritdoc/>
     public IReadOnlyList<DrmFormat> ShmTextureFormats => ShmFormatLists.Integer;
 
+    /// <summary>
+    /// Creates a render stack with a new <see cref="PixmanRenderer"/> and no device allocator.
+    /// </summary>
+    /// <returns>A stack that renders into shm buffers only.</returns>
     public static RenderStack CreateStack() => new(new PixmanRenderer(), null);
 
+    /// <inheritdoc/>
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Lut3D;
 
+    /// <inheritdoc/>
     public RenderFencePrecision FencePrecision => RenderFencePrecision.None;
 
+    /// <inheritdoc/>
     public IColorLut? ImportLut(ColorLut3D lut) => new PixmanColorLut(lut);
 
+    /// <inheritdoc/>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         RenderFences.WaitSyncFile(options.WaitFenceFd);
@@ -57,6 +71,7 @@ public sealed class PixmanRenderer : IRenderer
         return entry;
     }
 
+    /// <inheritdoc/>
     public void Dispose()
     {
         foreach (var entry in _targets.Values)

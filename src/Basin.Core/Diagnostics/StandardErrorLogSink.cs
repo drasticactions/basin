@@ -1,9 +1,13 @@
 namespace Basin.Diagnostics;
 
+/// <summary>
+/// A log sink that writes <c>[level] category: message</c> lines to standard error. It is safe to use from many threads.
+/// </summary>
 public sealed class StandardErrorLogSink : IBasinLogSink
 {
     private readonly Lock _gate = new();
 
+    /// <inheritdoc/>
     public void Write(BasinLogLevel level, string category, ReadOnlySpan<char> message)
     {
         lock (_gate)
@@ -22,6 +26,9 @@ public sealed class StandardErrorLogSink : IBasinLogSink
         }
     }
 
+    /// <summary>
+    /// Flushes standard error under the sink lock.
+    /// </summary>
     public void Flush()
     {
         lock (_gate)

@@ -7,6 +7,10 @@ using Wayland;
 
 namespace Basin.Backend.Wayland;
 
+/// <summary>
+/// The chrome around a nested output's window, for a parent that does not draw decorations. It shows four bands cut from one buffer around the output.
+/// The consumer draws every pixel and decides what each input means.
+/// </summary>
 public sealed class WaylandHostFrame : IDisposable
 {
     private const int ProtReadWrite = 3;
@@ -77,8 +81,10 @@ public sealed class WaylandHostFrame : IDisposable
         }
     }
 
+    /// <summary>Gets the band widths that <see cref="SetInsets(HostFrameInsets, HostFrameInsets)"/> set last, shadow included, in logical pixels.</summary>
     public HostFrameInsets Insets => _insets;
 
+    /// <summary>Gets the part of each inset that is a drop shadow. The window geometry and the input regions leave it out.</summary>
     public HostFrameInsets Shadow => _shadow;
 
     internal HostFrameInsets VisibleInsets => new(
@@ -86,32 +92,59 @@ public sealed class WaylandHostFrame : IDisposable
 
     internal bool HasContent => _attached;
 
+    /// <summary>Gets the width of the output plus the left and right insets, in logical pixels. It is 0 before the output has a mode.</summary>
     public int OuterWidth => _output.CurrentMode.Width == 0 ? 0 : _output.ContentLogicalWidth + _insets.Left + _insets.Right;
 
+    /// <summary>Gets the height of the output plus the top and bottom insets, in logical pixels. It is 0 before the output has a mode.</summary>
     public int OuterHeight => _output.CurrentMode.Height == 0 ? 0 : _output.ContentLogicalHeight + _insets.Top + _insets.Bottom;
 
+    /// <summary>Gets the output scale. A buffer for <see cref="Attach"/> has the outer size times this scale.</summary>
     public double Scale => _output.Scale;
 
+    /// <summary>Gets a value indicating whether the parent window is active.</summary>
     public bool Activated { get; internal set; }
 
+    /// <summary>Gets a value indicating whether the parent window is maximized.</summary>
     public bool Maximized { get; internal set; }
 
+    /// <summary>Gets a value indicating whether the parent window is fullscreen.</summary>
     public bool Fullscreen { get; internal set; }
 
+    /// <summary>Gets a value indicating whether an interactive resize of the parent window is in progress.</summary>
     public bool Resizing { get; internal set; }
 
+    /// <summary>
+    /// Occurs when <see cref="Activated"/>, <see cref="Maximized"/>, <see cref="Fullscreen"/>, <see cref="Resizing"/> or <see cref="Title"/> changes.
+    /// </summary>
     public event Action? StateChanged;
 
+    /// <summary>Occurs when the pointer enters a band. The arguments are X and Y in logical pixels from the top-left of the outer box.</summary>
     public event Action<double, double>? PointerEnter;
 
+    /// <summary>
+    /// Occurs when the pointer moves over a band. The arguments are the time in milliseconds and X and Y in logical pixels from the top-left of the outer box.
+    /// </summary>
     public event Action<uint, double, double>? PointerMotion;
 
+    /// <summary>
+    /// Occurs when a button changes state over a band. The arguments are the time in milliseconds, the Linux input event code and the pressed state.
+    /// </summary>
     public event Action<uint, uint, bool>? PointerButton;
 
+    /// <summary>Occurs when the pointer leaves the bands, or when the parent removes the pointer while it is on them.</summary>
     public event Action? PointerLeave;
 
+    /// <summary>Sets the band widths with no shadow. Empty insets hide the bands.</summary>
+    /// <param name="insets">The band widths in logical pixels.</param>
+    /// <returns><see langword="false"/> when the frame is disposed or an inset is negative.</returns>
     public bool SetInsets(HostFrameInsets insets) => SetInsets(insets, default);
 
+    /// <summary>
+    /// Sets the band widths and the shadow part of each one, and configures the output again. Empty insets hide the bands.
+    /// </summary>
+    /// <param name="insets">The band widths in logical pixels, shadow included.</param>
+    /// <param name="shadow">The shadow part of each band. Each side must be from 0 to the matching inset.</param>
+    /// <returns><see langword="false"/> when the frame is disposed or a value is out of range.</returns>
     public bool SetInsets(HostFrameInsets insets, HostFrameInsets shadow)
     {
         if (_disposed)
@@ -164,6 +197,13 @@ public sealed class WaylandHostFrame : IDisposable
         _backend.Flush();
     }
 
+    /// <summary>
+    /// Shows <paramref name="buffer"/> in the bands and commits them. A dmabuf the parent accepts is shared, and other buffers are copied into shm.
+    /// </summary>
+    /// <param name="buffer">The chrome image for the whole outer box, in physical pixels.</param>
+    /// <param name="damage">The changed area in outer-box coordinates, or <see langword="null"/> for all of it.</param>
+    /// <returns><see langword="false"/> when the frame is disposed, the insets are empty, the size does not match or the buffer cannot be imported.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="buffer"/> is <see langword="null"/>.</exception>
     public bool Attach(IBuffer buffer, PixmanRegion32? damage = null)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -206,16 +246,25 @@ public sealed class WaylandHostFrame : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Shows a named Xcursor theme cursor over the bands, at the frame's scale. An unknown name shows <c>left_ptr</c>.
+    /// </summary>
+    /// <param name="name">The Xcursor name, for example <c>top_left_corner</c>.</param>
+    /// <returns><see langword="false"/> when the frame is disposed, the seat has no pointer or no cursor loads.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public bool ShowCursor(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
         return !_disposed && _backend.ShowFrameCursor(name, Scale);
     }
 
+    /// <summary>Raises the output's <see cref="WaylandOutput.CloseRequested"/> event.</summary>
     public void RequestClose() => _output.RequestClose();
 
+    /// <summary>Gets the title of the output's parent window.</summary>
     public string Title => _output.Title;
 
+    /// <summary>Starts an interactive move of the parent window. It needs a pointer serial from the parent, and it does nothing without one.</summary>
     public void StartMove()
     {
         if (!_disposed && _backend.ParentSeat is { } seat && _backend.LastPointerSerial is { } serial)
@@ -225,6 +274,8 @@ public sealed class WaylandHostFrame : IDisposable
         }
     }
 
+    /// <summary>Starts an interactive resize of the parent window. It needs a pointer serial from the parent, and it does nothing without one.</summary>
+    /// <param name="edges">The edges to move. <see cref="HostFrameEdges.None"/> does nothing.</param>
     public void StartResize(HostFrameEdges edges)
     {
         if (edges == HostFrameEdges.None)
@@ -239,6 +290,8 @@ public sealed class WaylandHostFrame : IDisposable
         }
     }
 
+    /// <summary>Asks the parent to maximize or restore the window. The parent decides, and <see cref="StateChanged"/> reports the result.</summary>
+    /// <param name="maximized"><see langword="true"/> to maximize, <see langword="false"/> to restore.</param>
     public void SetMaximized(bool maximized)
     {
         if (_disposed)
@@ -258,6 +311,7 @@ public sealed class WaylandHostFrame : IDisposable
         _backend.Flush();
     }
 
+    /// <summary>Asks the parent to minimize the window.</summary>
     public void SetMinimized()
     {
         if (!_disposed)
@@ -267,6 +321,7 @@ public sealed class WaylandHostFrame : IDisposable
         }
     }
 
+    /// <summary>Releases the imported buffers and the shm slots and destroys the band surfaces. A second call does nothing.</summary>
     public void Dispose()
     {
         if (_disposed)

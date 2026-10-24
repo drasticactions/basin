@@ -4,6 +4,10 @@ using static Basin.Sdl.SdlViewLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Runs the compositor host inside the SDL loop: wait, drain, tick. A present is capped at one per frame interval.
+/// An idle host blocks in the SDL wait and does no work.
+/// </summary>
 public sealed class SdlFrameLoop : IDisposable
 {
     private readonly SdlLoop _loop;
@@ -18,6 +22,11 @@ public sealed class SdlFrameLoop : IDisposable
     private bool _wantedDuringTick;
     private long _lastFrameDone;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlFrameLoop"/> class with no windows.
+    /// </summary>
+    /// <param name="loop">The SDL loop to pump.</param>
+    /// <param name="host">The host to tick.</param>
     public SdlFrameLoop(SdlLoop loop, BasinCompositorHost host)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -35,10 +44,20 @@ public sealed class SdlFrameLoop : IDisposable
         host.Scene.FrameRequested += _onFrameRequested;
     }
 
+    /// <summary>
+    /// Gets the number of ticks that presented at least one window.
+    /// </summary>
     public long Frames { get; private set; }
 
+    /// <summary>
+    /// Gets the windows that the loop renders, in the order they were added.
+    /// </summary>
     public IReadOnlyList<SdlOutputWindow> Windows => _windows;
 
+    /// <summary>
+    /// Adds a window to render, and sets <see cref="FrameInterval"/> from the fastest window.
+    /// </summary>
+    /// <param name="window">The window to add.</param>
     public void Add(SdlOutputWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -47,6 +66,11 @@ public sealed class SdlFrameLoop : IDisposable
         FollowRefresh();
     }
 
+    /// <summary>
+    /// Removes a window, and sets <see cref="FrameInterval"/> from the fastest window that remains.
+    /// </summary>
+    /// <param name="window">The window to remove.</param>
+    /// <returns><see langword="true"/> when the window was in the loop.</returns>
     public bool Remove(SdlOutputWindow window)
     {
         window.DisplayChanged -= _onDisplayChanged;
@@ -79,10 +103,20 @@ public sealed class SdlFrameLoop : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Gets the number of ticks that entered a frame.
+    /// </summary>
     public long Pumps { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the shortest time between two presents and between two frame-done events.
+    /// A window that is added, removed or moved to another display sets it again from the fastest refresh rate, or 60 Hz.
+    /// </summary>
     public TimeSpan FrameInterval { get; set; } = TimeSpan.FromSeconds(1.0 / 60.0);
 
+    /// <summary>
+    /// Gets or sets a value indicating whether every window repaints once per frame interval, with or without damage.
+    /// </summary>
     public bool Continuous { get; set; }
 
     private long _lastPresent;
@@ -94,6 +128,10 @@ public sealed class SdlFrameLoop : IDisposable
         return remaining <= 0 ? 0 : (int)Math.Ceiling(remaining * 1000.0 / Stopwatch.Frequency);
     }
 
+    /// <summary>
+    /// Computes how long the next wait for SDL events can take, from pending work, the next present and the next frame callback.
+    /// </summary>
+    /// <returns>The wait in milliseconds, 0 to poll, or -1 to wait with no limit.</returns>
     public int Timeout()
     {
         var idle = _loop.IdleTimeout();
@@ -134,6 +172,11 @@ public sealed class SdlFrameLoop : IDisposable
         return remaining <= 0 ? 0 : (int)Math.Ceiling(remaining * 1000.0 / Stopwatch.Frequency);
     }
 
+    /// <summary>
+    /// Runs one iteration: waits for events, drains them, follows window visibility, and ticks the host when work is due.
+    /// </summary>
+    /// <param name="maxWaitMs">The longest wait in milliseconds, or -1 for no extra limit.</param>
+    /// <returns><see langword="false"/> when SDL or the consumer asked to quit.</returns>
     public bool RunOnce(int maxWaitMs = -1)
     {
         var timeout = Timeout();
@@ -168,6 +211,10 @@ public sealed class SdlFrameLoop : IDisposable
         return !_loop.QuitRequested;
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the loop suspends the host while every window is hidden, minimized or occluded.
+    /// With no windows, or when this is <see langword="false"/>, the loop resumes a suspended host.
+    /// </summary>
     public bool SuspendWhenHidden { get; set; } = true;
 
     private void FollowVisibility()
@@ -198,6 +245,9 @@ public sealed class SdlFrameLoop : IDisposable
         }
     }
 
+    /// <summary>
+    /// Calls <see cref="RunOnce"/> until a quit is requested.
+    /// </summary>
     public void Run()
     {
         while (RunOnce())
@@ -279,6 +329,9 @@ public sealed class SdlFrameLoop : IDisposable
         _host.Scene.SendFrameDone((uint)Environment.TickCount);
     }
 
+    /// <summary>
+    /// Stops following the frame requests of the scene and the exposed events of the loop. It does not dispose the windows.
+    /// </summary>
     public void Dispose()
     {
         _host.Scene.FrameRequested -= _onFrameRequested;

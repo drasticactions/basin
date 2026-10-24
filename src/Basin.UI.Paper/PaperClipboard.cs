@@ -5,6 +5,9 @@ using Prowl.PaperUI;
 
 namespace Basin.UI.Paper;
 
+/// <summary>
+/// A Paper clipboard handler over the compositor clipboard selection. It reads text from clients on the compositor loop.
+/// </summary>
 public sealed class PaperClipboard : IClipboardHandler, IDisposable
 {
     private static readonly string[] TextMimeTypes =
@@ -31,6 +34,11 @@ public sealed class PaperClipboard : IClipboardHandler, IDisposable
     private string _text = string.Empty;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PaperClipboard"/> class and starts to read the current clipboard text.
+    /// </summary>
+    /// <param name="store">The selection store.</param>
+    /// <param name="loop">The compositor loop that reads the client pipes.</param>
     public PaperClipboard(ISelectionStore store, ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(store);
@@ -42,10 +50,21 @@ public sealed class PaperClipboard : IClipboardHandler, IDisposable
         Refresh();
     }
 
+    /// <summary>
+    /// Gets the last clipboard text that was read or set. It is empty while a read is in progress or when the selection has no text.
+    /// </summary>
     public string Text => _text;
 
+    /// <summary>
+    /// Gets the same text as <see cref="Text"/>.
+    /// </summary>
+    /// <returns>The clipboard text, or an empty string.</returns>
     public string GetClipboardText() => _text;
 
+    /// <summary>
+    /// Makes the text the clipboard selection, offered as UTF-8 under the common text MIME types. It does nothing after dispose.
+    /// </summary>
+    /// <param name="text">The text, or <see langword="null"/> for an empty string.</param>
     public void SetClipboardText(string text)
     {
         if (_disposed)
@@ -68,6 +87,9 @@ public sealed class PaperClipboard : IClipboardHandler, IDisposable
         _store.SetSelection(SelectionKind.Clipboard, source, SelectionSerial.Unchecked);
     }
 
+    /// <summary>
+    /// Stops watching the selection and stops a read in progress. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

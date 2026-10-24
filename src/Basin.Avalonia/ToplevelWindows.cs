@@ -9,6 +9,10 @@ using static Basin.Avalonia.AvaloniaLog;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// Shows each xdg toplevel, popup, layer surface and foreign window of a compositor in its own Avalonia host window.
+/// Compositor events run on the compositor thread, and the host windows change on the Avalonia UI thread.
+/// </summary>
 public sealed class ToplevelWindows : IDisposable
 {
     private const int CellStride = 16384;
@@ -76,6 +80,14 @@ public sealed class ToplevelWindows : IDisposable
     private Action? _cursorCommitted;
     private Action? _cursorDestroyed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ToplevelWindows"/> class and starts to watch the shell, the layer shell and the cursor.
+    /// Call it on the compositor thread. It makes server-side decoration the default.
+    /// </summary>
+    /// <param name="host">The compositor host.</param>
+    /// <param name="postToCompositor">Runs work on the compositor thread.</param>
+    /// <param name="policy">The window policy, or <see langword="null"/> for an <see cref="AvaloniaShellPolicy"/>.</param>
+    /// <param name="requestFrame">Wakes the compositor after host input is queued, or <see langword="null"/>.</param>
     public ToplevelWindows(
         BasinCompositorHost host,
         Action<Action> postToCompositor,
@@ -374,24 +386,53 @@ public sealed class ToplevelWindows : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the window policy. A change applies to windows that open after it.
+    /// </summary>
     public IAvaloniaShellPolicy Policy { get; set; }
 
+    /// <summary>
+    /// Gets the open toplevel host windows. Read it on the UI thread.
+    /// </summary>
     public IReadOnlyCollection<ToplevelWindow> Windows => _windows.Values;
 
+    /// <summary>
+    /// Gets the open popup windows. Read it on the UI thread.
+    /// </summary>
     public IReadOnlyCollection<PopupWindow> PopupWindows => _popupWindows.Values;
 
+    /// <summary>
+    /// Gets the open layer host windows. Read it on the UI thread.
+    /// </summary>
     public IReadOnlyCollection<LayerWindow> LayerWindows => _layerWindows.Values;
 
+    /// <summary>
+    /// Occurs on the UI thread after a toplevel host window opens or closes, with the new number of toplevel windows.
+    /// </summary>
     public event Action<int>? CountChanged;
 
+    /// <summary>
+    /// Occurs on the UI thread when the host activates a toplevel window.
+    /// </summary>
     public event Action? WindowActivatedOnHost;
 
+    /// <summary>
+    /// Occurs on the UI thread when a screen toplevel opens, with its window, or closes, with <see langword="null"/>.
+    /// </summary>
     public event Action<ToplevelWindow?>? ScreenWindowChanged;
 
+    /// <summary>
+    /// Occurs on the UI thread when a toplevel window is made, before the policy places it and before it is shown.
+    /// The client is <see langword="null"/> for a foreign window.
+    /// </summary>
     public event Action<ToplevelWindow, Wayland.Server.WlClient?>? WindowOpened;
 
     internal void NotifyActivatedUi() => WindowActivatedOnHost?.Invoke();
 
+    /// <summary>
+    /// Closes every toplevel and layer host window from the compositor side. Call it on the UI thread.
+    /// </summary>
+    /// <returns>A task that completes when all those windows are closed.</returns>
     public Task CloseAllAsync()
     {
         List<Task> pending = [];
@@ -1502,6 +1543,12 @@ public sealed class ToplevelWindows : IDisposable
         ArrangeLayers();
     }
 
+    /// <summary>
+    /// Shows a foreign window in a host window, or in a popup when <see cref="IForeignToplevel.IsPopup"/> is set.
+    /// Call it on the compositor thread. The window is removed when it raises <see cref="IForeignToplevel.Closed"/>.
+    /// </summary>
+    /// <param name="foreign">The foreign window.</param>
+    /// <returns>The id that <see cref="RemoveForeign"/> takes.</returns>
     public int AddForeign(IForeignToplevel foreign)
     {
         ArgumentNullException.ThrowIfNull(foreign);
@@ -1570,6 +1617,10 @@ public sealed class ToplevelWindows : IDisposable
         return id;
     }
 
+    /// <summary>
+    /// Removes a foreign window and closes its host window. Call it on the compositor thread. An id that is not a foreign window does nothing.
+    /// </summary>
+    /// <param name="id">The id that <see cref="AddForeign"/> returned.</param>
     public void RemoveForeign(int id)
     {
         if (!_entries.Remove(id, out var entry) || entry.Foreign is null)
@@ -1679,10 +1730,20 @@ public sealed class ToplevelWindows : IDisposable
     private DragIconWindow? _dragIconWindow;
     private int _dragIconEntryId;
 
+    /// <summary>
+    /// Gets the drag bridge that <see cref="AttachDrag"/> set, or <see langword="null"/>.
+    /// </summary>
     public HostDrag? Drag => _drag;
 
+    /// <summary>
+    /// Gets the host input method that <see cref="AttachTextInput"/> set, or <see langword="null"/>.
+    /// </summary>
     public AvaloniaTextInput? TextInput { get; private set; }
 
+    /// <summary>
+    /// Connects the host input method, so that it follows the host window of the active text input.
+    /// </summary>
+    /// <param name="textInput">The host input method.</param>
     public void AttachTextInput(AvaloniaTextInput textInput)
     {
         ArgumentNullException.ThrowIfNull(textInput);
@@ -1703,6 +1764,10 @@ public sealed class ToplevelWindows : IDisposable
         textInput.UiWindowResolver = id => _windows.TryGetValue(id, out var window) ? window.View : null;
     }
 
+    /// <summary>
+    /// Connects the drag bridge, so that client drags show their icon in a <see cref="DragIconWindow"/> and can leave for the host.
+    /// </summary>
+    /// <param name="drag">The drag bridge.</param>
     public void AttachDrag(HostDrag drag)
     {
         ArgumentNullException.ThrowIfNull(drag);
@@ -1863,8 +1928,15 @@ public sealed class ToplevelWindows : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the last <see cref="CaptureInput"/> call asked for capture. It changes on the compositor thread.
+    /// </summary>
     public bool InputCaptured { get; private set; }
 
+    /// <summary>
+    /// Activates or deactivates, on the compositor thread, the pointer constraints of every screen toplevel.
+    /// </summary>
+    /// <param name="captured"><see langword="true"/> to lock or confine the pointer, <see langword="false"/> to release it.</param>
     public void CaptureInput(bool captured)
     {
         _post(() =>
@@ -1891,6 +1963,9 @@ public sealed class ToplevelWindows : IDisposable
 
     private int _screenWindowId;
 
+    /// <summary>
+    /// Gets the host window of the last screen toplevel that opened, or <see langword="null"/> when none is open. Read it on the UI thread.
+    /// </summary>
     public ToplevelWindow? ScreenWindow =>
         _screenWindowId != 0 && _windows.TryGetValue(_screenWindowId, out var window) ? window : null;
 
@@ -1899,6 +1974,9 @@ public sealed class ToplevelWindows : IDisposable
     private ToplevelWindow? WindowOf(Entry entry) =>
         _windows.TryGetValue(entry.Id, out var window) ? window : null;
 
+    /// <summary>
+    /// Releases the cursor surface and stops taking new toplevels, layer surfaces and decoration changes. Open windows stay open. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

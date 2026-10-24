@@ -2,8 +2,19 @@ using Basin.Ipc;
 
 namespace Basin.SoftKeyboard.Ipc;
 
+/// <summary>
+/// Registers the IPC methods that drive a <see cref="SoftKeyboardSession"/> by hand: show and hide, tap, type, hold, long-press choice, size and layout.
+/// </summary>
 public static class SoftKeyboardSessionIpc
 {
+    /// <summary>
+    /// Registers the seven keyboard methods under the namespace in <paramref name="hooks"/>. Taps and holds go through the session's typer, so they use the real engine path.
+    /// </summary>
+    /// <param name="methods">The registry that receives the methods.</param>
+    /// <param name="report">The line report that registers the methods and prints the LONGPRESS line.</param>
+    /// <param name="session">The keyboard session whose engine and typer the methods drive.</param>
+    /// <param name="hooks">The shell callbacks and the method namespace.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public static void Register(IpcMethodRegistry methods, IpcLineReport report, SoftKeyboardSession session, SoftKeyboardIpcHooks hooks)
     {
         ArgumentNullException.ThrowIfNull(methods);

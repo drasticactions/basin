@@ -2,6 +2,9 @@ using Basin.Capabilities;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Caps the frame rate of single surfaces. It holds back frame callbacks of a capped surface until its next cycle opens on the surface's main output.
+/// </summary>
 public sealed class FrameLimiter : IFrameLimits, IDisposable
 {
     private readonly ICompositorEventLoop _loop;
@@ -14,6 +17,12 @@ public sealed class FrameLimiter : IFrameLimits, IDisposable
     private readonly Dictionary<IOutput, (ulong Sequence, long TimeNanos)> _vblanks = [];
     private readonly Dictionary<IOutput, ulong> _previousVblank = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FrameLimiter"/> class. It follows the frame and presentation events of every output in the layout.
+    /// </summary>
+    /// <param name="loop">The loop that holds the cycle timer.</param>
+    /// <param name="layout">The layout whose outputs pace the surfaces.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> or <paramref name="layout"/> is <see langword="null"/>.</exception>
     public FrameLimiter(ICompositorEventLoop loop, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -25,10 +34,15 @@ public sealed class FrameLimiter : IFrameLimits, IDisposable
         Rehook();
     }
 
+    /// <inheritdoc/>
     public event Action<Surface>? Changed;
 
+    /// <summary>
+    /// Gets the number of surfaces that have a cap.
+    /// </summary>
     public int Count => _entries.Count;
 
+    /// <inheritdoc/>
     public int LimitOf(Surface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -36,6 +50,7 @@ public sealed class FrameLimiter : IFrameLimits, IDisposable
         return index < 0 ? 0 : _entries[index].Fps;
     }
 
+    /// <inheritdoc/>
     public void SetLimit(Surface surface, int fps)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -81,6 +96,9 @@ public sealed class FrameLimiter : IFrameLimits, IDisposable
 
     private readonly Dictionary<Surface, Action> _entriesCleanup = [];
 
+    /// <summary>
+    /// Removes every cap, releases every held surface and stops following the outputs.
+    /// </summary>
     public void Dispose()
     {
         _layout.Changed -= Rehook;

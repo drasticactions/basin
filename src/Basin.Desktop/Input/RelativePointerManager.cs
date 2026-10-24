@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_relative_pointer_manager_v1</c> global and sends relative motion to the client with pointer focus. Until the consumer calls <see cref="NotifyMotion"/>, it follows pointer motion and reports it as both accelerated and unaccelerated.
+/// </summary>
 public sealed class RelativePointerManager : IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -13,6 +19,11 @@ public sealed class RelativePointerManager : IDisposable
     private readonly List<ZwpRelativePointerV1Resource> _pointers = [];
     private bool _consumerNotifies;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RelativePointerManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="seat">The seat whose pointer focus selects the client.</param>
     public RelativePointerManager(WlServerDisplay display, Seat.Seat seat)
     {
         _seat = seat;
@@ -20,12 +31,23 @@ public sealed class RelativePointerManager : IDisposable
         _seat.Pointer.Moved += FollowPointer;
     }
 
+    /// <summary>
+    /// Stops following the pointer and removes the global.
+    /// </summary>
     public void Dispose()
     {
         _seat.Pointer.Moved -= FollowPointer;
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Sends relative motion to the focused client and then a pointer frame. After the first call, the manager stops following pointer motion.
+    /// </summary>
+    /// <param name="timeMicroseconds">The event time in microseconds.</param>
+    /// <param name="dx">The accelerated X delta in logical pixels.</param>
+    /// <param name="dy">The accelerated Y delta in logical pixels.</param>
+    /// <param name="dxUnaccelerated">The X delta before acceleration.</param>
+    /// <param name="dyUnaccelerated">The Y delta before acceleration.</param>
     public void NotifyMotion(ulong timeMicroseconds, double dx, double dy, double dxUnaccelerated, double dyUnaccelerated)
     {
         _consumerNotifies = true;

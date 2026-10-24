@@ -2,6 +2,9 @@ using Basin.WindowManager.Protocol;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// A temporary set of key bindings on a seat, from <see cref="WmBindings.EnterSubmap"/>. It exits on its first binding, on an unbound key, or on its timeout.
+/// </summary>
 public sealed class WmSubmap
 {
     private readonly RiverWindowManager _wm;
@@ -27,10 +30,20 @@ public sealed class WmSubmap
         _timeout = timeout;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the submap exited or was canceled.
+    /// </summary>
     public bool IsExited => _exited;
 
+    /// <summary>
+    /// Occurs inside the manage sequence in which the submap exits.
+    /// </summary>
     public event Action? Exited;
 
+    /// <summary>
+    /// Disables the submap's bindings and enables again the bindings it suspended. A second call does nothing.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No manage sequence is in progress.</exception>
     public void Exit()
     {
         _wm.EnsureManage(nameof(Exit));

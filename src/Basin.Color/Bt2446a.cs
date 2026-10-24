@@ -1,5 +1,8 @@
 namespace Basin.Color;
 
+/// <summary>
+/// The BT.2446 method A tone expansion, which maps SDR content onto an HDR luminance range.
+/// </summary>
 public static class Bt2446a
 {
     private const double KR = 0.262698338956556;
@@ -10,6 +13,13 @@ public static class Bt2446a
     private const double InverseGamma = 2.4;
     private const double Gamma = 1 / InverseGamma;
 
+    /// <summary>
+    /// Expands one SDR color into HDR luminance in place. The input 100 nits to 1000 nits case uses the
+    /// exact BT.2446 fit.
+    /// </summary>
+    /// <param name="rgb">Three linear SDR channels relative to reference white. The luma weights are BT.2020. They are replaced with luminances in nits.</param>
+    /// <param name="sdrNits">The SDR reference white in nits, clamped to 1 through 1000.</param>
+    /// <param name="targetNits">The HDR peak in nits, clamped to between <paramref name="sdrNits"/> and 10000.</param>
     public static void Expand(Span<double> rgb, double sdrNits, double targetNits)
     {
         sdrNits = Math.Clamp(sdrNits, 1, 1000);

@@ -3,6 +3,9 @@ using Basin.Themes.MsStyles;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// A port of wine's <c>DrawThemeBackgroundEx</c>. It does not draw. It appends the operations for a theme part to an <see cref="MsStylesDrawList"/>.
+/// </summary>
 public static class MsStylesDrawing
 {
     private static readonly ThemeProperty[] ImageFiles =
@@ -35,6 +38,17 @@ public static class MsStylesDrawing
         ThemeProperty.GradientRatio4, ThemeProperty.GradientRatio5,
     ];
 
+    /// <summary>
+    /// Appends the background of a part, image or border fill, and then its glyph. All rectangles are device pixels.
+    /// </summary>
+    /// <param name="list">The list to append to.</param>
+    /// <param name="cls">The theme class.</param>
+    /// <param name="part">The part number.</param>
+    /// <param name="state">The state number.</param>
+    /// <param name="destination">The area to draw in device pixels.</param>
+    /// <param name="context">The image cache, output DPI and opacity.</param>
+    /// <param name="frame">The 1-based image frame to draw, or 0 to use the state number.</param>
+    /// <returns><see langword="true"/> when the background drew. It is false when the type is none, the area is empty or the image did not load.</returns>
     public static bool Background(MsStylesDrawList list, MsStylesClass cls, int part, int state, RectangleF destination, in MsStylesDrawContext context, int frame = 0)
     {
         ArgumentNullException.ThrowIfNull(list);
@@ -52,6 +66,15 @@ public static class MsStylesDrawing
         return drawn;
     }
 
+    /// <summary>
+    /// Computes the content area of a part from its <c>CONTENTMARGINS</c>. Without them it uses the border size of a border fill, or the sizing margins of an image.
+    /// </summary>
+    /// <param name="cls">The theme class.</param>
+    /// <param name="part">The part number.</param>
+    /// <param name="state">The state number.</param>
+    /// <param name="bounds">The part area in device pixels.</param>
+    /// <param name="dpi">The output DPI that scales the margins.</param>
+    /// <returns>The content area in device pixels.</returns>
     public static RectangleF ContentRect(MsStylesClass cls, int part, int state, RectangleF bounds, double dpi)
     {
         ArgumentNullException.ThrowIfNull(cls);
@@ -77,6 +100,18 @@ public static class MsStylesDrawing
         return bounds;
     }
 
+    /// <summary>
+    /// Picks the image for a part by its <c>IMAGESELECTTYPE</c>: by DPI, by size, or the single image file.
+    /// </summary>
+    /// <param name="cls">The theme class.</param>
+    /// <param name="part">The part number.</param>
+    /// <param name="state">The state number.</param>
+    /// <param name="destination">The area to draw in device pixels. Selection by size uses it.</param>
+    /// <param name="glyph">Whether to pick the glyph image instead of the background.</param>
+    /// <param name="context">The image cache and output DPI.</param>
+    /// <param name="image">The picked image when the call returns <see langword="true"/>.</param>
+    /// <param name="imageDpi">The DPI that the picked image is drawn for. It is 96 by default.</param>
+    /// <returns><see langword="true"/> when the part has an image to draw.</returns>
     public static bool TrySelectImage(MsStylesClass cls, int part, int state, RectangleF destination, bool glyph, in MsStylesDrawContext context, out MsStylesImage image, out double imageDpi)
     {
         ArgumentNullException.ThrowIfNull(cls);
@@ -154,6 +189,20 @@ public static class MsStylesDrawing
         return cls.TryGetImage(part, state, glyph ? ThemeProperty.GlyphImageFile : ThemeProperty.ImageFile, out image);
     }
 
+    /// <summary>
+    /// Picks and decodes the image of a part, applies its transparency key, and finds the source cell for a frame. It reads the DWM atlas when the part has an atlas rectangle.
+    /// </summary>
+    /// <param name="cls">The theme class.</param>
+    /// <param name="part">The part number.</param>
+    /// <param name="state">The state number.</param>
+    /// <param name="destination">The area to draw in device pixels.</param>
+    /// <param name="glyph">Whether to load the glyph image instead of the background.</param>
+    /// <param name="context">The image cache and output DPI.</param>
+    /// <param name="frame">The 1-based image frame, or 0 to use the state number.</param>
+    /// <param name="bitmap">The decoded bitmap when the call returns <see langword="true"/>.</param>
+    /// <param name="source">The source cell in texels.</param>
+    /// <param name="imageDpi">The DPI that the image is drawn for.</param>
+    /// <returns><see langword="true"/> when the image loaded and the cell is not empty.</returns>
     public static bool TryLoadImage(MsStylesClass cls, int part, int state, RectangleF destination, bool glyph, in MsStylesDrawContext context, int frame, out MsStylesBitmap bitmap, out Rectangle source, out double imageDpi)
     {
         ArgumentNullException.ThrowIfNull(cls);
@@ -216,6 +265,15 @@ public static class MsStylesDrawing
         return source.Width > 0 && source.Height > 0;
     }
 
+    /// <summary>
+    /// Measures the size of one image cell of a part, scaled from the image DPI to the output DPI.
+    /// </summary>
+    /// <param name="cls">The theme class.</param>
+    /// <param name="part">The part number.</param>
+    /// <param name="state">The state number.</param>
+    /// <param name="context">The image cache and output DPI.</param>
+    /// <param name="size">The size in device pixels when the call returns <see langword="true"/>.</param>
+    /// <returns><see langword="true"/> when the part has an image that loads.</returns>
     public static bool TryPartSize(MsStylesClass cls, int part, int state, in MsStylesDrawContext context, out SizeF size)
     {
         var probe = new RectangleF(0, 0, 4096, 4096);

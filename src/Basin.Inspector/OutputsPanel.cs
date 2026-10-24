@@ -7,8 +7,14 @@ using ImGuiApi = Hexa.NET.ImGui.ImGui;
 
 namespace Basin.Inspector;
 
+/// <summary>
+/// The Outputs panel. It shows the mode, scale, transform, timing and scanout state of each output, and plots the intervals between paints.
+/// </summary>
 public sealed unsafe class OutputsPanel : IInspectorPanel, IDisposable
 {
+    /// <summary>
+    /// The number of intervals between paints that the panel keeps for each output.
+    /// </summary>
     public const int Samples = 600;
 
     private readonly OutputDriver _driver;
@@ -16,6 +22,12 @@ public sealed unsafe class OutputsPanel : IInspectorPanel, IDisposable
     private readonly Dictionary<OutputView, Timing> _timings = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputsPanel"/> class. It subscribes to the driver events until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="driver">The driver whose outputs the panel shows.</param>
+    /// <param name="clockNanos">The clock in nanoseconds, or <see langword="null"/> for <see cref="MonotonicClock.Nanos"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="driver"/> is <see langword="null"/>.</exception>
     public OutputsPanel(OutputDriver driver, Func<long>? clockNanos = null)
     {
         ArgumentNullException.ThrowIfNull(driver);
@@ -32,10 +44,15 @@ public sealed unsafe class OutputsPanel : IInspectorPanel, IDisposable
         driver.ScanoutChanged += OnScanoutChanged;
     }
 
+    /// <inheritdoc/>
     public ReadOnlySpan<byte> Name => "Outputs"u8;
 
+    /// <summary>
+    /// Gets or sets the rate in frames per second at which the panel redraws while it is shown. The default is 10.
+    /// </summary>
     public int RefreshHz { get; set; } = 10;
 
+    /// <inheritdoc/>
     public void Draw(ref InspectorDraw draw)
     {
         draw.RequestRefresh(RefreshHz);
@@ -80,6 +97,9 @@ public sealed unsafe class OutputsPanel : IInspectorPanel, IDisposable
         }
     }
 
+    /// <summary>
+    /// Unsubscribes from the driver events and drops the timing samples. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

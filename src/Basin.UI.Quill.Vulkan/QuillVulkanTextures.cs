@@ -5,6 +5,9 @@ using Buffer = Silk.NET.Vulkan.Buffer;
 
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// The pool of RGBA Vulkan textures that the surfaces of a <see cref="QuillVulkanUIHost"/> share. Uploads go through staging arenas and run in the next frame.
+/// </summary>
 public sealed unsafe class QuillVulkanTextures : IDisposable
 {
     private const ulong MinArenaSize = 256 * 1024;
@@ -49,12 +52,22 @@ public sealed unsafe class QuillVulkanTextures : IDisposable
         Update(White, new Box(0, 0, 1, 1), opaque);
     }
 
+    /// <summary>
+    /// Gets the number of live textures in the pool.
+    /// </summary>
     public int Count => _textures.Count;
 
     internal QuillVulkanTexture White { get; }
 
     internal bool HasPending => _uploads.Count > 0 || _uninitialized.Count > 0;
 
+    /// <summary>
+    /// Creates an RGBA texture. Its contents are not defined until an upload runs.
+    /// </summary>
+    /// <param name="width">The width in texels. A value below 1 becomes 1.</param>
+    /// <param name="height">The height in texels. A value below 1 becomes 1.</param>
+    /// <returns>The texture, which the pool owns until <see cref="Destroy"/>.</returns>
+    /// <exception cref="ObjectDisposedException">The pool is disposed.</exception>
     public QuillVulkanTexture Create(int width, int height)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -63,6 +76,12 @@ public sealed unsafe class QuillVulkanTextures : IDisposable
         return texture;
     }
 
+    /// <summary>
+    /// Copies RGBA pixels into a staging arena and queues their upload into a part of a texture. The call does nothing when the part is empty or outside the texture, the data is too short, or the pool is disposed.
+    /// </summary>
+    /// <param name="texture">The texture to write.</param>
+    /// <param name="bounds">The part of the texture, in texels.</param>
+    /// <param name="rgba">The tightly packed RGBA bytes of the part. The pool copies them before it returns.</param>
     public void Update(QuillVulkanTexture texture, in Box bounds, ReadOnlySpan<byte> rgba)
     {
         ArgumentNullException.ThrowIfNull(texture);
@@ -93,6 +112,10 @@ public sealed unsafe class QuillVulkanTextures : IDisposable
         });
     }
 
+    /// <summary>
+    /// Removes a texture from the pool and drops its queued uploads. The pool frees the image after the GPU finishes the frames that use it.
+    /// </summary>
+    /// <param name="texture">The texture to destroy. A texture that the pool does not hold is ignored.</param>
     public void Destroy(QuillVulkanTexture texture)
     {
         ArgumentNullException.ThrowIfNull(texture);
@@ -108,6 +131,9 @@ public sealed unsafe class QuillVulkanTextures : IDisposable
         ReleaseCompleted();
     }
 
+    /// <summary>
+    /// Waits for the last submitted frame, then frees every texture and staging arena.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -4,6 +4,9 @@ using Wayland;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// A client for <c>ext_background_effect_manager_v1</c>, which blurs what is behind the manager's own translucent surfaces. It is present even when the compositor does not serve the global.
+/// </summary>
 public sealed class WmBackgroundEffects : IDisposable
 {
     private ExtBackgroundEffectManagerV1? _manager;
@@ -44,10 +47,23 @@ public sealed class WmBackgroundEffects : IDisposable
 
     internal void Attach(WlCompositor? compositor) => _compositor = compositor;
 
+    /// <summary>
+    /// Gets a value indicating whether the compositor serves the global. It is settled when the <see cref="RiverWindowManager"/> constructor returns.
+    /// </summary>
     public bool Bound => _manager is not null;
 
+    /// <summary>
+    /// Gets a value indicating whether the compositor promised blur in its capabilities event. It is settled when the <see cref="RiverWindowManager"/> constructor returns.
+    /// </summary>
     public bool Supported => (_capabilities & ExtBackgroundEffectManagerV1.Capability.Blur) != 0;
 
+    /// <summary>
+    /// Sets or unsets the blur region of a surface. It applies on the surface's next commit. The per-surface object is made on first use.
+    /// </summary>
+    /// <param name="surface">The surface to blur behind.</param>
+    /// <param name="rects">The region in surface-local logical coordinates. Empty boxes are skipped. An empty span unsets the region.</param>
+    /// <returns>The value of <see cref="Supported"/>, or <see langword="false"/> when the global or <c>wl_compositor</c> is missing or the object is disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public bool SetBlurRegion(WlSurface surface, ReadOnlySpan<Box> rects)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -76,6 +92,13 @@ public sealed class WmBackgroundEffects : IDisposable
         return Supported;
     }
 
+    /// <summary>
+    /// Sets or unsets the blur region of a surface from a pixman region. It applies on the surface's next commit.
+    /// </summary>
+    /// <param name="surface">The surface to blur behind.</param>
+    /// <param name="region">The region in surface-local logical coordinates. <see langword="null"/> or an empty region unsets it.</param>
+    /// <returns>The value of <see cref="Supported"/>, or <see langword="false"/> when the global or <c>wl_compositor</c> is missing or the object is disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public bool SetBlurRegion(WlSurface surface, PixmanRegion32? region)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -101,6 +124,11 @@ public sealed class WmBackgroundEffects : IDisposable
         return Supported;
     }
 
+    /// <summary>
+    /// Destroys the per-surface object, which clears the region on the next commit. Call it before the surface is destroyed.
+    /// </summary>
+    /// <param name="surface">The surface to forget. A surface with no object is ignored.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
     public void Forget(WlSurface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -110,6 +138,9 @@ public sealed class WmBackgroundEffects : IDisposable
         }
     }
 
+    /// <summary>
+    /// Destroys every per-surface object and the global binding. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

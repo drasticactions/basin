@@ -4,6 +4,9 @@ using Basin.Diagnostics;
 
 namespace Basin;
 
+/// <summary>
+/// A compositor loop on Linux epoll, for a process with no Wayland display. Timers use timerfd.
+/// </summary>
 [SupportedOSPlatform("linux")]
 public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
 {
@@ -35,6 +38,9 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
     private ulong _nextId;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="EpollEventLoop"/> class. The thread that calls it becomes the loop thread. It throws <see cref="PlatformNotSupportedException"/> outside Linux.
+    /// </summary>
     public EpollEventLoop()
     {
         if (!OperatingSystem.IsLinux())
@@ -54,8 +60,10 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         _events = new byte[_eventSize * MaxEvents];
     }
 
+    /// <inheritdoc/>
     public int Fd => _epoll;
 
+    /// <inheritdoc/>
     public void Dispatch(int timeoutMs)
     {
         _thread.Assert();
@@ -91,6 +99,7 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public IEventSource AddFd(int fd, FdReadiness events, Action<int, FdReadiness> handler)
     {
         _thread.Assert();
@@ -100,6 +109,7 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         return source;
     }
 
+    /// <inheritdoc/>
     public IEventSource AddTimer(Action handler)
     {
         _thread.Assert();
@@ -115,6 +125,7 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         return source;
     }
 
+    /// <inheritdoc/>
     public IEventSource AddSignal(int signalNumber, Action<int> handler)
     {
         _thread.Assert();
@@ -130,18 +141,21 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         return source;
     }
 
+    /// <inheritdoc/>
     public void AddIdle(Action handler)
     {
         _thread.Assert();
         _idle.Add(handler);
     }
 
+    /// <inheritdoc/>
     public void DispatchIdle()
     {
         _thread.Assert();
         DrainQueues();
     }
 
+    /// <inheritdoc/>
     public void DeferDestroy(IDisposable victim)
     {
         _thread.Assert();
@@ -149,6 +163,9 @@ public sealed unsafe class EpollEventLoop : ICompositorEventLoop, IDisposable
         BasinCounters.TrackPendingFree();
     }
 
+    /// <summary>
+    /// Runs the queued idle callbacks and deferred destroys, removes every source and closes the epoll descriptor.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

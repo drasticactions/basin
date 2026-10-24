@@ -5,6 +5,9 @@ using Prowl.Quill;
 
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// The OpenGL ES Quill chrome host. It draws Argb8888 dmabufs with one shader pipeline and one texture pool for all of its surfaces. Use it on the thread that created it.
+/// </summary>
 public sealed class QuillUIHost : IUIHost
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -21,6 +24,13 @@ public sealed class QuillUIHost : IUIHost
     private bool _syncReported;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="QuillUIHost"/> class on a device that the caller owns. The context of the device must be current.
+    /// </summary>
+    /// <param name="device">The device to draw on. The host does not own it.</param>
+    /// <param name="allocator">The allocator of the dmabufs. The host does not own it.</param>
+    /// <param name="atlas">The glyph atlas settings of the surface canvases, or <see langword="null"/> for the defaults.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> or <paramref name="allocator"/> is <see langword="null"/>.</exception>
     public QuillUIHost(GlDevice device, IAllocator allocator, FontAtlasSettings? atlas = null)
         : this(device, allocator, [], ownsDevice: false, ownsAllocator: false, atlas)
     {
@@ -44,6 +54,16 @@ public sealed class QuillUIHost : IUIHost
         _textures = new QuillTextures(device.Gl, _context);
     }
 
+    /// <summary>
+    /// Creates a host on the device of the renderer, or on a device of its own. The host checks that it can allocate and render a chrome buffer before it returns.
+    /// </summary>
+    /// <param name="shared">The device of the renderer, which the host uses and does not own. When it is <see langword="null"/>, the host opens its own device on <paramref name="renderNodePath"/>.</param>
+    /// <param name="renderNodePath">The DRM render node for a device of its own, for example /dev/dri/renderD128.</param>
+    /// <param name="imports">The dmabuf formats that the renderer imports, or <see langword="null"/> to let the allocator choose the modifier.</param>
+    /// <param name="declined">The reason that no host was made, or <see langword="null"/> on success.</param>
+    /// <param name="allocator">The buffer allocator for a shared device, which the host does not own. When it is <see langword="null"/>, or the host opens its own device, the host makes and owns an allocator.</param>
+    /// <param name="atlas">The glyph atlas settings, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The host, or <see langword="null"/> when no device is available or no buffer that the renderer imports can be rendered.</returns>
     public static QuillUIHost? TryCreate(
         GlDevice? shared,
         string? renderNodePath,
@@ -94,8 +114,14 @@ public sealed class QuillUIHost : IUIHost
         return host;
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the host opened its device and disposes it.
+    /// </summary>
     public bool OwnsDevice => _ownsDevice;
 
+    /// <summary>
+    /// Gets the device that the host draws on.
+    /// </summary>
     public GlDevice Device => _device;
 
     internal int FencedFrames { get; private set; }
@@ -106,10 +132,19 @@ public sealed class QuillUIHost : IUIHost
 
     internal QuillGlContext Context => _context;
 
+    /// <summary>
+    /// Gets <see cref="IQuillUISurface"/>, which every surface of the host implements.
+    /// </summary>
     public Type SurfaceContract => typeof(IQuillUISurface);
 
+    /// <summary>
+    /// Gets <see cref="UITargetKind.Dmabuf"/>, the only kind that the host produces.
+    /// </summary>
     public UITargetKind Produces => UITargetKind.Dmabuf;
 
+    /// <summary>
+    /// Gets the texture pool that every surface of the host shares.
+    /// </summary>
     public QuillTextures Textures
     {
         get
@@ -119,8 +154,14 @@ public sealed class QuillUIHost : IUIHost
         }
     }
 
+    /// <summary>
+    /// Gets <see langword="null"/>, because the host never has work due.
+    /// </summary>
     public long? NextDueMillis => null;
 
+    /// <summary>
+    /// Never occurs. The host has no work of its own.
+    /// </summary>
     public event Action? WakeupRequested
     {
         add
@@ -132,6 +173,11 @@ public sealed class QuillUIHost : IUIHost
         }
     }
 
+    /// <summary>
+    /// Creates a configured surface and tracks it until it is disposed. The caller owns the surface.
+    /// </summary>
+    /// <param name="options">The target kind, the logical size and the scale.</param>
+    /// <returns>The surface, or <see langword="null"/> when the host is disposed, the kind is not <see cref="UITargetKind.Dmabuf"/>, or the allocation fails.</returns>
     public IUISurface? CreateSurface(in UISurfaceOptions options)
     {
         _thread.Assert();
@@ -150,10 +196,16 @@ public sealed class QuillUIHost : IUIHost
         return surface;
     }
 
+    /// <summary>
+    /// Does nothing. The caller draws each surface.
+    /// </summary>
     public void Pump()
     {
     }
 
+    /// <summary>
+    /// Disposes every live surface, the texture pool and the pipeline, and the allocator and the device when the host owns them.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

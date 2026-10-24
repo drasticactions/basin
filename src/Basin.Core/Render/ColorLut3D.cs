@@ -1,7 +1,15 @@
 namespace Basin;
 
+/// <summary>
+/// Holds a 3D color lookup table for a renderer that declares <see cref="ColorTransformCapability.Lut3D"/>. The table maps straight-alpha, display-encoded RGB in [0, 1] to output RGB.
+/// </summary>
 public sealed class ColorLut3D
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ColorLut3D"/> class. It throws <see cref="ArgumentOutOfRangeException"/> for a size under 2, and <see cref="ArgumentException"/> when the data length does not match the size.
+    /// </summary>
+    /// <param name="size">The number of grid points on each axis.</param>
+    /// <param name="data">The RGB triplets of the grid, red axis fastest, then green, then blue. The table keeps the array without a copy.</param>
     public ColorLut3D(int size, float[] data)
     {
         if (size < 2)
@@ -18,17 +26,40 @@ public sealed class ColorLut3D
         Data = data;
     }
 
+    /// <summary>
+    /// Gets the number of grid points on each axis.
+    /// </summary>
     public int Size { get; }
 
+    /// <summary>
+    /// Gets the RGB triplets of the grid, with the red axis fastest. The index of a channel is <c>(((b * Size) + g) * Size + r) * 3 + channel</c>.
+    /// </summary>
     public float[] Data { get; }
 
+    /// <summary>
+    /// Gets the luminance in cd/m² that an input signal of 1 stands for. When it is above zero, each input goes through the inverse PQ curve before the lookup. Zero means no shaper.
+    /// </summary>
     public float ShaperNits { get; init; }
 
+    /// <summary>
+    /// Gets the largest input signal that the table was baked for, for example 125 for scRGB content. The default is 1.
+    /// </summary>
     public float ShaperInputMax { get; init; } = 1;
 
+    /// <summary>
+    /// Applies the input shaper to one channel.
+    /// </summary>
+    /// <param name="signal">The input value.</param>
+    /// <param name="shaperNits">The luminance that a signal of 1 stands for, or zero or less for no shaper.</param>
+    /// <returns>The grid coordinate from 0 to 1. Without a shaper it is the signal clamped to [0, 1].</returns>
     public static float Shape(float signal, float shaperNits) =>
         shaperNits <= 0 ? Math.Clamp(signal, 0f, 1f) : PqInverse(signal * shaperNits);
 
+    /// <summary>
+    /// Encodes a luminance with the SMPTE ST 2084 inverse EOTF.
+    /// </summary>
+    /// <param name="nits">The luminance in cd/m². Values are clamped to [0, 10000].</param>
+    /// <returns>The PQ signal from 0 to 1.</returns>
     public static float PqInverse(float nits)
     {
         var y = MathF.Pow(Math.Clamp(nits / 10000f, 0f, 1f), PqM1);
@@ -41,9 +72,23 @@ public sealed class ColorLut3D
     private const float PqC2 = 2413f / 4096 * 32;
     private const float PqC3 = 2392f / 4096 * 32;
 
+    /// <summary>
+    /// Looks up a color through the input shaper and tetrahedral interpolation, as a renderer does.
+    /// </summary>
+    /// <param name="r">The red input.</param>
+    /// <param name="g">The green input.</param>
+    /// <param name="b">The blue input.</param>
+    /// <returns>The output color.</returns>
     public (float R, float G, float B) SampleShaped(float r, float g, float b) =>
         SampleTetrahedral(Shape(r, ShaperNits), Shape(g, ShaperNits), Shape(b, ShaperNits));
 
+    /// <summary>
+    /// Looks up a color with tetrahedral interpolation. Inputs are clamped to [0, 1].
+    /// </summary>
+    /// <param name="r">The red grid coordinate.</param>
+    /// <param name="g">The green grid coordinate.</param>
+    /// <param name="b">The blue grid coordinate.</param>
+    /// <returns>The interpolated output color.</returns>
     public (float R, float G, float B) SampleTetrahedral(float r, float g, float b)
     {
         var max = Size - 1;
@@ -93,6 +138,13 @@ public sealed class ColorLut3D
         return (result[0], result[1], result[2]);
     }
 
+    /// <summary>
+    /// Looks up a color with trilinear interpolation. Inputs are clamped to [0, 1].
+    /// </summary>
+    /// <param name="r">The red grid coordinate.</param>
+    /// <param name="g">The green grid coordinate.</param>
+    /// <param name="b">The blue grid coordinate.</param>
+    /// <returns>The interpolated output color.</returns>
     public (float R, float G, float B) Sample(float r, float g, float b)
     {
         var n = Size;

@@ -6,6 +6,9 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Implements the backdrop blur on the Vulkan renderer. It draws the dual Kawase pyramid, the Vista DWM kernel and the Smol Gaussian.
+/// </summary>
 public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdropBlur
 {
     private const int PushSize = 128;
@@ -90,14 +93,23 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
     private int _depth = BlurStrength.For(new BlurOptions().Strength).Iterations;
     private bool _disposed;
 
+    /// <summary>
+    /// Gets <see cref="BackgroundEffects.Blur"/> and <see cref="BackgroundEffects.Contrast"/>, which this blur always supports.
+    /// </summary>
     public BackgroundEffects Supported => BackgroundEffects.Blur | BackgroundEffects.Contrast;
 
+    /// <summary>
+    /// Gets the reach of the widest strength that the options or a key asked for, or 8 when any key used the Vista DWM kernel. <see cref="ForgetSurface(object)"/> does not shrink it.
+    /// </summary>
     public int ExpandSize => Math.Max(_widest.ExpandSize, _anyVistaDwm ? VistaDwmKernel.ExpandSize : 0);
 
+    /// <inheritdoc/>
     public BlurCorners Corners { get; set; }
 
+    /// <inheritdoc/>
     public double Opacity { get; set; } = 1.0;
 
+    /// <inheritdoc/>
     public void SetSurface(object key, in BlurSurfaceOptions options)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -109,12 +121,14 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         }
     }
 
+    /// <inheritdoc/>
     public bool ForgetSurface(object key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return _surfaces.Remove(key);
     }
 
+    /// <inheritdoc/>
     public BlurOptions Options
     {
         get => _options;
@@ -149,6 +163,11 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanBackdropBlur"/> class. It creates the pipelines and the noise image on the device.
+    /// </summary>
+    /// <param name="device">The device of the renderer that draws the blur. The caller keeps ownership.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public VulkanBackdropBlur(VulkanDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -279,6 +298,7 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
 
     internal int PyramidCount => _pyramids.Count;
 
+    /// <inheritdoc/>
     public bool Record(in VulkanBackdropContext context, out VulkanBackdropResult result)
     {
         if (!RecordBlur(context, out result))
@@ -1004,6 +1024,9 @@ public sealed unsafe class VulkanBackdropBlur : IVulkanBackdropEffect, IBackdrop
         }
     }
 
+    /// <summary>
+    /// Waits for the device to go idle and destroys every Vulkan object that the blur created. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

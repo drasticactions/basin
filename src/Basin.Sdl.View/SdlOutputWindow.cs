@@ -8,6 +8,10 @@ using static Basin.Sdl.SdlViewLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Pairs one SDL window with one <see cref="BasinViewOutput"/> of the host. It translates SDL input into a list that drains inside the frame.
+/// It resizes, rescales and repaints the output as the window changes.
+/// </summary>
 public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
 {
     private readonly SdlLoop _loop;
@@ -24,6 +28,15 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
     private readonly Action<double, double> _onWarp;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlOutputWindow"/> class. It creates the window, a lease of the device and a view output.
+    /// A popup falls back to a borderless utility window when the driver has no popup windows.
+    /// </summary>
+    /// <param name="loop">The SDL loop that delivers the window events.</param>
+    /// <param name="host">The host that owns the output.</param>
+    /// <param name="device">The render device that creates the lease.</param>
+    /// <param name="options">The window settings, or <see langword="null"/> for the defaults.</param>
+    /// <exception cref="InvalidOperationException">SDL cannot create the window, or the device cannot create a lease.</exception>
     public SdlOutputWindow(SdlLoop loop, BasinCompositorHost host, ISdlRenderDevice device, SdlOutputWindowOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -95,40 +108,94 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         loop.AddSink(this);
     }
 
+    /// <summary>
+    /// Gets the SDL window that the output shows in.
+    /// </summary>
     public SdlWindow Window { get; }
 
+    /// <summary>
+    /// Gets the lease that draws the window. A new lease replaces it after a context loss.
+    /// </summary>
     public ISdlRenderLease Lease { get; private set; }
 
     private readonly ISdlRenderDevice _device;
 
+    /// <summary>
+    /// Gets the view output of the host that the window shows.
+    /// </summary>
     public BasinViewOutput View { get; }
 
+    /// <summary>
+    /// Gets the output scale, snapped from the display scale or taken from <see cref="SdlOutputWindowOptions.Scale"/>.
+    /// </summary>
     public double Scale { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the function that receives each input record when the list drains, before the host dispatches.
+    /// Without it, the window drops its input.
+    /// </summary>
     public Action<BasinViewInput>? InputSink { get; set; }
 
+    /// <summary>
+    /// Gets or sets the function that applies a new size in device pixels and a new scale.
+    /// When it is <see langword="null"/>, <see cref="ApplySize"/> reconfigures the view output itself.
+    /// </summary>
     public Action<int, int, double>? ResizeHandler { get; set; }
 
+    /// <summary>
+    /// Occurs when the user asks to close the window. The window stays open until the consumer disposes it.
+    /// </summary>
     public event Action<SdlOutputWindow>? CloseRequested;
 
+    /// <summary>
+    /// Occurs when the window moves to another display, after it reads the refresh rate and the HDR state again.
+    /// </summary>
     public event Action<SdlOutputWindow>? DisplayChanged;
 
+    /// <summary>
+    /// Occurs after <see cref="ApplySize"/> resized the lease and the output.
+    /// </summary>
     public event Action<SdlOutputWindow>? Reconfigured;
 
+    /// <summary>
+    /// Occurs when SDL reports that the window was minimized, maximized, restored, or entered or left fullscreen. The second argument is the SDL event type.
+    /// </summary>
     public event Action<SdlOutputWindow, SDL.EventType>? StateChanged;
 
+    /// <summary>
+    /// Gets the refresh rate of the window display in hertz, or 0 when SDL reports none.
+    /// </summary>
     public float RefreshRate { get; private set; }
 
+    /// <summary>
+    /// Gets the number of frames that the window presented.
+    /// </summary>
     public long Presented { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the window is minimized, hidden or occluded.
+    /// </summary>
     public bool IsHidden { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the window is visible and has damage or a forced frame.
+    /// </summary>
     public bool NeedsFrame => !IsHidden && (_forceFrame || View.SceneOutput.NeedsRepaint);
 
+    /// <summary>
+    /// Gets the RGBA pixels of the frame after the last <see cref="RequestCapture"/>. It is <see langword="null"/> before that frame or when the capture failed.
+    /// </summary>
     public byte[]? LastCapture { get; private set; }
 
+    /// <summary>
+    /// Asks the next presented frame to store its pixels in <see cref="LastCapture"/>.
+    /// </summary>
     public void RequestCapture() => _captureRequested = true;
 
+    /// <summary>
+    /// Adds an input record to the list that drains in the next dispatch, and marks the loop active.
+    /// </summary>
+    /// <param name="input">The input record, with positions in view-local logical units.</param>
     public void Enqueue(in BasinViewInput input)
     {
         _input.Add(input);
@@ -152,6 +219,11 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         _input.Clear();
     }
 
+    /// <summary>
+    /// Translates the keyboard, mouse, touch and pinch events and the window events of this window. Key repeats are dropped.
+    /// </summary>
+    /// <param name="e">The SDL event.</param>
+    /// <returns><see langword="true"/> when the window queued input or changed state.</returns>
     public bool Handle(in SDL.Event e)
     {
         var type = (SDL.EventType)e.Type;
@@ -245,8 +317,14 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when the window gains keyboard focus, after it queues the focus input.
+    /// </summary>
     public event Action<SdlOutputWindow>? FocusGained;
 
+    /// <summary>
+    /// Gets a value indicating whether a pointer lock is in effect on this window, so motion reaches the client as relative input.
+    /// </summary>
     public bool IsRelative { get; private set; }
 
     private bool _hasPointer;
@@ -271,6 +349,9 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether SDL accepted relative mouse mode for the pointer lock. It is <see langword="false"/> when the driver refused it.
+    /// </summary>
     public bool HostRelative { get; private set; }
 
     private void OnPointerWarp(double layoutX, double layoutY)
@@ -296,10 +377,19 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the window grabs the keyboard while it has focus.
+    /// </summary>
     public bool HasKeyboardGrab => _grabKeyboard;
 
     private static uint TimeMs(ulong timestampNs) => (uint)(timestampNs / 1_000_000UL);
 
+    /// <summary>
+    /// Converts a position in window points to view-local logical units, through the pixel density and the output scale.
+    /// </summary>
+    /// <param name="pointX">The horizontal position in points.</param>
+    /// <param name="pointY">The vertical position in points.</param>
+    /// <returns>The position in logical units.</returns>
     public (double X, double Y) ToLogical(float pointX, float pointY)
     {
         var factor = Window.PixelDensity / View.Target.Scale;
@@ -440,6 +530,9 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// Reads the pixel size and the scale of the window, resizes the lease and the output, and forces a full frame.
+    /// </summary>
     public void ApplySize()
     {
         var (width, height) = Window.PixelSize;
@@ -459,12 +552,25 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
         Reconfigured?.Invoke(this);
     }
 
+    /// <summary>
+    /// Gets the HDR state that the lease presents now.
+    /// </summary>
     public SdlHdrState Hdr => Lease.Hdr;
 
+    /// <summary>
+    /// Occurs when <see cref="ApplyHdr"/> changes the state that the lease presents.
+    /// </summary>
     public event Action<SdlOutputWindow>? HdrChanged;
 
+    /// <summary>
+    /// Applies the HDR state that SDL reports for the window now.
+    /// </summary>
     public void FollowHdr() => ApplyHdr(Window.ReadHdr());
 
+    /// <summary>
+    /// Asks the lease to present a state, or SDR when the lease refuses it. It then seeds the output color state with what the lease presents.
+    /// </summary>
+    /// <param name="state">The requested HDR state.</param>
     public void ApplyHdr(SdlHdrState state)
     {
         var before = Lease.Hdr;
@@ -618,6 +724,9 @@ public sealed class SdlOutputWindow : ISdlEventSink, IDisposable
     private bool WriteScreenshot(int width, int height, string path, GRContext? context) =>
         Capture(width, height, context) is { } pixels && HostedViewCapture.WritePng(pixels, width, height, path);
 
+    /// <summary>
+    /// Leaves the loop and the host events, and disposes the view output, the lease and the window. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

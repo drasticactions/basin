@@ -4,6 +4,9 @@ using ImGuiApi = Hexa.NET.ImGui.ImGui;
 
 namespace Basin.Inspector;
 
+/// <summary>
+/// The Windows panel. It lists each toplevel of an <see cref="IToplevelModel"/> and shows the surface tree of the selected one.
+/// </summary>
 public sealed unsafe class WindowsPanel : IInspectorPanel, IToplevelObserver, IDisposable
 {
     private const int MaxDepth = 8;
@@ -15,6 +18,11 @@ public sealed unsafe class WindowsPanel : IInspectorPanel, IToplevelObserver, ID
     private bool _stale = true;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WindowsPanel"/> class. It observes the model until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="model">The toplevels that the panel lists.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="model"/> is <see langword="null"/>.</exception>
     public WindowsPanel(IToplevelModel model)
     {
         ArgumentNullException.ThrowIfNull(model);
@@ -22,8 +30,12 @@ public sealed unsafe class WindowsPanel : IInspectorPanel, IToplevelObserver, ID
         model.AddObserver(this);
     }
 
+    /// <inheritdoc/>
     public ReadOnlySpan<byte> Name => "Windows"u8;
 
+    /// <summary>
+    /// Gets the number of toplevels. It enumerates the model again when the model reported a change.
+    /// </summary>
     public int Count
     {
         get
@@ -33,6 +45,7 @@ public sealed unsafe class WindowsPanel : IInspectorPanel, IToplevelObserver, ID
         }
     }
 
+    /// <inheritdoc/>
     public void Draw(ref InspectorDraw draw)
     {
         Refresh();
@@ -81,10 +94,13 @@ public sealed unsafe class WindowsPanel : IInspectorPanel, IToplevelObserver, ID
         }
     }
 
+    /// <inheritdoc/>
     public void OnToplevelAdded(ulong toplevelId) => _stale = true;
 
+    /// <inheritdoc/>
     public void OnToplevelChanged(ulong toplevelId) => _stale = true;
 
+    /// <inheritdoc/>
     public void OnToplevelRemoved(ulong toplevelId)
     {
         _stale = true;
@@ -94,6 +110,9 @@ public sealed unsafe class WindowsPanel : IInspectorPanel, IToplevelObserver, ID
         }
     }
 
+    /// <summary>
+    /// Stops observing the model and drops the listed toplevels. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

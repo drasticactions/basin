@@ -5,8 +5,15 @@ using SkiaSharp;
 
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// An <see cref="IFrameRenderer"/> that paints a metacity theme through SkiaSharp on an <see cref="ISkiaUISurface"/>, and draws marco's window menu.
+/// It keeps the layout of one window, so each window must have its own instance.
+/// </summary>
 public sealed partial class MetacityFrameRenderer : IFrameRenderer
 {
+    /// <summary>
+    /// Gets the <see cref="ISkiaUISurface"/> type. A UI host that cannot give a Skia surface cannot host this renderer.
+    /// </summary>
     public Type SurfaceContract => typeof(ISkiaUISurface);
 
     private const int CornerZone = 16;
@@ -21,6 +28,10 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
     private bool _shaded;
     private bool _translucent;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MetacityFrameRenderer"/> class over a painter.
+    /// </summary>
+    /// <param name="painter">The painter for the default color scheme. The renderer makes light and dark painters from it when a window asks for them.</param>
     public MetacityFrameRenderer(MetacityPainter painter)
     {
         ArgumentNullException.ThrowIfNull(painter);
@@ -28,11 +39,22 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
         _painter = painter;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MetacityFrameRenderer"/> class with a new <see cref="MetacityPainter"/>.
+    /// </summary>
+    /// <param name="theme">The loaded theme.</param>
+    /// <param name="palette">The colors for <c>gtk:</c> specs.</param>
+    /// <param name="buttonLayout">The button layout.</param>
+    /// <param name="font">The title font.</param>
+    /// <param name="resources">The shared Skia resources.</param>
     public MetacityFrameRenderer(MetacityTheme theme, MetacityPalette palette, MetacityButtonLayout buttonLayout, MetacityFont font, MetacityResources resources)
         : this(new MetacityPainter(theme, palette, buttonLayout, font, resources))
     {
     }
 
+    /// <summary>
+    /// Gets the painter for the default color scheme, the one given at construction.
+    /// </summary>
     public MetacityPainter Painter => _base;
 
     private MetacityPainter PainterFor(FrameColorScheme scheme) => scheme switch
@@ -42,12 +64,29 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
         _ => _base,
     };
 
+    /// <summary>
+    /// Gets the layout of the last draw.
+    /// </summary>
     public MetacityFrameGeometry Geometry => _geometry;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the frame asks for a backdrop effect. When true, <see cref="BackdropRegion"/> fills the frame outline and <see cref="OpaqueChrome"/> is false.
+    /// </summary>
     public bool Frosted { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether every pixel of the frame is opaque. It is true before the first draw. After a draw it is false for rounded corners,
+    /// a shaded window, a frosted frame or a translucent window background.
+    /// </summary>
     public bool OpaqueChrome => !_laidOut || (!_geometry.HasRoundedCorner && !_shaded && !Frosted && !_translucent);
 
+    /// <summary>
+    /// Fills the frame outline, with each rounded corner cut by marco's curve, when <see cref="Frosted"/> is true.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <param name="into">The region to fill in logical surface coordinates. The method clears it first.</param>
+    /// <returns><see langword="true"/> for a frosted frame that has been laid out.</returns>
     public bool BackdropRegion(in FrameState state, double scale, PixmanRegion32 into)
     {
         ArgumentNullException.ThrowIfNull(into);
@@ -78,9 +117,11 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
         }
     }
 
+    /// <inheritdoc/>
     public FrameInsets Measure(in FrameState state, double scale) =>
         _painter.Measure(new MetacityFrameInput(state, default));
 
+    /// <inheritdoc/>
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
     {
         var skia = (ISkiaUISurface)surface;
@@ -104,6 +145,7 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
         }
     }
 
+    /// <inheritdoc/>
     public FramePart PartAt(double x, double y, in FrameState state, double scale)
     {
         if (!_laidOut)
@@ -198,8 +240,14 @@ public sealed partial class MetacityFrameRenderer : IFrameRenderer
         return onBottom ? FramePart.Bottom : onLeft ? FramePart.Left : FramePart.Right;
     }
 
+    /// <summary>
+    /// Gives the drawn area of a button in the last draw. A hover or press change on the button damages only that area.
+    /// </summary>
+    /// <param name="part">The part to look up.</param>
+    /// <returns>The button area in surface coordinates, or an empty box for a part that is not a shown button.</returns>
     public Box PartBounds(FramePart part) => _laidOut ? _geometry.VisibleRect(part) : default;
 
+    /// <inheritdoc/>
     public string? CursorFor(FramePart part) => part switch
     {
         FramePart.Top => "top_side",

@@ -6,6 +6,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The backdrop blur on a GL device. It keeps one mip pyramid for each target size and drops a pyramid when no backdrop of that size remains.
+/// </summary>
 public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
 {
     private const string VertexSource = """
@@ -268,16 +271,25 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
     private int _depth = BlurStrength.For(new BlurOptions().Strength).Iterations;
     private bool _disposed;
 
+    /// <summary>
+    /// Gets blur and contrast, the two effects that this blur can draw.
+    /// </summary>
     public BackgroundEffects Supported => BackgroundEffects.Blur | BackgroundEffects.Contrast;
 
+    /// <summary>
+    /// Gets the widest sample reach in pixels among the shared options and every key. It is at least 8 once any key asks for <see cref="BlurKernel.VistaDwm"/>.
+    /// </summary>
     public int ExpandSize => Math.Max(_widest.ExpandSize, _anyVistaDwm ? VistaDwmKernel.ExpandSize : 0);
 
     private bool _anyVistaDwm;
 
+    /// <inheritdoc/>
     public BlurCorners Corners { get; set; }
 
+    /// <inheritdoc/>
     public double Opacity { get; set; } = 1.0;
 
+    /// <inheritdoc/>
     public void SetSurface(object key, in BlurSurfaceOptions options)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -289,12 +301,19 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         }
     }
 
+    /// <summary>
+    /// Drops the options of one key. It does not make the pyramid shallower.
+    /// </summary>
+    /// <param name="key">The key that <see cref="SetSurface"/> took.</param>
+    /// <returns><see langword="true"/> when the key had options.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="key"/> is <see langword="null"/>.</exception>
     public bool ForgetSurface(object key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return _surfaces.Remove(key);
     }
 
+    /// <inheritdoc/>
     public BlurOptions Options
     {
         get => _options;
@@ -322,6 +341,11 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlBackdropBlur"/> class and compiles its programs on the device.
+    /// </summary>
+    /// <param name="device">The GL device. Its context must be current.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public GlBackdropBlur(GlDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -345,6 +369,12 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
 
     internal int PyramidCount => _pyramids.Count;
 
+    /// <summary>
+    /// Blurs the backdrop under the bounds of the context with the options of its key. With a mesh, the result draws only through the triangles.
+    /// </summary>
+    /// <param name="context">The backdrop texture, the target size, the bounds, the key and the optional mesh.</param>
+    /// <param name="result">The texture that holds the result and the box to composite from it.</param>
+    /// <returns><see langword="true"/> when the result is ready to composite.</returns>
     public bool Record(in GlBackdropContext context, out GlBackdropResult result)
     {
         if (!RecordBlur(context, out result))
@@ -921,6 +951,9 @@ public sealed class GlBackdropBlur : IGlBackdropEffect, IBackdropBlur
         };
     }
 
+    /// <summary>
+    /// Deletes every program, pyramid and texture of the blur. The GL context must be current. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -4,19 +4,27 @@ using Xkb;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// The default <see cref="IIdleSource"/>. It measures idle time with a monotonic stopwatch and also counts touch activity from a <see cref="TouchRouter"/>.
+/// </summary>
 public sealed class SeatIdleSource : IIdleSource, ITouchActivitySink
 {
     private readonly System.Diagnostics.Stopwatch _since = System.Diagnostics.Stopwatch.StartNew();
     private int _inhibitors;
 
+    /// <inheritdoc/>
     public long IdleMillis => IsInhibited ? 0 : _since.ElapsedMilliseconds;
 
+    /// <inheritdoc/>
     public bool IsInhibited => _inhibitors > 0;
 
+    /// <inheritdoc/>
     public event Action? Activity;
 
+    /// <inheritdoc/>
     public event Action? InhibitionChanged;
 
+    /// <inheritdoc/>
     public void NotifyActivity()
     {
         _since.Restart();
@@ -25,6 +33,7 @@ public sealed class SeatIdleSource : IIdleSource, ITouchActivitySink
 
     void ITouchActivitySink.OnTouchActivity() => NotifyActivity();
 
+    /// <inheritdoc/>
     public IDisposable Inhibit()
     {
         _inhibitors++;

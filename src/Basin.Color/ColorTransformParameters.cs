@@ -2,6 +2,10 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
+/// <summary>
+/// The resolved steps that convert a color from one image description into another: decode, gamut
+/// matrix, tone mapping and encode. It is the reference that the LUT bakers and shaders follow.
+/// </summary>
 public readonly struct ColorTransformParameters
 {
     private const double SoftGamutMinSaturation = 0.7;
@@ -34,34 +38,91 @@ public readonly struct ColorTransformParameters
         ToneKnee = mapTones ? Math.Max(0, 1.5 * ToneTargetMax - 0.5) : 1;
     }
 
+    /// <summary>
+    /// Gets the transfer function that decodes the input.
+    /// </summary>
     public TransferCharacteristics Source { get; }
 
+    /// <summary>
+    /// Gets the transfer function that encodes the result.
+    /// </summary>
     public TransferCharacteristics Output { get; }
 
+    /// <summary>
+    /// Gets the row-major 3x3 gamut matrix from source to output primaries in linear light.
+    /// </summary>
     public ReadOnlySpan<double> Matrix => _matrix;
 
+    /// <summary>
+    /// Gets the factor that maps source luminance onto output luminance, so that both reference whites
+    /// match. It is 1 when inverse tone mapping runs.
+    /// </summary>
     public double Anchor { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the source peak is above the output's maximum luminance, so the
+    /// BT.2390 roll-off runs.
+    /// </summary>
     public bool MapTones { get; }
 
+    /// <summary>
+    /// Gets the PQ signal of the source peak after anchoring. It is 1 when <see cref="MapTones"/> is
+    /// false.
+    /// </summary>
     public double ToneSourceMax { get; }
 
+    /// <summary>
+    /// Gets the PQ signal of the output maximum, relative to <see cref="ToneSourceMax"/>. It is 1 when
+    /// <see cref="MapTones"/> is false.
+    /// </summary>
     public double ToneTargetMax { get; }
 
+    /// <summary>
+    /// Gets the relative PQ signal where the BT.2390 roll-off starts. Below it, luminance passes
+    /// unchanged.
+    /// </summary>
     public double ToneKnee { get; }
 
+    /// <summary>
+    /// Gets the SDR to HDR expansion that runs instead of the anchor, or <see langword="null"/> when
+    /// none runs.
+    /// </summary>
     public InverseToneMapping? InverseToneMapping { get; }
 
+    /// <summary>
+    /// Gets the creative look table that the output applies to the encoded source before decoding, or
+    /// <see langword="null"/>.
+    /// </summary>
     public ColorLut3D? Look { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether saturated colors blend toward their unconverted values instead
+    /// of clipping. It is set only when the gamut matrix leaves the output gamut.
+    /// </summary>
     public bool SoftGamut { get; }
 
+    /// <summary>
+    /// Resolves the conversion between two descriptions without soft gamut mapping.
+    /// </summary>
+    /// <param name="source">The description of the input.</param>
+    /// <param name="output">The description of the target.</param>
+    /// <param name="intent">The rendering intent. Only <see cref="ColorRenderIntent.AbsoluteNoAdaptation"/> changes the result, by skipping white adaptation.</param>
+    /// <returns>The resolved parameters.</returns>
     public static ColorTransformParameters From(
         ImageDescription source,
         ImageDescription output,
         ColorRenderIntent intent = ColorRenderIntent.Perceptual) =>
         From(source, output, intent, softGamut: false);
 
+    /// <summary>
+    /// Resolves the conversion between two descriptions. Inverse tone mapping runs only for a
+    /// standard-range source without ICC data into a PQ output that asks for it.
+    /// </summary>
+    /// <param name="source">The description of the input.</param>
+    /// <param name="output">The description of the target.</param>
+    /// <param name="intent">The rendering intent. Only <see cref="ColorRenderIntent.AbsoluteNoAdaptation"/> changes the result, by skipping white adaptation.</param>
+    /// <param name="softGamut">Whether to blend saturated colors instead of clipping them when the source gamut is larger.</param>
+    /// <returns>The resolved parameters.</returns>
     public static ColorTransformParameters From(
         ImageDescription source,
         ImageDescription output,
@@ -93,6 +154,11 @@ public readonly struct ColorTransformParameters
             softGamut && Colorimetry.LeavesGamut(matrix));
     }
 
+    /// <summary>
+    /// Converts one color in place through the look, decode, gamut matrix, tone mapping and encode
+    /// steps.
+    /// </summary>
+    /// <param name="rgb">Three encoded source channels. They are replaced with encoded output channels.</param>
     public void Apply(Span<double> rgb)
     {
         if (Look is { } look)

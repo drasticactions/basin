@@ -4,6 +4,9 @@ using static Basin.SystemStatus.SystemStatusLog;
 
 namespace Basin.SystemStatus;
 
+/// <summary>
+/// The base of the status readers. A reader reads the whole state of one D-Bus service again after each burst of signals, and it recovers when the service starts or restarts.
+/// </summary>
 public abstract class SystemStatusReader : IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -25,14 +28,29 @@ public abstract class SystemStatusReader : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the well-known bus name that the reader reads.
+    /// </summary>
     public string Service { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the first read is complete, with or without a result.
+    /// </summary>
     public bool IsReady { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the service answered the last read. A shell hides an indicator whose reader is not available.
+    /// </summary>
     public bool IsAvailable { get; private set; }
 
+    /// <summary>
+    /// Gets why the indicator is absent, for example that the service is not on the bus or that it reports no device. It is <see langword="null"/> when the indicator is present.
+    /// </summary>
     public string? Reason => IsAvailable ? AvailableReason : _reason;
 
+    /// <summary>
+    /// Occurs on the compositor thread after each read, successful or not. One burst of signals gives one event.
+    /// </summary>
     public event Action? Changed;
 
     private protected SystemStatusBus Bus { get; }
@@ -41,6 +59,9 @@ public abstract class SystemStatusReader : IDisposable
 
     private protected virtual string? AvailableReason => null;
 
+    /// <summary>
+    /// Removes the signal watches and the timer. A result that arrives later is dropped. Call it on the compositor thread, before the bus is disposed. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

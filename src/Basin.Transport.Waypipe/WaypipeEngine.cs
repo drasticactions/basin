@@ -6,6 +6,9 @@ using static Basin.Transport.Waypipe.WaypipeLog;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// Applies decoded waypipe messages: it rebuilds remote buffers, images and pipes, and delivers protocol bytes to a <see cref="WaypipeClientTransport"/>. It is not thread safe.
+/// </summary>
 public sealed class WaypipeEngine : IDisposable
 {
     private readonly Dictionary<int, SharedMemoryRegion> _regions = [];
@@ -27,6 +30,13 @@ public sealed class WaypipeEngine : IDisposable
     private bool _draining;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WaypipeEngine"/> class.
+    /// </summary>
+    /// <param name="transport">The transport that gets the protocol bytes and descriptor slots.</param>
+    /// <param name="compression">The compression of buffer contents from the peer.</param>
+    /// <param name="limits">The limits on the peer, or <see langword="null"/> for the defaults.</param>
+    /// <param name="options">The content that the engine accepts, or <see langword="null"/> for the defaults.</param>
     public WaypipeEngine(
         WaypipeClientTransport transport,
         WaypipeCompression compression = WaypipeCompression.Lz4,
@@ -40,12 +50,24 @@ public sealed class WaypipeEngine : IDisposable
         _options = options ?? new WaypipeChannelOptions();
     }
 
+    /// <summary>
+    /// Gets the compression that the engine expects for buffer contents.
+    /// </summary>
     public WaypipeCompression Compression { get; }
 
+    /// <summary>
+    /// Gets or sets the video codec that the connection header announced. A video stream with another codec ends the channel. It is <see langword="null"/> for no video.
+    /// </summary>
     public Basin.Capabilities.VideoCodec? ExpectedVideoCodec { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the peer sent a close message.
+    /// </summary>
     public bool Closed { get; private set; }
 
+    /// <summary>
+    /// Gets the number of buffers, images and pipes that are still live. The get first drops the ones that the compositor released.
+    /// </summary>
     public int LiveRemoteIds
     {
         get
@@ -57,12 +79,28 @@ public sealed class WaypipeEngine : IDisposable
 
     internal long RegionBytes => _regionBytes;
 
+    /// <summary>
+    /// Occurs when the engine must send a message to the peer, for example pipe bytes. The arguments are the type, the remote id and the payload.
+    /// </summary>
     public event Action<WaypipeMessageType, int, ReadOnlyMemory<byte>>? Send;
 
+    /// <summary>
+    /// Occurs when a message that was deferred behind an asynchronous video decode fails. Without a handler, the error goes to the caller of the completion.
+    /// </summary>
     public event Action<Exception>? Failed;
 
+    /// <summary>
+    /// Gets a value indicating whether the engine waits for an asynchronous video decode. Messages that arrive during the wait are queued.
+    /// </summary>
     public bool AwaitingFrame => _awaitingImage is not null;
 
+    /// <summary>
+    /// Applies one message, or queues it while a video decode is pending.
+    /// </summary>
+    /// <param name="type">The message type from the frame header.</param>
+    /// <param name="body">The message bytes after the frame header, without padding.</param>
+    /// <exception cref="WaypipeException">The message is malformed, goes over a limit or is a type that the channel refuses.</exception>
+    /// <exception cref="ObjectDisposedException">The engine is disposed.</exception>
     public void Apply(WaypipeMessageType type, ReadOnlySpan<byte> body)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -208,6 +246,9 @@ public sealed class WaypipeEngine : IDisposable
         }
     }
 
+    /// <summary>
+    /// Releases every buffer, image and decode session that the engine holds, and completes the forwarded pipes. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -8,6 +8,9 @@ using SkiaSharp;
 
 namespace Basin.Frames.MsStyles.Quill;
 
+/// <summary>
+/// Replays an <see cref="MsStylesDrawList"/> on a Prowl.Quill canvas. It caches textures for each canvas renderer, so many windows can share one instance.
+/// </summary>
 public sealed class MsStylesQuillPainter
 {
     private const int MaxNearestScale = 4;
@@ -16,6 +19,11 @@ public sealed class MsStylesQuillPainter
     private readonly Dictionary<IBuffer, (int Width, int Height, byte[] Rgba)?> _pixelIcons = [];
     private readonly Dictionary<SKImage, (int Width, int Height, byte[] Rgba)?> _namedIcons = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MsStylesQuillPainter"/> class.
+    /// </summary>
+    /// <param name="images">The decoded theme images that the draw lists refer to by handle.</param>
+    /// <param name="text">The text engine that draws and measures titles.</param>
     public MsStylesQuillPainter(MsStylesImageCache images, MsStylesQuillText text)
     {
         ArgumentNullException.ThrowIfNull(images);
@@ -24,12 +32,29 @@ public sealed class MsStylesQuillPainter
         Text = text;
     }
 
+    /// <summary>
+    /// Gets the image cache that resolves the bitmap handles in a draw list.
+    /// </summary>
     public MsStylesImageCache Images { get; }
 
+    /// <summary>
+    /// Gets the text engine that draws text and glow operations.
+    /// </summary>
     public MsStylesQuillText Text { get; }
 
+    /// <summary>
+    /// Gets or sets the lookup for named icons. It takes an icon name and a scale in multiples of 16 pixels, and returns
+    /// <see langword="null"/> when no icon matches. The caller keeps ownership of each returned image.
+    /// </summary>
     public Func<string, int, SKImage?>? Icons { get; set; }
 
+    /// <summary>
+    /// Draws every operation of a draw list. The list is in device pixels, and the canvas is in logical pixels.
+    /// </summary>
+    /// <param name="canvas">The canvas to draw on.</param>
+    /// <param name="renderer">The canvas renderer that owns the textures for this canvas.</param>
+    /// <param name="list">The operations to draw.</param>
+    /// <param name="scale">The output scale that converts device pixels to canvas units.</param>
     public void Paint(Canvas canvas, ICanvasRenderer renderer, MsStylesDrawList list, float scale)
     {
         ArgumentNullException.ThrowIfNull(canvas);

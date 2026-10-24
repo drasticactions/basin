@@ -2,29 +2,81 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// An easing shape as a value. The four parameters mean different things for each kind.
+/// </summary>
+/// <param name="Kind">The shape.</param>
+/// <param name="X1">The first control X of a Bézier, or the stiffness of a spring.</param>
+/// <param name="Y1">The first control Y of a Bézier, or the friction of a spring.</param>
+/// <param name="X2">The second control X of a Bézier, or the settle time of a spring in milliseconds.</param>
+/// <param name="Y2">The second control Y of a Bézier, or the initial velocity of a spring.</param>
 public readonly record struct EasingCurve(EasingKind Kind, double X1, double Y1, double X2, double Y2)
 {
+    /// <summary>
+    /// Progress without easing.
+    /// </summary>
     public static readonly EasingCurve Linear = new(EasingKind.Linear, 0, 0, 0, 0);
 
+    /// <summary>
+    /// A logistic curve, normalized to pass through 0 and 1.
+    /// </summary>
     public static readonly EasingCurve Sigmoid = new(EasingKind.Sigmoid, 0, 0, 0, 0);
 
+    /// <summary>
+    /// Two quarter circles that ease in and out.
+    /// </summary>
     public static readonly EasingCurve Circle = new(EasingKind.Circle, 0, 0, 0, 0);
 
+    /// <summary>
+    /// The Qt ease-in curve, a sine blended against linear over the first part.
+    /// </summary>
     public static readonly EasingCurve InCurve = new(EasingKind.InCurve, 0, 0, 0, 0);
 
+    /// <summary>
+    /// The Qt ease-out curve, a sine blended against linear over the last part.
+    /// </summary>
     public static readonly EasingCurve OutCurve = new(EasingKind.OutCurve, 0, 0, 0, 0);
 
+    /// <summary>
+    /// An exact cubic ease-in.
+    /// </summary>
     public static readonly EasingCurve InCubic = new(EasingKind.InCubic, 0, 0, 0, 0);
 
+    /// <summary>
+    /// An exact cubic ease-out.
+    /// </summary>
     public static readonly EasingCurve OutCubic = new(EasingKind.OutCubic, 0, 0, 0, 0);
 
+    /// <summary>
+    /// An exact cubic ease-in and ease-out.
+    /// </summary>
     public static readonly EasingCurve InOutCubic = new(EasingKind.InOutCubic, 0, 0, 0, 0);
 
+    /// <summary>
+    /// Creates a CSS cubic Bézier from 0,0 to 1,1.
+    /// </summary>
+    /// <param name="x1">The X of the first control point, from 0 to 1.</param>
+    /// <param name="y1">The Y of the first control point.</param>
+    /// <param name="x2">The X of the second control point, from 0 to 1.</param>
+    /// <param name="y2">The Y of the second control point.</param>
+    /// <returns>The curve.</returns>
     public static EasingCurve CubicBezier(double x1, double y1, double x2, double y2) =>
         new(EasingKind.CubicBezier, x1, y1, x2, y2);
 
+    /// <summary>
+    /// Creates a spring curve with the weston default friction of 400. That friction is underdamped and rings at ordinary stiffness.
+    /// </summary>
+    /// <param name="k">The spring stiffness.</param>
+    /// <returns>The curve, which an opacity easing must not use.</returns>
     public static EasingCurve Spring(double k) => Spring(k, 400.0, 0.0);
 
+    /// <summary>
+    /// Creates a curve that samples a weston spring over its settle time. The settle time is measured once, here.
+    /// </summary>
+    /// <param name="k">The spring stiffness.</param>
+    /// <param name="friction">The friction. An opacity easing needs a damped value, for example 1400 or 4000.</param>
+    /// <param name="initialVelocity">The start velocity toward the target.</param>
+    /// <returns>The curve.</returns>
     public static EasingCurve Spring(double k, double friction, double initialVelocity = 0.0) =>
         new(
             EasingKind.Spring,
@@ -33,8 +85,16 @@ public readonly record struct EasingCurve(EasingKind Kind, double X1, double Y1,
             Effects.Spring.SettleMillis(k, friction, initialVelocity),
             initialVelocity);
 
+    /// <summary>
+    /// Gets the time the spring takes to settle, in milliseconds. It is 0 for every other kind.
+    /// </summary>
     public double SettleMillis => Kind == EasingKind.Spring ? X2 : 0.0;
 
+    /// <summary>
+    /// Maps a raw fraction through the curve.
+    /// </summary>
+    /// <param name="t">The raw fraction. The method clamps it to the range from 0 to 1.</param>
+    /// <returns>The eased value. A spring or a Bézier can go past the range from 0 to 1.</returns>
     public double Apply(double t)
     {
         t = Math.Clamp(t, 0, 1);

@@ -4,10 +4,19 @@ using System.Text;
 
 namespace Basin.Themes.MsStyles;
 
+/// <summary>
+/// Reads the resource tree of a PE image, for example an <c>.msstyles</c> file. Each resource is keyed by type and name, and the first language entry wins.
+/// </summary>
 public sealed class PeResources
 {
+    /// <summary>
+    /// The resource type ID of a string table, <c>RT_STRING</c>.
+    /// </summary>
     public const int StringType = 6;
 
+    /// <summary>
+    /// The resource type ID of a bitmap, <c>RT_BITMAP</c>.
+    /// </summary>
     public const int BitmapType = 2;
 
     private const int MaxEntries = 65536;
@@ -29,10 +38,22 @@ public sealed class PeResources
         _file = file;
     }
 
+    /// <summary>
+    /// Gets the bytes of the whole image. Every resource that this object returns is a slice of these bytes.
+    /// </summary>
     public ReadOnlyMemory<byte> File => _file;
 
+    /// <summary>
+    /// Gets the resource types in the order of the resource directory.
+    /// </summary>
     public IReadOnlyList<PeResourceKey> Types => _typeOrder;
 
+    /// <summary>
+    /// Reads the resource tree of a PE image. The result keeps a reference to <paramref name="file"/> and does not copy it.
+    /// </summary>
+    /// <param name="file">The bytes of the image.</param>
+    /// <returns>The resources of the image.</returns>
+    /// <exception cref="MsStylesFormatException">The bytes are not a PE image, the image has no resource directory, or the tree is damaged.</exception>
     public static PeResources Read(ReadOnlyMemory<byte> file)
     {
         var resources = new PeResources(file);
@@ -40,12 +61,30 @@ public sealed class PeResources
         return resources;
     }
 
+    /// <summary>
+    /// Lists the resource names of one type.
+    /// </summary>
+    /// <param name="type">The resource type.</param>
+    /// <returns>The names in directory order. The list is empty when the image has no resource of the type.</returns>
     public IReadOnlyList<PeResourceKey> Names(PeResourceKey type) =>
         _nameOrder.TryGetValue(type, out var names) ? names : [];
 
+    /// <summary>
+    /// Checks whether the image has a resource.
+    /// </summary>
+    /// <param name="type">The resource type.</param>
+    /// <param name="name">The resource name.</param>
+    /// <returns><see langword="true"/> when the resource exists.</returns>
     public bool Contains(PeResourceKey type, PeResourceKey name) =>
         _types.TryGetValue(type, out var names) && names.ContainsKey(name);
 
+    /// <summary>
+    /// Finds the data of a resource.
+    /// </summary>
+    /// <param name="type">The resource type.</param>
+    /// <param name="name">The resource name.</param>
+    /// <param name="data">A slice of <see cref="File"/> that holds the data, or empty when the resource does not exist.</param>
+    /// <returns><see langword="true"/> when the resource exists.</returns>
     public bool TryFind(PeResourceKey type, PeResourceKey name, out ReadOnlyMemory<byte> data)
     {
         if (_types.TryGetValue(type, out var names) && names.TryGetValue(name, out data))
@@ -57,6 +96,12 @@ public sealed class PeResources
         return false;
     }
 
+    /// <summary>
+    /// Reads one string from the string tables, as <c>LoadString</c> does.
+    /// </summary>
+    /// <param name="id">The string ID.</param>
+    /// <param name="value">The string, or empty when it is not found.</param>
+    /// <returns><see langword="true"/> when the string exists and is not empty. It is <see langword="false"/> for a negative ID.</returns>
     public bool TryGetString(int id, out string value)
     {
         value = string.Empty;

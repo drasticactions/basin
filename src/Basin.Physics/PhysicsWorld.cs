@@ -3,14 +3,29 @@ using Basin.Kinematics;
 
 namespace Basin.Physics;
 
+/// <summary>
+/// Simulates boxes in a plane on one <see cref="PhysicsEngine"/>, in logical pixels with the y axis down. The consumer steps it on each frame tick and writes the poses back. The world never schedules a frame.
+/// </summary>
 public sealed class PhysicsWorld : IDisposable
 {
+    /// <summary>
+    /// The fixed scale between logical pixels and engine meters.
+    /// </summary>
     public const double PixelsPerMeter = 100.0;
 
+    /// <summary>
+    /// The fixed step length, in nanoseconds. It does not depend on the display refresh rate.
+    /// </summary>
     public const long StepNanos = 16_666_667;
 
+    /// <summary>
+    /// The most steps that one <see cref="Step"/> call runs. A larger backlog is dropped.
+    /// </summary>
     public const int MaxStepsPerTick = 2;
 
+    /// <summary>
+    /// The number of engine substeps in each step.
+    /// </summary>
     public const int SubSteps = 4;
 
     private const double StepSeconds = 1.0 / 60.0;
@@ -38,6 +53,12 @@ public sealed class PhysicsWorld : IDisposable
     private bool _frozen;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PhysicsWorld"/> class on an engine. The world owns its engine state until <see cref="Dispose"/>.
+    /// </summary>
+    /// <param name="engine">The engine to run on.</param>
+    /// <param name="gravityX">The horizontal gravity, in logical pixels per second squared.</param>
+    /// <param name="gravityY">The vertical gravity, in logical pixels per second squared. A positive value pulls down.</param>
     public PhysicsWorld(PhysicsEngine engine, double gravityX = 0, double gravityY = 0)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -48,6 +69,9 @@ public sealed class PhysicsWorld : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets or sets the approach speed, in logical pixels per second, above which a new contact becomes a <see cref="PhysicsImpact"/>. A negative value becomes 0. The default is 150.
+    /// </summary>
     public double ImpactThreshold
     {
         get;
@@ -61,20 +85,44 @@ public sealed class PhysicsWorld : IDisposable
         }
     } = 150;
 
+    /// <summary>
+    /// Gets the engine that the world runs on. A body can move only to a world on the same engine.
+    /// </summary>
     public PhysicsEngine Engine { get; }
 
+    /// <summary>
+    /// Gets or sets the factor that <see cref="EndDrag"/> applies to the release velocity.
+    /// </summary>
     public double ThrowMultiplier { get; set; } = 1.0;
 
+    /// <summary>
+    /// Gets or sets the highest speed that <see cref="EndDrag"/> gives a body, in logical pixels per second, after <see cref="ThrowMultiplier"/>.
+    /// </summary>
     public double MaxThrowSpeed { get; set; } = 6000;
 
+    /// <summary>
+    /// Gets or sets the speed in logical pixels per second below which a slowing dynamic body stops and sleeps. It applies only to a body with no gravity.
+    /// </summary>
     public double StopSpeed { get; set; } = 20;
 
+    /// <summary>
+    /// Gets or sets the drag jump, in logical pixels, at or above which <see cref="Drag(PhysicsBody, double, double)"/> places the body directly. Such a jump does not push the bodies between.
+    /// </summary>
     public double TeleportDistance { get; set; } = double.PositiveInfinity;
 
+    /// <summary>
+    /// Gets or sets the factor on the spin that an off-center throw gives. Zero gives no spin.
+    /// </summary>
     public double SpinScale { get; set; } = 0.5;
 
+    /// <summary>
+    /// Gets or sets the stiffness of the spring that turns an upright body back to an angle of zero. A change applies to the next spring that starts.
+    /// </summary>
     public double UprightStiffness { get; set; } = 200;
 
+    /// <summary>
+    /// Gets or sets the gravity, in logical pixels per second squared. A set wakes every dynamic body.
+    /// </summary>
     public (double X, double Y) Gravity
     {
         get => (_gravityX, _gravityY);
@@ -87,6 +135,9 @@ public sealed class PhysicsWorld : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="Step"/> does nothing. A frozen world keeps its accumulator, so the poses stay the poses drawn last.
+    /// </summary>
     public bool Frozen
     {
         get => _frozen;
@@ -106,14 +157,39 @@ public sealed class PhysicsWorld : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a body moves, is dragged or turns upright, and the world is not frozen. The consumer schedules a repaint while it is <see langword="true"/>.
+    /// </summary>
     public bool IsAwake => !_frozen && _awake;
 
+    /// <summary>
+    /// Gets the number of live bodies, wall bodies included.
+    /// </summary>
     public int Count => _slotCount - _freeCount;
 
+    /// <summary>
+    /// Gets the bodies whose <see cref="PhysicsBody.Pose"/> changed in the last <see cref="Step"/>. The span is valid until the next <see cref="Step"/>.
+    /// </summary>
     public ReadOnlySpan<PhysicsBody> Moved => _moved.AsSpan(0, _movedCount);
 
+    /// <summary>
+    /// Gets the impacts of the last <see cref="Step"/>. The span is valid until the next <see cref="Step"/>.
+    /// </summary>
     public ReadOnlySpan<PhysicsImpact> Impacts => _impacts.AsSpan(0, _impactCount);
 
+    /// <summary>
+    /// Adds a box body with the mask <see cref="PhysicsCategory.All"/> and no locks.
+    /// </summary>
+    /// <param name="kind">The kind of the body.</param>
+    /// <param name="x">The left edge of the box, in logical pixels.</param>
+    /// <param name="y">The top edge of the box, in logical pixels.</param>
+    /// <param name="width">The box width. A value below 1 becomes 1.</param>
+    /// <param name="height">The box height. A value below 1 becomes 1.</param>
+    /// <param name="material">The material of the body.</param>
+    /// <param name="tag">The consumer value stored with the body.</param>
+    /// <param name="awake">Whether the body starts awake. A body made asleep does not move or push until something wakes it.</param>
+    /// <returns>The handle of the new body.</returns>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public PhysicsBody CreateBody(
         PhysicsBodyKind kind,
         double x,
@@ -162,6 +238,10 @@ public sealed class PhysicsWorld : IDisposable
         return new PhysicsBody(this, index, slot.Generation);
     }
 
+    /// <summary>
+    /// Removes a body. Every handle to it becomes stale. It does nothing for a handle that is not live in this world.
+    /// </summary>
+    /// <param name="body">The body to remove.</param>
     public void Destroy(PhysicsBody body)
     {
         if (!IsLive(body))
@@ -176,6 +256,15 @@ public sealed class PhysicsWorld : IDisposable
         _free[_freeCount++] = body.Slot;
     }
 
+    /// <summary>
+    /// Moves a body to another world. It makes a copy with the same size, kind, material, tag, locks, mask and upright flag, and then destroys the original.
+    /// </summary>
+    /// <param name="body">The body to move.</param>
+    /// <param name="target">The world that gets the copy. It must be on the same engine.</param>
+    /// <param name="x">The left edge of the copy in the target world.</param>
+    /// <param name="y">The top edge of the copy in the target world.</param>
+    /// <param name="velocityScale">The factor on the velocity of a dynamic body. Zero places the copy at rest and asleep.</param>
+    /// <returns>The handle of the copy, or <see langword="default"/> when <paramref name="body"/> is not live in this world.</returns>
     public PhysicsBody MoveTo(PhysicsBody body, PhysicsWorld target, double x, double y, double velocityScale)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -205,6 +294,11 @@ public sealed class PhysicsWorld : IDisposable
         return moved;
     }
 
+    /// <summary>
+    /// Advances the world to a frame tick with fixed steps and an accumulator. A tick that does not advance past the last one steps nothing. The first tick after a wake counts one refresh interval.
+    /// </summary>
+    /// <param name="tick">The frame tick of the output that repaints.</param>
+    /// <returns><see langword="true"/> while the world is still awake and needs another frame.</returns>
     public bool Step(in FrameTick tick)
     {
         _movedCount = 0;
@@ -252,6 +346,9 @@ public sealed class PhysicsWorld : IDisposable
         return _awake;
     }
 
+    /// <summary>
+    /// Releases the engine state. After it, <see cref="Step"/> does nothing and every body handle is stale.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -264,6 +361,12 @@ public sealed class PhysicsWorld : IDisposable
         BasinCounters.Untrack();
     }
 
+    /// <summary>
+    /// Starts a drag. The body becomes kinematic until <see cref="EndDrag"/>, and the grab point stays fixed in the body frame. The angle does not change during the drag.
+    /// </summary>
+    /// <param name="body">The body to drag. A handle that is not live does nothing.</param>
+    /// <param name="grabX">The horizontal grab position, in logical pixels.</param>
+    /// <param name="grabY">The vertical grab position, in logical pixels.</param>
     public void BeginDrag(PhysicsBody body, double grabX, double grabY)
     {
         if (!IsLive(body))
@@ -292,8 +395,21 @@ public sealed class PhysicsWorld : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Moves the drag target of a dragged body and keeps its angle. The body reaches the target over the next step and pushes the dynamic bodies in its way.
+    /// </summary>
+    /// <param name="body">The dragged body. A body that is not dragged does nothing.</param>
+    /// <param name="x">The new horizontal grab position.</param>
+    /// <param name="y">The new vertical grab position.</param>
     public void Drag(PhysicsBody body, double x, double y) => Drag(body, x, y, double.NaN);
 
+    /// <summary>
+    /// Moves the drag target of a dragged body and turns it about the grab point.
+    /// </summary>
+    /// <param name="body">The dragged body. A body that is not dragged does nothing.</param>
+    /// <param name="x">The new horizontal grab position.</param>
+    /// <param name="y">The new vertical grab position.</param>
+    /// <param name="angle">The target angle in radians, or <see cref="double.NaN"/> to keep the angle.</param>
     public void Drag(PhysicsBody body, double x, double y, double angle)
     {
         if (!IsLive(body) || !_slots[body.Slot].Dragging)
@@ -316,6 +432,12 @@ public sealed class PhysicsWorld : IDisposable
         _awake = true;
     }
 
+    /// <summary>
+    /// Ends a drag at the last target and restores the kind of the body. A dynamic body gets the release velocity and, for an off-center grab, a spin.
+    /// </summary>
+    /// <param name="body">The dragged body. A body that is not dragged does nothing.</param>
+    /// <param name="velocityX">The horizontal release velocity, in logical pixels per second.</param>
+    /// <param name="velocityY">The vertical release velocity, in logical pixels per second.</param>
     public void EndDrag(PhysicsBody body, double velocityX, double velocityY)
     {
         if (!IsLive(body) || !_slots[body.Slot].Dragging)

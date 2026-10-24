@@ -2,9 +2,18 @@ using Tmds.DBus.Protocol;
 
 namespace Basin.SystemStatus;
 
+/// <summary>
+/// Reads the UPower display device, which UPower composes from all batteries. The values read as zero when no battery is present.
+/// </summary>
 public sealed class BatteryStatus : SystemStatusReader
 {
+    /// <summary>
+    /// The bus name of UPower.
+    /// </summary>
     public const string ServiceName = "org.freedesktop.UPower";
+    /// <summary>
+    /// The object path of the display device that the reader reads.
+    /// </summary>
     public const string DisplayDevicePath = "/org/freedesktop/UPower/devices/DisplayDevice";
 
     private const string DeviceInterface = "org.freedesktop.UPower.Device";
@@ -15,20 +24,45 @@ public sealed class BatteryStatus : SystemStatusReader
     {
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the display device is a battery that is present. A desktop computer reads false.
+    /// </summary>
     public bool IsPresent { get; private set; }
 
+    /// <summary>
+    /// Gets the charge from 0 to 100, or 0 when no battery is present.
+    /// </summary>
     public double Percentage { get; private set; }
 
+    /// <summary>
+    /// Gets the charge state, or <see cref="BatteryState.Unknown"/> when no battery is present or UPower sends a value outside the enum.
+    /// </summary>
     public BatteryState State { get; private set; }
 
+    /// <summary>
+    /// Gets the time that UPower estimates until the battery is empty, or zero when it gives none.
+    /// </summary>
     public TimeSpan TimeToEmpty { get; private set; }
 
+    /// <summary>
+    /// Gets the time that UPower estimates until the battery is full, or zero when it gives none.
+    /// </summary>
     public TimeSpan TimeToFull { get; private set; }
 
+    /// <summary>
+    /// Gets the icon name that UPower selects for the state, or <see langword="null"/>.
+    /// </summary>
     public string? IconName { get; private set; }
 
     private protected override string? AvailableReason => IsPresent ? null : "UPower reports no battery";
 
+    /// <summary>
+    /// Creates the reader and starts its first read in the background. The reader is created also when UPower is not on the bus, and then it reads as not available.
+    /// </summary>
+    /// <param name="bus">The shared system bus connection.</param>
+    /// <param name="reason">Why no reader was created, or <see langword="null"/>.</param>
+    /// <returns>The reader, or <see langword="null"/> when the bus is disposed or has no address.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bus"/> is <see langword="null"/>.</exception>
     public static BatteryStatus? TryCreate(SystemStatusBus bus, out string? reason)
     {
         if (!CheckBus(bus, out reason))

@@ -2,15 +2,27 @@ using Basin.Capabilities;
 
 namespace Basin.Scene;
 
+/// <content>
+/// Color management state for the scene.
+/// </content>
 public sealed partial class Scene
 {
     private readonly List<SceneOutput> _outputs = [];
     private IColorTransformResolver? _colorTransforms;
 
+    /// <summary>
+    /// Gets the scene outputs that show this scene, in the order they attached.
+    /// </summary>
     public IReadOnlyList<SceneOutput> Outputs => _outputs;
 
+    /// <summary>
+    /// Occurs when the color description of a buffer node changes.
+    /// </summary>
     public event Action<SceneBuffer>? ColorDescriptionChanged;
 
+    /// <summary>
+    /// Gets or sets the resolver that builds color transforms between descriptions. Setting it rebuilds the lookup tables of every attached output.
+    /// </summary>
     public IColorTransformResolver? ColorTransforms
     {
         get => _colorTransforms;
@@ -29,6 +41,9 @@ public sealed partial class Scene
         }
     }
 
+    /// <summary>
+    /// Gets the total number of color lookup tables that the attached outputs hold.
+    /// </summary>
     public int LutCount
     {
         get
@@ -43,12 +58,23 @@ public sealed partial class Scene
         }
     }
 
+    /// <summary>
+    /// Sets the color description of every surface buffer in the scene from a callback.
+    /// </summary>
+    /// <param name="describe">Returns the description for a surface, or <see langword="null"/> to clear it.</param>
+    /// <returns>The number of buffers that got a description.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="describe"/> is <see langword="null"/>.</exception>
     public int DescribeSurfaces(Func<Surface, ImageDescription?> describe)
     {
         ArgumentNullException.ThrowIfNull(describe);
         return DescribeSurfaces(Root, describe);
     }
 
+    /// <summary>
+    /// Adds the color description of every buffer node in the scene to a set. Disabled nodes are included.
+    /// </summary>
+    /// <param name="descriptions">The set to add to. The method does not clear it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="descriptions"/> is <see langword="null"/>.</exception>
     public void CollectColorDescriptions(HashSet<ImageDescription> descriptions)
     {
         ArgumentNullException.ThrowIfNull(descriptions);

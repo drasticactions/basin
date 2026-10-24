@@ -5,8 +5,17 @@ using Basin.Icons.Skia;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// Loads application icons for the Avalonia prompts.
+/// </summary>
 public static class PromptIcon
 {
+    /// <summary>
+    /// Draws an icon file into a new square bitmap with premultiplied BGRA pixels.
+    /// </summary>
+    /// <param name="path">The path of the icon file.</param>
+    /// <param name="sizePx">The edge length of the bitmap in pixels.</param>
+    /// <returns>The bitmap, which the caller must dispose. It is <see langword="null"/> for an empty path, a size of 0 or less, or a file that does not draw.</returns>
     public static Bitmap? Load(string path, int sizePx)
     {
         if (string.IsNullOrEmpty(path) || sizePx <= 0)

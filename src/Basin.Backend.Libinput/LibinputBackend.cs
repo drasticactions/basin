@@ -6,6 +6,10 @@ using Udev;
 
 namespace Basin.Backend.Libinput;
 
+/// <summary>
+/// Reads input devices through libinput on the session's seat. Device fds come from the session, udev reports hotplug, and a session switch suspends reading.
+/// Events pass through without policy.
+/// </summary>
 public sealed class LibinputBackend : IDisposable
 {
     private static readonly BasinLogger Log = BasinLog.For("libinput");
@@ -29,18 +33,25 @@ public sealed class LibinputBackend : IDisposable
     private int _generation;
     private LibinputDeviceConfiguration? _configuration;
 
+    /// <summary>Gets the session that opens the device fds and names the seat.</summary>
     public ISession Session => _session;
 
+    /// <summary>Initializes a new instance of the <see cref="LibinputBackend"/> class. It opens nothing until <see cref="Start"/>.</summary>
+    /// <param name="loop">The event loop that dispatches udev and libinput.</param>
+    /// <param name="session">The session that opens the devices.</param>
     public LibinputBackend(ICompositorEventLoop loop, ISession session)
     {
         _loop = loop;
         _session = session;
     }
 
+    /// <summary>Gets the devices that libinput has now. While the session is disabled, the collection is empty.</summary>
     public IReadOnlyCollection<InputDevice> Devices => _devices.Values;
 
+    /// <summary>Gets the device configuration capability over this backend. It is created on first access.</summary>
     public LibinputDeviceConfiguration Configuration => _configuration ??= new LibinputDeviceConfiguration(this);
 
+    /// <summary>Gets a value indicating whether one of the current devices has the touch capability.</summary>
     public bool HasTouchDevice
     {
         get
@@ -57,44 +68,92 @@ public sealed class LibinputBackend : IDisposable
         }
     }
 
+    /// <summary>Occurs when libinput adds a device, at hotplug and when the session is enabled again.</summary>
     public event Action<InputDevice>? DeviceAdded;
 
+    /// <summary>
+    /// Occurs when libinput removes a device, at unplug and when the session is disabled. The device is disposed after the handlers return.
+    /// </summary>
     public event Action<InputDevice>? DeviceRemoved;
 
+    /// <summary>
+    /// Occurs when a key changes state. The arguments are the device, the time in milliseconds, the Linux input event code and the pressed state.
+    /// </summary>
     public event Action<InputDevice, uint, uint, bool>? Key;
 
+    /// <summary>
+    /// Occurs on relative pointer motion. The arguments are the device, the time in milliseconds, the accelerated delta and the unaccelerated delta.
+    /// The deltas are in libinput's normalized 1000 DPI units.
+    /// </summary>
     public event Action<InputDevice, uint, double, double, double, double>? PointerMotion;
 
+    /// <summary>
+    /// Occurs on absolute pointer motion. The arguments are the device, the time in milliseconds and X and Y from 0 to 1 across the device's area.
+    /// </summary>
     public event Action<InputDevice, uint, double, double>? PointerMotionAbsolute;
 
+    /// <summary>
+    /// Occurs when a pointer button changes state. The arguments are the device, the time in milliseconds, the Linux input event code and the pressed state.
+    /// </summary>
     public event Action<InputDevice, uint, uint, bool>? PointerButton;
 
+    /// <summary>
+    /// Occurs once per axis that a scroll event carries. The arguments are the device, the time in milliseconds and the axis value.
+    /// Only wheel scroll carries a value120.
+    /// </summary>
     public event Action<InputDevice, uint, PointerAxis>? PointerScroll;
 
+    /// <summary>
+    /// Occurs when a touch point goes down. The arguments are the device, the time in milliseconds, the seat slot and X and Y from 0 to 1 across the device's area.
+    /// </summary>
     public event Action<InputDevice, uint, int, double, double>? TouchDown;
 
+    /// <summary>Occurs when a touch point goes up. The arguments are the device, the time in milliseconds and the seat slot.</summary>
     public event Action<InputDevice, uint, int>? TouchUp;
 
+    /// <summary>
+    /// Occurs when a touch point moves. The arguments are the device, the time in milliseconds, the seat slot and X and Y from 0 to 1 across the device's area.
+    /// </summary>
     public event Action<InputDevice, uint, int, double, double>? TouchMotion;
 
+    /// <summary>Occurs when a device ends a group of touch events that belong together.</summary>
     public event Action<InputDevice>? TouchFrame;
 
+    /// <summary>Occurs when the device cancels all touch points that are down.</summary>
     public event Action<InputDevice>? TouchCancel;
 
+    /// <summary>
+    /// Occurs for each swipe, pinch and hold gesture event. The event object is disposed after the handlers return, so a handler must not keep it.
+    /// </summary>
     public event Action<InputDevice, LibinputEventType, LibinputGestureEvent>? Gesture;
 
+    /// <summary>
+    /// Occurs when a switch changes state. The event object is disposed after the handlers return, so a handler must not keep it.
+    /// </summary>
     public event Action<InputDevice, LibinputSwitchEvent>? SwitchToggled;
 
+    /// <summary>
+    /// Occurs when a tablet tool comes into or goes out of proximity. The event object is disposed after the handlers return.
+    /// </summary>
     public event Action<InputDevice, LibinputTabletToolEvent>? TabletToolProximity;
 
+    /// <summary>Occurs when a tablet tool axis changes. The event object is disposed after the handlers return.</summary>
     public event Action<InputDevice, LibinputTabletToolEvent>? TabletToolAxis;
 
+    /// <summary>Occurs when a tablet tool tip touches or leaves the surface. The event object is disposed after the handlers return.</summary>
     public event Action<InputDevice, LibinputTabletToolEvent>? TabletToolTip;
 
+    /// <summary>Occurs when a tablet tool button changes state. The event object is disposed after the handlers return.</summary>
     public event Action<InputDevice, LibinputTabletToolEvent>? TabletToolButton;
 
+    /// <summary>
+    /// Occurs for each tablet pad button, ring, strip or key event. The event object is disposed after the handlers return.
+    /// </summary>
     public event Action<InputDevice, LibinputEventType, LibinputTabletPadEvent>? TabletPad;
 
+    /// <summary>
+    /// Starts udev monitoring, adds every initialized input device on the session's seat and dispatches the first events. Call it once.
+    /// </summary>
     public void Start()
     {
         _udev = new UdevContext();
@@ -130,6 +189,9 @@ public sealed class LibinputBackend : IDisposable
         Dispatch();
     }
 
+    /// <summary>
+    /// Stops reading, releases every device and the libinput and udev contexts. It raises no <see cref="DeviceRemoved"/> event.
+    /// </summary>
     public void Dispose()
     {
         _disposed = true;

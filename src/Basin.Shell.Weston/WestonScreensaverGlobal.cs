@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Shell.Weston;
 
+/// <summary>
+/// The <c>weston_screensaver</c> global. It forwards the screensaver surface of one bound client to <see cref="IShellRoles.SetScreensaverSurface"/>.
+/// </summary>
 public sealed class WestonScreensaverGlobal : IDisposable
 {
+    /// <summary>
+    /// The version of <c>weston_screensaver</c> that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorInvalidArgument = 0;
@@ -15,6 +21,12 @@ public sealed class WestonScreensaverGlobal : IDisposable
     private readonly IShellRoles _roles;
     private WestonScreensaverResource? _bound;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WestonScreensaverGlobal"/> class. It creates the global on <paramref name="display"/> at once. Any client can bind, but only one at a time.
+    /// </summary>
+    /// <param name="display">The display that advertises the global.</param>
+    /// <param name="compositor">The compositor global that resolves the client's surfaces.</param>
+    /// <param name="roles">The shell policy that receives the screensaver surfaces.</param>
     public WestonScreensaverGlobal(WlServerDisplay display, CompositorGlobal compositor, IShellRoles roles)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -25,6 +37,9 @@ public sealed class WestonScreensaverGlobal : IDisposable
         _global = display.CreateGlobal(WestonScreensaver.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Destroys the global. A client that is bound keeps its resource until it disconnects.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

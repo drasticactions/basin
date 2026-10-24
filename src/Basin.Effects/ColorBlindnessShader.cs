@@ -1,7 +1,13 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// The pixel shader that <see cref="ColorBlindnessStage"/> drives. It corrects in LMS space and moves the lost color into the channels that remain.
+/// </summary>
 public static class ColorBlindnessShader
 {
+    /// <summary>
+    /// The uniforms of the shader, mode and intensity, in the order that <see cref="IPixelShader.SetUniforms"/> takes them.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("mode", PixelShaderUniformType.Float),
@@ -10,6 +16,9 @@ public static class ColorBlindnessShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the GLSL, SkSL and SPIR-V dialects of the shader. The first read loads the SPIR-V from an embedded resource.
+    /// </summary>
     public static PixelShaderSource Source => new()
     {
         SamplesTexture = true,

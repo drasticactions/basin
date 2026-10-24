@@ -2,6 +2,9 @@ using System.Text.Json.Serialization;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// The params of <c>windows/send-to-output</c>. The <c>id</c> and <c>output</c> keys are required.
+/// </summary>
 public sealed class IpcSendToOutputParams : IIpcParams, IIpcReusable
 {
     private ulong _id;
@@ -9,16 +12,30 @@ public sealed class IpcSendToOutputParams : IIpcParams, IIpcReusable
 
     private int _present;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcSendToOutputParams"/> class.
+    /// Every required key starts absent. The deserializer uses this constructor.
+    /// </summary>
     public IpcSendToOutputParams()
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="IpcSendToOutputParams"/> class.
+    /// Both keys are present.
+    /// </summary>
+    /// <param name="id">The window to send.</param>
+    /// <param name="output">The name of the target output.</param>
     public IpcSendToOutputParams(ulong id, string output)
     {
         Id = id;
         Output = output;
     }
 
+    /// <summary>
+    /// Gets or sets the id of the window to send.
+    /// JSON can carry it as a number or as a string of decimal digits.
+    /// </summary>
     [JsonNumberHandling(JsonNumberHandling.AllowReadingFromString)]
     public ulong Id
     {
@@ -30,6 +47,10 @@ public sealed class IpcSendToOutputParams : IIpcParams, IIpcReusable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the name of the output that receives the window.
+    /// An explicit JSON <see langword="null"/> does not count as present.
+    /// </summary>
     public string Output
     {
         get => _output;
@@ -40,6 +61,7 @@ public sealed class IpcSendToOutputParams : IIpcParams, IIpcReusable
         }
     }
 
+    /// <inheritdoc/>
     [JsonIgnore]
     public string? Missing =>
         (_present & 1) == 0 ? "'id' is required"

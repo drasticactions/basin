@@ -4,8 +4,14 @@ using Avalonia.Markup.Xaml;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// The Avalonia view of a <see cref="ConfirmPromptModel"/>. Escape cancels and Enter accepts.
+/// </summary>
 public sealed partial class ConfirmPromptView : UserControl
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ConfirmPromptView"/> class. The view takes keyboard focus when it attaches.
+    /// </summary>
     public ConfirmPromptView()
     {
         AvaloniaXamlLoader.Load(this);

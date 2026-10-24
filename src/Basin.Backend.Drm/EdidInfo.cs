@@ -1,21 +1,53 @@
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// The identity and color capabilities that a monitor reports in its EDID.
+/// </summary>
+/// <param name="Make">The three-letter PNP manufacturer id, or <c>unknown</c>.</param>
+/// <param name="Model">The monitor name descriptor, or the product code in hexadecimal.</param>
+/// <param name="Serial">The serial descriptor, or the numeric serial, or an empty string.</param>
 public readonly record struct EdidInfo(string Make, string Model, string Serial)
 {
+    /// <summary>
+    /// Gets the CIE 1931 xy coordinates of the red, green and blue primaries and the white point. It is <see langword="null"/> when the EDID has no valid set.
+    /// </summary>
     public (double Rx, double Ry, double Gx, double Gy, double Bx, double By, double Wx, double Wy)? Chromaticities { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the HDR static metadata block lists the PQ transfer function.
+    /// </summary>
     public bool SupportsPq { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the HDR static metadata block lists the HLG transfer function.
+    /// </summary>
     public bool SupportsHlg { get; init; }
 
+    /// <summary>
+    /// Gets a value indicating whether the colorimetry block lists BT.2020 RGB.
+    /// </summary>
     public bool SupportsBt2020 { get; init; }
 
+    /// <summary>
+    /// Gets the desired peak luminance in cd/m². It is 0 when the EDID does not report it.
+    /// </summary>
     public double MaxLuminance { get; init; }
 
+    /// <summary>
+    /// Gets the desired maximum frame-average luminance in cd/m². It is 0 when the EDID does not report it.
+    /// </summary>
     public double MaxFrameAverageLuminance { get; init; }
 
+    /// <summary>
+    /// Gets the desired minimum luminance in cd/m². It is 0 when the EDID does not report it.
+    /// </summary>
     public double MinLuminance { get; init; }
 
+    /// <summary>
+    /// Parses the base block and the CTA extension blocks of an EDID.
+    /// </summary>
+    /// <param name="edid">The raw EDID bytes.</param>
+    /// <returns>The parsed information. A blob shorter than 128 bytes gives <c>unknown</c> make and model.</returns>
     public static EdidInfo Parse(ReadOnlySpan<byte> edid)
     {
         if (edid.Length < 128)

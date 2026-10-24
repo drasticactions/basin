@@ -2,8 +2,12 @@ using Basin.Capabilities;
 
 namespace Basin;
 
+/// <summary>
+/// Records the commit and present times of each main surface over the last <see cref="Capacity"/> events, while at least one holder needs them.
+/// </summary>
 public sealed class WindowFrameStats : IFrameStats, IDisposable
 {
+    /// <summary>The number of commits and presents kept for each surface.</summary>
     public const int Capacity = 120;
 
     private const long Window = 1_000_000_000;
@@ -17,14 +21,19 @@ public sealed class WindowFrameStats : IFrameStats, IDisposable
     private CompositorGlobal? _compositor;
     private int _holders;
 
+    /// <summary>Initializes a new instance of the <see cref="WindowFrameStats"/> class. It finds the layout and compositor at the first <see cref="Acquire"/>.</summary>
+    /// <param name="services">The services that hold the <see cref="OutputLayout"/> and <see cref="CompositorGlobal"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="services"/> is <see langword="null"/>.</exception>
     public WindowFrameStats(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);
         _services = services;
     }
 
+    /// <summary>Gets a value indicating whether at least one holder needs the recording.</summary>
     public bool IsActive => _holders > 0;
 
+    /// <inheritdoc/>
     public void Acquire()
     {
         if (_holders++ > 0)
@@ -42,6 +51,9 @@ public sealed class WindowFrameStats : IFrameStats, IDisposable
         Rehook();
     }
 
+    /// <summary>
+    /// Removes a holder. When the last holder releases, the recording stops and all recorded data is discarded. A call with no holder does nothing.
+    /// </summary>
     public void Release()
     {
         if (_holders == 0 || --_holders > 0)
@@ -64,6 +76,7 @@ public sealed class WindowFrameStats : IFrameStats, IDisposable
         _trackers.Clear();
     }
 
+    /// <summary>Stops the recording and discards the data, whatever the holder count.</summary>
     public void Dispose()
     {
         if (_holders > 0)
@@ -73,6 +86,7 @@ public sealed class WindowFrameStats : IFrameStats, IDisposable
         }
     }
 
+    /// <inheritdoc/>
     public bool TryGet(Surface surface, long nowNanos, out FrameStatsSnapshot snapshot)
     {
         ArgumentNullException.ThrowIfNull(surface);

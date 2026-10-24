@@ -2,6 +2,9 @@ using System.Numerics;
 
 namespace Basin.Scene3D;
 
+/// <summary>
+/// The six planes of a view-projection. It culls boxes for the visibility walk.
+/// </summary>
 public readonly struct WorldFrustum
 {
     private readonly Vector4 _left;
@@ -21,6 +24,11 @@ public readonly struct WorldFrustum
         _far = far;
     }
 
+    /// <summary>
+    /// Extracts the planes from a view-projection with clip depth in [0, 1].
+    /// </summary>
+    /// <param name="m">The view-projection, in the row-vector convention of <see cref="Matrix4x4"/>.</param>
+    /// <returns>The frustum of <paramref name="m"/>.</returns>
     public static WorldFrustum From(in Matrix4x4 m)
     {
         var c1 = new Vector4(m.M11, m.M21, m.M31, m.M41);
@@ -30,6 +38,11 @@ public readonly struct WorldFrustum
         return new WorldFrustum(c4 + c1, c4 - c1, c4 + c2, c4 - c2, c3, c4 - c3);
     }
 
+    /// <summary>
+    /// Tests a box against the six planes. The test is conservative, so it can accept a box near a corner that is outside.
+    /// </summary>
+    /// <param name="box">The box in world space.</param>
+    /// <returns><see langword="false"/> when the box is empty or fully outside one plane.</returns>
     public bool Intersects(in WorldBounds box)
     {
         if (box.IsEmpty)

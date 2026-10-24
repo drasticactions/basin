@@ -6,6 +6,9 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Serves <c>org.freedesktop.impl.portal.GlobalShortcuts</c> over an <see cref="IGlobalShortcuts"/> registry. It asks the user for the triggers of the shortcuts that have none.
+/// </summary>
 public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcutsHandler, IGlobalShortcutsProperties
 {
     private IGlobalShortcuts _registry = null!;
@@ -13,18 +16,23 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
     private PortalOptions _options = new();
     private GlobalShortcutInfo[] _scratch = new GlobalShortcutInfo[32];
 
+    /// <inheritdoc/>
     public override string WireInterface => "org.freedesktop.impl.portal.GlobalShortcuts";
 
+    /// <inheritdoc/>
     public override int Version => 2;
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Capabilities => [typeof(IAppInfoResolver)];
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Drivers => [typeof(IGlobalShortcuts), typeof(IPortalPrompts)];
 
     internal override DBusHandler.DBusInterface Interface => DBusHandler.DBusInterface.OrgFreedesktopImplPortalGlobalShortcuts;
 
     uint IGlobalShortcutsProperties.Version => (uint)Version;
 
+    /// <inheritdoc/>
     protected override void Bind(BasinServices services)
     {
         _registry = services.Require<IGlobalShortcuts>();
@@ -36,6 +44,15 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
 
     ValueTask IGlobalShortcutsHandler.HandleGetAllPropertiesAsync(IGlobalShortcutsHandler.GetAllPropertiesContext context) => context.Handle(this);
 
+    /// <summary>
+    /// Creates a shortcuts session and registers it as an observer of the registry.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The session object path.</param>
+    /// <param name="appId">The application that owns the session.</param>
+    /// <param name="options">No options are read.</param>
+    /// <returns><see cref="PortalResponse.Success"/> with empty results.</returns>
+    /// <exception cref="InvalidOperationException">The module is not installed.</exception>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> CreateSessionAsync(
         ObjectPath handle, ObjectPath sessionHandle, string appId, Dictionary<string, VariantValue> options)
     {
@@ -46,6 +63,15 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
         return ValueTask.FromResult((PortalResponse.Success, Results.Empty));
     }
 
+    /// <summary>
+    /// Registers the shortcuts for the session's application, then prompts for a trigger for each shortcut that has none.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The shortcuts session.</param>
+    /// <param name="shortcuts">The id and the properties of each shortcut.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>modal</c> option.</param>
+    /// <returns>The <c>shortcuts</c> result with the bound shortcuts, or <see cref="PortalResponse.Other"/> when the session does not exist or the request closed.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> BindShortcutsAsync(
         ObjectPath handle, ObjectPath sessionHandle, (string, Dictionary<string, VariantValue>)[] shortcuts, string parentWindow,
         Dictionary<string, VariantValue> options)
@@ -105,6 +131,12 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
         }
     }
 
+    /// <summary>
+    /// Lists the shortcuts that the session bound, with their current triggers.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="sessionHandle">The shortcuts session.</param>
+    /// <returns>The <c>shortcuts</c> result, or <see cref="PortalResponse.Other"/> when the session does not exist.</returns>
     public ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> ListShortcutsAsync(ObjectPath handle, ObjectPath sessionHandle)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is not GlobalShortcutsSession session)
@@ -115,6 +147,14 @@ public sealed class PortalGlobalShortcutsModule : PortalModule, IGlobalShortcuts
         return ValueTask.FromResult((PortalResponse.Success, Results.With("shortcuts", Describe(session))));
     }
 
+    /// <summary>
+    /// Prompts the user to change the triggers of the application's shortcuts, then sends <c>ShortcutsChanged</c>.
+    /// </summary>
+    /// <param name="sessionHandle">The shortcuts session.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>modal</c> option.</param>
+    /// <returns>A task that completes when the prompt closes.</returns>
+    /// <exception cref="DBusErrorReplyException">The session does not exist.</exception>
     public async ValueTask ConfigureShortcutsAsync(ObjectPath sessionHandle, string parentWindow, Dictionary<string, VariantValue> options)
     {
         if (Bus?.SessionAt(sessionHandle.ToString()) is not GlobalShortcutsSession session)

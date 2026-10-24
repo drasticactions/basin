@@ -4,8 +4,14 @@ using Basin.Themes.MsStyles;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// Lays out one window's frame in logical pixels, emits its draw list in device pixels, and answers hit tests. It keeps per-window state, so each window needs its own instance.
+/// </summary>
 public sealed partial class MsStylesFramePainter
 {
+    /// <summary>
+    /// The length in logical pixels along each edge from a corner where a hit test reports the corner.
+    /// </summary>
     public const int CornerZone = 16;
 
     private const int ButtonNormal = 1;
@@ -17,22 +23,46 @@ public sealed partial class MsStylesFramePainter
     private int _chromeOps;
     private double _paintedScale = 1;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MsStylesFramePainter"/> class.
+    /// </summary>
+    /// <param name="style">The shared frame style.</param>
     public MsStylesFramePainter(MsStylesFrameStyle style)
     {
         ArgumentNullException.ThrowIfNull(style);
         _style = style;
     }
 
+    /// <summary>
+    /// Gets the shared frame style.
+    /// </summary>
     public MsStylesFrameStyle Style => _style;
 
+    /// <summary>
+    /// Gets the layout that the last <see cref="Layout"/> call wrote. The instance stays the same for the life of the painter.
+    /// </summary>
     public MsStylesFrameGeometry Geometry { get; } = new();
 
+    /// <summary>
+    /// Gets the draw list that the last <see cref="Paint"/> call wrote, in device pixels.
+    /// </summary>
     public MsStylesDrawList List { get; } = new();
 
+    /// <summary>
+    /// Gets a value indicating whether the last layout produced a frame. It is false for a fullscreen window or an empty surface.
+    /// </summary>
     public bool LaidOut { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the chrome of the last paint has no transparent image. It is always false for the glass look.
+    /// </summary>
     public bool Opaque { get; private set; }
 
+    /// <summary>
+    /// Measures the frame thickness around the client area. A fullscreen window has none, and a maximized window has only the caption.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <returns>The insets in logical pixels.</returns>
     public FrameInsets Measure(in FrameState state)
     {
         if (state.Fullscreen)
@@ -55,6 +85,11 @@ public sealed partial class MsStylesFramePainter
         return new FrameInsets(border + bar + 1, border, border, border);
     }
 
+    /// <summary>
+    /// Measures the shadow margin outside the window. Only a glass frame that is not maximized, fullscreen or border-only has one.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <returns>The outsets in logical pixels.</returns>
     public FrameInsets Outsets(in FrameState state)
     {
         if (!_style.IsGlass || state.Fullscreen || state.Maximized || state.Kind == FrameKind.Border)
@@ -65,6 +100,13 @@ public sealed partial class MsStylesFramePainter
         return new FrameInsets(VistaButtonMetrics.ShadowTop, VistaButtonMetrics.ShadowRight, VistaButtonMetrics.ShadowBottom, VistaButtonMetrics.ShadowLeft);
     }
 
+    /// <summary>
+    /// Lays out the frame around a client area and writes the result to <see cref="Geometry"/>.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="clientWidth">The client width in logical pixels.</param>
+    /// <param name="clientHeight">The client height in logical pixels.</param>
+    /// <returns><see langword="true"/> when the frame has an area to draw. It is the new value of <see cref="LaidOut"/>.</returns>
     public bool Layout(in FrameState state, int clientWidth, int clientHeight)
     {
         var insets = Measure(state);
@@ -194,6 +236,12 @@ public sealed partial class MsStylesFramePainter
         geometry.ButtonCount = count;
     }
 
+    /// <summary>
+    /// Clears <see cref="List"/> and writes the operations for the last layout. It writes nothing when <see cref="LaidOut"/> is false.
+    /// </summary>
+    /// <param name="state">The window state. It must be the state of the last layout.</param>
+    /// <param name="interaction">The pointer state and the change times that select the button states.</param>
+    /// <param name="scale">The output scale from logical to device pixels.</param>
     public void Paint(in FrameState state, in FrameInteraction interaction, double scale)
     {
         var list = List;
@@ -305,6 +353,12 @@ public sealed partial class MsStylesFramePainter
         List.Text(state.Title, font, pixels, Device(Geometry.TitleRect, scale), align, color.ToArgb(), shadow, shadowOffset);
     }
 
+    /// <summary>
+    /// Finds the frame part at a point. A point over a fully transparent pixel of the last paint gives <see cref="FramePart.None"/>.
+    /// </summary>
+    /// <param name="x">The horizontal position in logical pixels on the frame surface.</param>
+    /// <param name="y">The vertical position in logical pixels on the frame surface.</param>
+    /// <returns>The part, or <see cref="FramePart.None"/> outside the window or before a layout.</returns>
     public FramePart PartAt(double x, double y)
     {
         if (!LaidOut)
@@ -384,9 +438,20 @@ public sealed partial class MsStylesFramePainter
         return FramePart.Border;
     }
 
+    /// <summary>
+    /// Tells whether a caption button hover is still fading. Only the glass look animates.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="interaction">The pointer state and the change times.</param>
+    /// <returns><see langword="true"/> while a glass button fades in or out.</returns>
     public bool Animating(in FrameState state, in FrameInteraction interaction) =>
         _style.IsGlass && LaidOut && GlassAnimating(interaction);
 
+    /// <summary>
+    /// Gives the area that a caption button covers, including its glow for the glass look.
+    /// </summary>
+    /// <param name="part">The part to look up. Only close, maximize and minimize have bounds.</param>
+    /// <returns>The area in logical pixels, clipped to the surface, or an empty box for any other part.</returns>
     public Basin.Box PartBounds(FramePart part)
     {
         if (!LaidOut)
@@ -419,6 +484,12 @@ public sealed partial class MsStylesFramePainter
         return right > left && bottom > top ? new Basin.Box(left, top, right - left, bottom - top) : default;
     }
 
+    /// <summary>
+    /// Tells whether the last paint left a point fully transparent. It samples the topmost image under the point. A fill, text or icon counts as opaque.
+    /// </summary>
+    /// <param name="x">The horizontal position in logical pixels on the frame surface.</param>
+    /// <param name="y">The vertical position in logical pixels on the frame surface.</param>
+    /// <returns><see langword="true"/> when no operation covers the point or the image texel there has an alpha of 0.</returns>
     public bool IsTransparentAt(double x, double y)
     {
         var px = (float)(x * _paintedScale);

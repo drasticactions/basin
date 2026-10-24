@@ -9,6 +9,9 @@ using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// The KMS backend for one DRM card. It opens the card through the session, makes one <see cref="DrmOutput"/> per connected connector with a CRTC, and follows hotplug.
+/// </summary>
 public sealed class DrmBackend : IDisposable
 {
     private readonly ICompositorEventLoop _loop;
@@ -27,6 +30,12 @@ public sealed class DrmBackend : IDisposable
     private UdevMonitor? _udevMonitor;
     private IEventSource? _udevSource;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DrmBackend"/> class. It touches no device until <see cref="Start"/>.
+    /// </summary>
+    /// <param name="loop">The loop that receives the DRM and udev fds.</param>
+    /// <param name="session">The session that opens the card and reports VT switches.</param>
+    /// <param name="devicePath">The card path, for example <c>/dev/dri/card0</c>, or <see langword="null"/> to pick the primary card at start.</param>
     public DrmBackend(ICompositorEventLoop loop, ISession session, string? devicePath = null)
     {
         _loop = loop;
@@ -39,16 +48,28 @@ public sealed class DrmBackend : IDisposable
         };
     }
 
+    /// <summary>
+    /// Gets the card path. It is empty before <see cref="Start"/> when the constructor received no path.
+    /// </summary>
     public string DevicePath { get; private set; }
 
     internal ICompositorEventLoop Loop => _loop;
 
+    /// <summary>
+    /// Gets the render node of the card. It is <see langword="null"/> before <see cref="Start"/> or when the card has none.
+    /// </summary>
     public string? RenderNodePath { get; private set; }
 
+    /// <summary>
+    /// Gets the kernel driver name of the card, for example <c>amdgpu</c>. It is <see langword="null"/> before <see cref="Start"/> or when the kernel refuses the query.
+    /// </summary>
     public string? DriverName { get; private set; }
 
     internal bool CursorRidesWithFrame { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the card accepts asynchronous page flips in atomic commits. It is <see langword="false"/> before <see cref="Start"/>.
+    /// </summary>
     public bool SupportsAtomicAsync { get; private set; }
 
     private string? ReadDriverName()
@@ -63,26 +84,53 @@ public sealed class DrmBackend : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the opened DRM device. It is not valid before <see cref="Start"/>.
+    /// </summary>
     public DrmDevice Device { get; private set; } = null!;
 
+    /// <summary>
+    /// Gets the outputs that exist now, one per connected desktop connector that has a CRTC.
+    /// </summary>
     public IReadOnlyList<DrmOutput> Outputs => _outputs;
 
+    /// <summary>
+    /// Gets the DRM lease device that offers the card's non-desktop connectors to clients.
+    /// </summary>
     public DrmLeaseDevice Leasing { get; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the first scan keeps a lit connector on its CRTC and records its state for a handoff. It must be set before <see cref="Start"/>.
+    /// </summary>
     public bool Inherit { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets what <see cref="Dispose"/> leaves on the screen. The default is <see cref="DrmExitMode.Restore"/>.
+    /// </summary>
     public DrmExitMode ExitMode { get; set; }
 
+    /// <summary>
+    /// Occurs in <see cref="Dispose"/> once per output when <see cref="ExitMode"/> is <see cref="DrmExitMode.Retain"/>, with the result of the retention.
+    /// </summary>
     public event Action<HandoffRetention>? HandoffRetained;
 
     internal bool Retiring { get; private set; }
 
     internal Func<int, uint, int> CloseFramebuffer { get; set; } = static (fd, fbId) => -Libdrm.drmModeCloseFB(fd, fbId);
 
+    /// <summary>
+    /// Gets the largest cursor buffer that the card accepts, in pixels. It is 64 by 64 when the card reports no size.
+    /// </summary>
     public (int Width, int Height) CursorSize { get; private set; } = (64, 64);
 
+    /// <summary>
+    /// Occurs when a scan creates an output, for example at start or after a hotplug.
+    /// </summary>
     public event Action<DrmOutput>? OutputAdded;
 
+    /// <summary>
+    /// Occurs before the backend destroys an output, when its connector is gone or its CRTC changed.
+    /// </summary>
     public event Action<DrmOutput>? OutputRemoved;
 
     internal DrmFramebufferCache Framebuffers { get; private set; } = null!;
@@ -147,6 +195,10 @@ public sealed class DrmBackend : IDisposable
         return union;
     }
 
+    /// <summary>
+    /// Opens the card through the session, enables atomic modesetting, scans the connectors and starts the hotplug monitor.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No KMS card is present, or the card does not support atomic modesetting.</exception>
     public void Start()
     {
         if (DevicePath.Length == 0)
@@ -201,6 +253,9 @@ public sealed class DrmBackend : IDisposable
         StartUdevMonitor();
     }
 
+    /// <summary>
+    /// Revokes the leases, retains or turns off each output as <see cref="ExitMode"/> says, restores the saved CRTCs that it did not retain and closes the card.
+    /// </summary>
     public void Dispose()
     {
         if (Device is not null)
@@ -252,6 +307,9 @@ public sealed class DrmBackend : IDisposable
     private static string? FindRenderNode(string cardPath) =>
         DrmDevices.Enumerate().FirstOrDefault(d => d.CardPath == cardPath)?.RenderNodePath;
 
+    /// <summary>
+    /// Reads the connectors again and reassigns CRTCs. It raises <see cref="OutputRemoved"/> and <see cref="OutputAdded"/> for the changes and updates the leasable connectors.
+    /// </summary>
     public void RescanConnectors()
     {
         var resources = Device.GetResources();

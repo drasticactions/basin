@@ -4,6 +4,9 @@ using static Basin.Hypr.HyprLog;
 
 namespace Basin.Hypr;
 
+/// <summary>
+/// An <see cref="IGlobalShortcuts"/> registry that binds each shortcut to a key chord and fires it from <see cref="HandleKey"/>. The chord comes from <see cref="Overrides"/>, or else from the preferred trigger of the shortcut.
+/// </summary>
 public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
 {
     private readonly Dictionary<(string AppId, string Id), GlobalShortcutInfo> _registered = [];
@@ -13,8 +16,15 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
     private IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> _overrides =
         new Dictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)>();
 
+    /// <summary>
+    /// Gets or sets a check that reports a chord that the compositor already uses. A preferred trigger that it reports as taken stays unbound. Overrides skip the check.
+    /// </summary>
     public Func<uint, Modifiers, bool>? IsTaken { get; set; }
 
+    /// <summary>
+    /// Gets or sets the chords that the compositor assigns by application id and shortcut id. They win over the preferred triggers. Setting the value rebinds every shortcut.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public IReadOnlyDictionary<(string AppId, string Id), (uint Keysym, Modifiers Modifiers)> Overrides
     {
         get => _overrides;
@@ -26,8 +36,17 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         }
     }
 
+    /// <summary>
+    /// Tells whether a shortcut is in the registry, bound to a chord or not.
+    /// </summary>
+    /// <param name="appId">The application that owns the shortcut.</param>
+    /// <param name="id">The identifier of the shortcut.</param>
+    /// <returns><see langword="true"/> when the shortcut is registered.</returns>
     public bool IsRegistered(string appId, string id) => _registered.ContainsKey((appId, id));
 
+    /// <summary>
+    /// Computes the chord of every registered shortcut again, for example after <see cref="IsTaken"/> starts to report a different set. It does not notify the observers.
+    /// </summary>
     public void Rebind()
     {
         foreach (var (key, info) in _registered.ToArray())
@@ -36,8 +55,16 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         }
     }
 
+    /// <summary>
+    /// Gets the number of registered shortcuts, bound or not.
+    /// </summary>
     public int Count => _registered.Count;
 
+    /// <summary>
+    /// Adds a shortcut and binds its chord. A second registration of the same pair with a preferred trigger replaces the first one and does not notify the observers.
+    /// </summary>
+    /// <param name="shortcut">The shortcut to add. The stored copy gets a trigger description of the chord, or an empty one when it stays unbound.</param>
+    /// <returns><see langword="false"/> when the pair is already registered and <paramref name="shortcut"/> has no preferred trigger.</returns>
     public bool TryRegister(in GlobalShortcutInfo shortcut)
     {
         var key = (shortcut.AppId, shortcut.Id);
@@ -56,6 +83,7 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         return true;
     }
 
+    /// <inheritdoc/>
     public void Unregister(string appId, string id)
     {
         if (_registered.Remove((appId, id), out var removed))
@@ -70,6 +98,7 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         }
     }
 
+    /// <inheritdoc/>
     public int Enumerate(Span<GlobalShortcutInfo> shortcuts)
     {
         if (shortcuts.Length < _registered.Count)
@@ -86,6 +115,7 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         return i;
     }
 
+    /// <inheritdoc/>
     public bool Trigger(string appId, string id, bool pressed, ulong timestampMs)
     {
         if (!_registered.TryGetValue((appId, id), out var info))
@@ -105,10 +135,18 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         return true;
     }
 
+    /// <inheritdoc/>
     public void AddObserver(IGlobalShortcutObserver observer) => _observers.Add(observer);
 
+    /// <inheritdoc/>
     public void RemoveObserver(IGlobalShortcutObserver observer) => _observers.Remove(observer);
 
+    /// <summary>
+    /// Tells whether a registered shortcut is bound to an exact chord.
+    /// </summary>
+    /// <param name="keysym">The keysym of the chord.</param>
+    /// <param name="modifiers">The modifiers of the chord. They must match exactly.</param>
+    /// <returns><see langword="true"/> when a shortcut uses the chord.</returns>
     public bool IsBound(uint keysym, Modifiers modifiers)
     {
         foreach (var chord in _bound.Values)
@@ -122,6 +160,14 @@ public sealed class PreferredTriggerShortcuts : IGlobalShortcuts
         return false;
     }
 
+    /// <summary>
+    /// Fires a bound shortcut on a key press and releases it on the release of the same key. Only one shortcut can be held at a time. A one-shot shortcut is unregistered on its release.
+    /// </summary>
+    /// <param name="key">The evdev key code, used to match the release to the press.</param>
+    /// <param name="keysym">The keysym of the pressed key.</param>
+    /// <param name="held">The modifiers that are held. They must match the chord exactly.</param>
+    /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
+    /// <returns><see langword="true"/> when the compositor must not send the key to the focused client. A <see cref="GlobalShortcutFlags.NoBlock"/> shortcut returns <see langword="false"/>.</returns>
     public bool HandleKey(uint key, uint keysym, Modifiers held, bool pressed)
     {
         var now = (ulong)Environment.TickCount64;

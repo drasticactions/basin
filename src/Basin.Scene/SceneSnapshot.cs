@@ -2,6 +2,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// A frozen copy of a subtree that keeps showing the last buffers after the live subtree changes or goes away, for example for a close animation.
+/// </summary>
 public sealed class SceneSnapshot : IDisposable
 {
     private readonly List<SceneBuffer> _nodes = [];
@@ -15,12 +18,26 @@ public sealed class SceneSnapshot : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Copies the tree of a scene surface into a new subtree.
+    /// </summary>
+    /// <param name="source">The surface whose tree to copy.</param>
+    /// <param name="parent">The tree to add the copy to.</param>
+    /// <returns>The snapshot. The caller owns it and must destroy it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="parent"/> is <see langword="null"/>.</exception>
     public static SceneSnapshot Capture(SceneSurface source, SceneTree parent)
     {
         ArgumentNullException.ThrowIfNull(source);
         return Capture(source.Tree, parent);
     }
 
+    /// <summary>
+    /// Copies the enabled trees, transforms, buffers and rectangles of a subtree into a new subtree. The copy locks the same buffers. While the live tree is disabled, its frame callbacks go out through the copy.
+    /// </summary>
+    /// <param name="source">The subtree to copy.</param>
+    /// <param name="parent">The tree to add the copy to.</param>
+    /// <returns>The snapshot. The caller owns it and must destroy it.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="source"/> or <paramref name="parent"/> is <see langword="null"/>.</exception>
     public static SceneSnapshot Capture(SceneTree source, SceneTree parent)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -38,12 +55,24 @@ public sealed class SceneSnapshot : IDisposable
         return snapshot;
     }
 
+    /// <summary>
+    /// Gets the root of the copy. It has the position, clip and alpha of the source.
+    /// </summary>
     public SceneTree Tree { get; }
 
+    /// <summary>
+    /// Gets the number of buffer nodes in the copy. It is 0 after <see cref="Destroy"/>.
+    /// </summary>
     public int NodeCount => _nodes.Count;
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Destroy"/> has run.
+    /// </summary>
     public bool IsDestroyed => _destroyed;
 
+    /// <summary>
+    /// Releases the copied buffers, ends the frame callback forwarding and destroys <see cref="Tree"/>. A second call does nothing.
+    /// </summary>
     public void Destroy()
     {
         if (_destroyed)
@@ -67,6 +96,9 @@ public sealed class SceneSnapshot : IDisposable
         BasinCounters.Untrack();
     }
 
+    /// <summary>
+    /// Calls <see cref="Destroy"/>.
+    /// </summary>
     public void Dispose() => Destroy();
 
     private void CopyTree(SceneTree source, SceneTree target)

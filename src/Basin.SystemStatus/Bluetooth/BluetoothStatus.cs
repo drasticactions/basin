@@ -2,8 +2,14 @@ using Tmds.DBus.Protocol;
 
 namespace Basin.SystemStatus;
 
+/// <summary>
+/// Reads BlueZ through its object manager: the first adapter by object path, its power state, and its paired or connected devices.
+/// </summary>
 public sealed class BluetoothStatus : SystemStatusReader
 {
+    /// <summary>
+    /// The bus name of BlueZ.
+    /// </summary>
     public const string ServiceName = "org.bluez";
 
     private const string ObjectManagerInterface = "org.freedesktop.DBus.ObjectManager";
@@ -15,16 +21,34 @@ public sealed class BluetoothStatus : SystemStatusReader
     {
     }
 
+    /// <summary>
+    /// Gets a value indicating whether BlueZ reports an adapter.
+    /// </summary>
     public bool HasAdapter => AdapterPath is not null;
 
+    /// <summary>
+    /// Gets the object path of the adapter that the reader uses, the first by ordinal order, or <see langword="null"/>.
+    /// </summary>
     public string? AdapterPath { get; private set; }
 
+    /// <summary>
+    /// Gets the alias of the adapter, else its name, or <see langword="null"/>.
+    /// </summary>
     public string? AdapterName { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the adapter is powered.
+    /// </summary>
     public bool Powered { get; private set; }
 
+    /// <summary>
+    /// Gets the paired or connected devices of the adapter, connected first, then by name without case. Each read replaces the list.
+    /// </summary>
     public IReadOnlyList<BluetoothDevice> Devices { get; private set; } = [];
 
+    /// <summary>
+    /// Gets a value indicating whether one device in <see cref="Devices"/> is connected.
+    /// </summary>
     public bool AnyConnected
     {
         get
@@ -43,6 +67,13 @@ public sealed class BluetoothStatus : SystemStatusReader
 
     private protected override string? AvailableReason => HasAdapter ? null : "BlueZ reports no adapter";
 
+    /// <summary>
+    /// Creates the reader and starts its first read in the background. The reader is created also when BlueZ is not on the bus, and then it reads as not available.
+    /// </summary>
+    /// <param name="bus">The shared system bus connection.</param>
+    /// <param name="reason">Why no reader was created, or <see langword="null"/>.</param>
+    /// <returns>The reader, or <see langword="null"/> when the bus is disposed or has no address.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="bus"/> is <see langword="null"/>.</exception>
     public static BluetoothStatus? TryCreate(SystemStatusBus bus, out string? reason)
     {
         if (!CheckBus(bus, out reason))
@@ -55,6 +86,11 @@ public sealed class BluetoothStatus : SystemStatusReader
         return status;
     }
 
+    /// <summary>
+    /// Sets the <c>Powered</c> property of the adapter. A successful call also starts a read.
+    /// </summary>
+    /// <param name="powered"><see langword="true"/> to power the adapter on.</param>
+    /// <returns>A task that completes on the compositor thread with <see langword="true"/> when BlueZ accepted the call, or with <see langword="false"/> when it failed or there is no adapter.</returns>
     public Task<bool> SetPowered(bool powered)
     {
         if (Connection is not { } connection || AdapterPath is not { } adapter)
@@ -65,8 +101,20 @@ public sealed class BluetoothStatus : SystemStatusReader
         return CallAsync(DBusProperties.SetBool(connection, ServiceName, adapter, AdapterInterface, "Powered", powered), "set Powered");
     }
 
+    /// <summary>
+    /// Calls <c>Connect</c> on a device. A successful call also starts a read.
+    /// </summary>
+    /// <param name="device">The device to connect.</param>
+    /// <returns>A task that completes on the compositor thread with <see langword="true"/> when BlueZ connected the device, or with <see langword="false"/> when the call failed or the reader is not connected.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public Task<bool> Connect(BluetoothDevice device) => DeviceCall(device, "Connect");
 
+    /// <summary>
+    /// Calls <c>Disconnect</c> on a device. A successful call also starts a read.
+    /// </summary>
+    /// <param name="device">The device to disconnect.</param>
+    /// <returns>A task that completes on the compositor thread with <see langword="true"/> when BlueZ disconnected the device, or with <see langword="false"/> when the call failed or the reader is not connected.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
     public Task<bool> Disconnect(BluetoothDevice device) => DeviceCall(device, "Disconnect");
 
     private protected override MatchRule[] Rules() =>

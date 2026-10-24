@@ -7,8 +7,14 @@ using Xkb;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_transient_seat_manager_v1</c> global. The consumer answers each request through <see cref="SeatRequested"/>, and an unanswered request is denied.
+/// </summary>
 public sealed class TransientSeatManager : IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlServerDisplay _display;
@@ -18,6 +24,12 @@ public sealed class TransientSeatManager : IDisposable
     private readonly List<Basin.Seat.Seat> _seats = [];
     private int _created;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TransientSeatManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="compositor">The compositor that new seats need. When it is <see langword="null"/>, <see cref="SeatRequest.Create"/> denies every request.</param>
+    /// <param name="keymaps">The keymap source for the keyboards of new seats, or <see langword="null"/> for the seat default.</param>
     public TransientSeatManager(
         WlServerDisplay display,
         CompositorGlobal? compositor = null,
@@ -30,6 +42,9 @@ public sealed class TransientSeatManager : IDisposable
         _global = display.CreateGlobal(ExtTransientSeatManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// One client request for a transient seat. The <see cref="SeatRequested"/> handler must answer it before it returns.
+    /// </summary>
     public sealed class SeatRequest
     {
         private readonly TransientSeatManager _owner;
@@ -42,8 +57,16 @@ public sealed class TransientSeatManager : IDisposable
             _resource = resource;
         }
 
+        /// <summary>
+        /// Gets the client that asked for the seat.
+        /// </summary>
         public WlClient Client => _resource.Client;
 
+        /// <summary>
+        /// Creates a seat that the manager owns, sends <c>ready</c> with its global name, and retires the seat when the client destroys the transient seat.
+        /// </summary>
+        /// <param name="sink">A factory for the input sink of the new seat. When it is <see langword="null"/>, the seat gets a plain <see cref="SeatInputSink"/>.</param>
+        /// <returns>The new seat, or <see langword="null"/> when the manager has no compositor or the client already destroyed the request.</returns>
         public Basin.Seat.Seat? Create(Func<Basin.Seat.Seat, IInputSink>? sink = null)
         {
             if (_owner._compositor is not { } compositor)
@@ -77,12 +100,20 @@ public sealed class TransientSeatManager : IDisposable
             return seat;
         }
 
+        /// <summary>
+        /// Answers the request with an existing seat that the consumer owns.
+        /// </summary>
+        /// <param name="seat">The seat whose global name the client receives.</param>
         public void Ready(Basin.Seat.Seat seat)
         {
             ArgumentNullException.ThrowIfNull(seat);
             Ready(seat.NameFor(_resource.Client));
         }
 
+        /// <summary>
+        /// Answers the request with an existing <c>wl_seat</c> global.
+        /// </summary>
+        /// <param name="seatGlobal">The seat global whose name the client receives.</param>
         public void Ready(WlGlobal seatGlobal)
         {
             ArgumentNullException.ThrowIfNull(seatGlobal);
@@ -98,6 +129,9 @@ public sealed class TransientSeatManager : IDisposable
             }
         }
 
+        /// <summary>
+        /// Answers the request with <c>denied</c>.
+        /// </summary>
         public void Deny()
         {
             Handled = true;
@@ -108,10 +142,19 @@ public sealed class TransientSeatManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs when a client asks for a transient seat. A request that the handler does not answer is denied.
+    /// </summary>
     public event Action<SeatRequest>? SeatRequested;
 
+    /// <summary>
+    /// Occurs when <see cref="SeatRequest.Create"/> creates a seat, before the client receives <c>ready</c>.
+    /// </summary>
     public event Action<Basin.Seat.Seat>? SeatCreated;
 
+    /// <summary>
+    /// Disposes every seat that the manager created and removes the global.
+    /// </summary>
     public void Dispose()
     {
         for (var i = _seats.Count - 1; i >= 0; i--)

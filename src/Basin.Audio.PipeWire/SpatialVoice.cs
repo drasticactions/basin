@@ -9,16 +9,34 @@ using static PipeWire.Native.Pipewire;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// One filter-chain module that places the streams attached to it. The session manager moves each attached stream onto the capture node of the voice. The voice never writes the volume of a stream.
+/// </summary>
 public sealed unsafe class SpatialVoice : IDisposable
 {
+    /// <summary>
+    /// The step in degrees to which <see cref="Update"/> rounds the azimuth.
+    /// </summary>
     public const float AzimuthQuantum = 2;
 
+    /// <summary>
+    /// The step in degrees to which <see cref="Update"/> rounds the elevation.
+    /// </summary>
     public const float ElevationQuantum = 5;
 
+    /// <summary>
+    /// The step in decibels to which <see cref="Update"/> rounds the gain and the wet level.
+    /// </summary>
     public const float GainQuantumDb = 0.25f;
 
+    /// <summary>
+    /// The step in octaves to which <see cref="Update"/> rounds the cutoff, on a grid anchored at <see cref="VoiceParams.OpenCutoffHz"/>.
+    /// </summary>
     public const float CutoffQuantumOctaves = 1f / 12;
 
+    /// <summary>
+    /// The step in meters to which <see cref="Update"/> rounds the radius.
+    /// </summary>
     public const float RadiusQuantum = 0.1f;
 
     private const string TargetObject = "target.object";
@@ -75,6 +93,17 @@ public sealed unsafe class SpatialVoice : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Loads the filter chain and waits until its capture node appears. Do not call it inside a PipeWire callback, because it pumps the loop and handlers can run again.
+    /// </summary>
+    /// <param name="session">The session whose context loads the module.</param>
+    /// <param name="graph">The graph to build.</param>
+    /// <param name="name">The capture node name. The playback node takes the name with <c>.output</c> appended. Use a name that is unique to the process.</param>
+    /// <param name="error">Why creation failed, or <see langword="null"/> on success.</param>
+    /// <param name="description">The <c>node.description</c>, or <see langword="null"/> to use <paramref name="name"/>.</param>
+    /// <returns>The voice, or <see langword="null"/> when the HRTF file is missing, the module does not load, or no capture node appears within 2 seconds.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> or <paramref name="graph"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty or white space.</exception>
     public static SpatialVoice? Create(AudioSession session, VoiceGraph graph, string name, out string? error, string? description = null)
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -114,32 +143,75 @@ public sealed unsafe class SpatialVoice : IDisposable
         return new SpatialVoice(session, graph, name, module, node, capture.Id, serial);
     }
 
+    /// <summary>
+    /// Gets the node name of the capture node.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// Gets the graph that the voice was built from.
+    /// </summary>
     public VoiceGraph Graph { get; }
 
+    /// <summary>
+    /// Gets the PipeWire global id of the capture node.
+    /// </summary>
     public uint CaptureNodeId { get; }
 
+    /// <summary>
+    /// Gets the <c>object.serial</c> of the capture node, which <see cref="Attach(uint)"/> writes as <c>target.object</c>.
+    /// </summary>
     public ulong CaptureSerial { get; }
 
+    /// <summary>
+    /// Gets the node ids of the attached streams.
+    /// </summary>
     public IReadOnlyCollection<uint> Streams => _streams;
 
+    /// <summary>
+    /// Gets the quantized parameters of the last <see cref="Update"/>. The radius is not yet clamped to the HRTF range.
+    /// </summary>
     public VoiceParams Current { get; private set; } = VoiceParams.Centered;
 
+    /// <summary>
+    /// Gets or sets the shortest time between two HRTF control changes. Each change rebuilds the convolvers. A loop timer sends the last change that waited.
+    /// </summary>
     public TimeSpan MinHrtfInterval { get; set; } = TimeSpan.FromSeconds(1.0 / 30);
 
+    /// <summary>
+    /// Gets the number of control writes that the voice sent to its node.
+    /// </summary>
     public long ParamWrites { get; private set; }
 
+    /// <summary>
+    /// Gets the number of control writes that changed an HRTF control.
+    /// </summary>
     public long HrtfWrites { get; private set; }
 
+    /// <summary>
+    /// Occurs when another client changes <c>target.object</c> or <c>target.node</c> of an attached stream. The voice has already forgotten the stream, whose node id is the second argument.
+    /// </summary>
     public event Action<SpatialVoice, uint>? Released;
 
+    /// <summary>
+    /// Attaches a reported stream by its node id.
+    /// </summary>
+    /// <param name="stream">The stream to move onto the voice.</param>
+    /// <returns><see langword="true"/> when the metadata was written. <see langword="false"/> when the session has no <c>default</c> metadata.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stream"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The voice is disposed.</exception>
     public bool Attach(AudioStream stream)
     {
         ArgumentNullException.ThrowIfNull(stream);
         return Attach(stream.NodeId);
     }
 
+    /// <summary>
+    /// Sets <c>target.object</c> of a node to the capture node, so the session manager moves it onto the voice. The voice ignores metadata of the node until its own value comes back.
+    /// </summary>
+    /// <param name="streamNodeId">The node to move, for example a stream or a <see cref="SoundPlayer.NodeId"/>.</param>
+    /// <returns><see langword="true"/> when the metadata was written. <see langword="false"/> when the session has no <c>default</c> metadata.</returns>
+    /// <exception cref="ObjectDisposedException">The voice is disposed.</exception>
     public bool Attach(uint streamNodeId)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -154,6 +226,11 @@ public sealed unsafe class SpatialVoice : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Forgets an attached stream and clears its <c>target.object</c> when the node still exists, so the session manager moves it back.
+    /// </summary>
+    /// <param name="streamNodeId">The node to release.</param>
+    /// <returns><see langword="true"/> when the stream was attached.</returns>
     public bool Detach(uint streamNodeId)
     {
         if (!_streams.Remove(streamNodeId))
@@ -171,12 +248,21 @@ public sealed unsafe class SpatialVoice : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Forgets an attached stream without a change to its metadata. Use it when the stream has gone or another voice takes it over.
+    /// </summary>
+    /// <param name="streamNodeId">The node to forget.</param>
     public void Forget(uint streamNodeId)
     {
         _streams.Remove(streamNodeId);
         _awaitingEcho.Remove(streamNodeId);
     }
 
+    /// <summary>
+    /// Quantizes the parameters and sends only the controls that changed, in one param write. It allocates nothing. An HRTF change inside <see cref="MinHrtfInterval"/> waits for a timer.
+    /// </summary>
+    /// <param name="wanted">The new placement. A stereo voice uses only the wet level.</param>
+    /// <exception cref="ObjectDisposedException">The voice is disposed.</exception>
     public void Update(in VoiceParams wanted)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -248,6 +334,9 @@ public sealed unsafe class SpatialVoice : IDisposable
         Send();
     }
 
+    /// <summary>
+    /// Clears the target of each attached stream that still exists, destroys the node proxy, runs a roundtrip, and then unloads the module. Do not call it inside a PipeWire callback. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

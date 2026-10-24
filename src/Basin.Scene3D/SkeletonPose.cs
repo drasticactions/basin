@@ -2,12 +2,19 @@ using System.Numerics;
 
 namespace Basin.Scene3D;
 
+/// <summary>
+/// A pose of a <see cref="Skeleton"/> and the arrays it resolves into. It owns the arrays, so a frame does not allocate.
+/// </summary>
 public sealed class SkeletonPose
 {
     private readonly Vector3[] _translations;
     private readonly Quaternion[] _rotations;
     private readonly Vector3[] _scales;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SkeletonPose"/> class at the rest pose, resolved.
+    /// </summary>
+    /// <param name="skeleton">The skeleton to pose.</param>
     public SkeletonPose(Skeleton skeleton)
     {
         Skeleton = skeleton;
@@ -20,12 +27,24 @@ public sealed class SkeletonPose
         Resolve();
     }
 
+    /// <summary>
+    /// Gets the skeleton that this pose is for.
+    /// </summary>
     public Skeleton Skeleton { get; }
 
+    /// <summary>
+    /// Gets the model-space matrix of each node, as of the last <see cref="Resolve"/>.
+    /// </summary>
     public Matrix4x4[] World { get; }
 
+    /// <summary>
+    /// Gets the skinning matrix of each joint, as of the last <see cref="Resolve"/>. A pass uploads it.
+    /// </summary>
     public Matrix4x4[] Palette { get; }
 
+    /// <summary>
+    /// Sets every node back to the rest pose. Call <see cref="Resolve"/> after it.
+    /// </summary>
     public void Reset()
     {
         Skeleton.Translations.CopyTo(_translations, 0);
@@ -33,6 +52,13 @@ public sealed class SkeletonPose
         Skeleton.Scales.CopyTo(_scales, 0);
     }
 
+    /// <summary>
+    /// Blends a sample of a clip into the pose. Apply clips in order after <see cref="Reset"/>, then call <see cref="Resolve"/>.
+    /// </summary>
+    /// <param name="clip">The clip to sample. Its node indices must belong to <see cref="Skeleton"/>.</param>
+    /// <param name="time">The time in seconds.</param>
+    /// <param name="weight">The blend weight, clamped to 1. At 0 or less the call does nothing.</param>
+    /// <param name="loop"><see langword="true"/> to wrap the time round the clip, <see langword="false"/> to hold the last frame.</param>
     public void Apply(SkeletonClip clip, float time, float weight, bool loop)
     {
         if (weight <= 0 || clip.FrameCount == 0)
@@ -81,6 +107,9 @@ public sealed class SkeletonPose
         }
     }
 
+    /// <summary>
+    /// Computes <see cref="World"/> and <see cref="Palette"/> from the current pose.
+    /// </summary>
     public void Resolve()
     {
         var parents = Skeleton.Parents;

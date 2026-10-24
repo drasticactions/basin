@@ -1,7 +1,13 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// The pixel shader that <see cref="CtmStage"/> drives. It applies a 3x3 color matrix in linear light.
+/// </summary>
 public static class CtmShader
 {
+    /// <summary>
+    /// The uniforms of the color matrix shader. The nine uniforms are the row-major matrix, in the order that <see cref="IPixelShader.SetUniforms"/> takes them.
+    /// </summary>
     public static readonly PixelShaderUniform[] Uniforms =
     [
         new("m0", PixelShaderUniformType.Float),
@@ -17,6 +23,9 @@ public static class CtmShader
 
     private static byte[]? _spirv;
 
+    /// <summary>
+    /// Gets the GLSL, SkSL and SPIR-V dialects of the color matrix shader. The nine uniforms are the row-major matrix. The first read loads the SPIR-V from an embedded resource.
+    /// </summary>
     public static PixelShaderSource Source => new()
     {
         SamplesTexture = true,

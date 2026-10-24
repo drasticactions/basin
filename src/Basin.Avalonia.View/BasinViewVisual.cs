@@ -9,10 +9,20 @@ using static Basin.Avalonia.ViewLog;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// The composition visual handler that composites one view output of a shared <see cref="BasinCompositorHost"/>.
+/// It processes <see cref="WakeMessage"/>, <see cref="RenderMessage"/>, an <see cref="Action"/> and a <see cref="BasinShutdownMessage"/>.
+/// </summary>
 public sealed class BasinViewVisual : CompositionCustomVisualHandler
 {
+    /// <summary>
+    /// The message that dispatches the compositor and invalidates the views that are dirty.
+    /// </summary>
     public static readonly object WakeMessage = new();
 
+    /// <summary>
+    /// The message that requests a render of this view.
+    /// </summary>
     public static readonly object RenderMessage = new();
 
     private readonly BasinCompositorHost _host;
@@ -23,11 +33,22 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
     private bool _shutdown;
     private bool _drainRegistered;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasinViewVisual"/> class with no input drain.
+    /// </summary>
+    /// <param name="host">The compositor host that the view output belongs to.</param>
+    /// <param name="createView">Makes the view output on the first frame or wake.</param>
     public BasinViewVisual(BasinCompositorHost host, Func<BasinCompositorHost, BasinViewOutput> createView)
         : this(host, createView, null)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasinViewVisual"/> class.
+    /// </summary>
+    /// <param name="host">The compositor host that the view output belongs to.</param>
+    /// <param name="createView">Makes the view output on the first frame or wake.</param>
+    /// <param name="drainInput">Called before each compositor dispatch to deliver queued input, or <see langword="null"/>.</param>
     public BasinViewVisual(
         BasinCompositorHost host,
         Func<BasinCompositorHost, BasinViewOutput> createView,
@@ -43,6 +64,7 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
 
     internal BasinViewOutput? View => _view;
 
+    /// <inheritdoc/>
     public override void OnRender(ImmediateDrawingContext context)
     {
         if (_shutdown)
@@ -67,6 +89,7 @@ public sealed class BasinViewVisual : CompositionCustomVisualHandler
         }
     }
 
+    /// <inheritdoc/>
     public override void OnMessage(object message)
     {
         using var affinity = _host.Affinity.Adopt();

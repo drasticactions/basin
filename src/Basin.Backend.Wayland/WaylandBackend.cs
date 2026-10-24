@@ -6,6 +6,10 @@ using static Basin.Backend.Wayland.WaylandBackendLog;
 
 namespace Basin.Backend.Wayland;
 
+/// <summary>
+/// Runs this compositor as a client of a parent Wayland compositor. Each output is an xdg toplevel on the parent, and the parent's seat supplies the input devices.
+/// The parent connection is one more fd on the compositor's own event loop.
+/// </summary>
 public sealed class WaylandBackend : IDisposable
 {
     private readonly ICompositorEventLoop _loop;
@@ -56,22 +60,38 @@ public sealed class WaylandBackend : IDisposable
     [DllImport("libc")]
     private static extern int close(int fd);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WaylandBackend"/> class. It does not connect until <see cref="Start"/>.
+    /// </summary>
+    /// <param name="loop">The compositor's event loop, which dispatches the parent connection.</param>
+    /// <param name="parentSocket">The parent's socket name, or <see langword="null"/> to use <c>WAYLAND_DISPLAY</c>.</param>
     public WaylandBackend(ICompositorEventLoop loop, string? parentSocket = null)
     {
         _loop = loop;
         _parentSocket = parentSocket;
     }
 
+    /// <summary>Gets the outputs that <see cref="CreateOutput"/> made and that are not destroyed.</summary>
     public IReadOnlyList<WaylandOutput> Outputs => _outputs;
 
+    /// <summary>
+    /// Gets or sets the GPU device that renders the outputs' frames. Set it before <see cref="Start"/>.
+    /// With a device and a parent syncobj manager, outputs synchronize explicitly with the parent.
+    /// </summary>
     public IRenderDevice? RenderDevice { get; set; }
 
+    /// <summary>Gets the pointer of the parent seat. It is <see langword="null"/> while the parent seat has no pointer.</summary>
     public WaylandPointerDevice? Pointer { get; private set; }
 
+    /// <summary>Gets the keyboard of the parent seat. It is <see langword="null"/> while the parent seat has no keyboard.</summary>
     public WaylandKeyboardDevice? Keyboard { get; private set; }
 
+    /// <summary>Gets the touch device of the parent seat. It is <see langword="null"/> while the parent seat has no touch device.</summary>
     public WaylandTouchDevice? Touch { get; private set; }
 
+    /// <summary>
+    /// Occurs when the parent seat gains a pointer. A handler added while <see cref="Pointer"/> is set runs at once with it.
+    /// </summary>
     public event Action<WaylandPointerDevice> PointerAdded
     {
         add
@@ -86,6 +106,9 @@ public sealed class WaylandBackend : IDisposable
         remove => _pointerAdded -= value;
     }
 
+    /// <summary>
+    /// Occurs when the parent seat gains a keyboard. A handler added while <see cref="Keyboard"/> is set runs at once with it.
+    /// </summary>
     public event Action<WaylandKeyboardDevice> KeyboardAdded
     {
         add
@@ -100,6 +123,9 @@ public sealed class WaylandBackend : IDisposable
         remove => _keyboardAdded -= value;
     }
 
+    /// <summary>
+    /// Occurs when the parent seat gains a touch device. A handler added while <see cref="Touch"/> is set runs at once with it.
+    /// </summary>
     public event Action<WaylandTouchDevice> TouchAdded
     {
         add
@@ -114,32 +140,54 @@ public sealed class WaylandBackend : IDisposable
         remove => _touchAdded -= value;
     }
 
+    /// <summary>
+    /// Occurs after the parent seat loses its pointer. The device released its held buttons and left its output first, and it is disposed.
+    /// </summary>
     public event Action<WaylandPointerDevice>? PointerRemoved;
 
+    /// <summary>Occurs after the parent seat loses its keyboard. The device released its held keys and raised its leave event first.</summary>
     public event Action<WaylandKeyboardDevice>? KeyboardRemoved;
 
+    /// <summary>Occurs after the parent seat loses its touch device. The device cancelled any points that were down first.</summary>
     public event Action<WaylandTouchDevice>? TouchRemoved;
 
+    /// <summary>
+    /// Occurs once when the parent connection hangs up or a dispatch or flush on it fails. After it, flushes do nothing.
+    /// </summary>
     public event Action? ParentGone;
 
+    /// <summary>Gets a value indicating whether the parent has pointer constraints and the seat has a pointer, so outputs can lock the pointer.</summary>
     public bool SupportsPointerLock => ParentPointerConstraints is not null && Pointer is not null;
 
+    /// <summary>Gets a value indicating whether the parent has a text input manager and a seat for <see cref="WaylandSeamTextInput"/>.</summary>
     public bool SupportsTextInput => ParentTextInputManager is not null && ParentSeat is not null;
 
     internal bool ParentPresentationClockMatches { get; private set; }
 
+    /// <summary>
+    /// Gets the dmabuf formats and modifiers that the parent accepts. It is empty before <see cref="Start"/> or when the parent has no dmabuf version 3 or later.
+    /// </summary>
     public DrmFormatSet ParentDmabufFormats { get; private set; } = DrmFormatSet.Empty;
 
+    /// <summary>Gets the parent's color manager, or <see langword="null"/> when the parent has none.</summary>
     public WpColorManagerV1? ParentColorManager { get; private set; }
 
+    /// <summary>Gets the color management features that the parent announced.</summary>
     public HashSet<WpColorManagerV1.Feature> ParentColorFeatures { get; } = [];
 
+    /// <summary>Gets the named transfer functions that the parent announced.</summary>
     public HashSet<WpColorManagerV1.TransferFunction> ParentColorTransfers { get; } = [];
 
+    /// <summary>Gets the named primaries that the parent announced.</summary>
     public HashSet<WpColorManagerV1.Primaries> ParentColorPrimaries { get; } = [];
 
+    /// <summary>Gets the parent's toplevel icon manager, or <see langword="null"/> when the parent has none.</summary>
     public XdgToplevelIconManagerV1? ParentToplevelIcon { get; private set; }
 
+    /// <summary>
+    /// Connects to the parent, binds its globals and adds the connection to the event loop. Call it once.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The parent lacks <c>wl_compositor</c>, <c>wl_shm</c> or <c>xdg_wm_base</c>.</exception>
     public void Start()
     {
         _parent = _parentSocket is null ? WlDisplay.Connect() : WlDisplay.Connect(_parentSocket);
@@ -299,6 +347,11 @@ public sealed class WaylandBackend : IDisposable
         });
     }
 
+    /// <summary>
+    /// Creates an output as a new toplevel window on the parent. The output leaves <see cref="Outputs"/> when it is destroyed. Call it after <see cref="Start"/>.
+    /// </summary>
+    /// <param name="name">The output name, or <see langword="null"/> for <c>WL-1</c>, <c>WL-2</c> and so on.</param>
+    /// <returns>The new output. It has no mode until the parent's first configure.</returns>
     public WaylandOutput CreateOutput(string? name = null)
     {
         var output = new WaylandOutput(this, name ?? $"WL-{++_outputCounter}");
@@ -308,6 +361,10 @@ public sealed class WaylandBackend : IDisposable
         return output;
     }
 
+    /// <summary>
+    /// Sends the queued requests to the parent. It does nothing before <see cref="Start"/> or after the parent is gone.
+    /// A failure raises <see cref="ParentGone"/> instead of an exception.
+    /// </summary>
     public void Flush()
     {
         if (_gone || _parent is null)
@@ -344,6 +401,7 @@ public sealed class WaylandBackend : IDisposable
             pointer.SetFrameCursor(image.Buffer, image.HotspotX, image.HotspotY, scale);
     }
 
+    /// <summary>Destroys every output, releases the input devices and the parent objects, and closes the parent connection.</summary>
     public void Dispose()
     {
         foreach (var output in _outputs.ToArray())

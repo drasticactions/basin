@@ -4,6 +4,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Host;
 
+/// <summary>
+/// Runs a startup command through <c>/bin/sh -c</c> in its own session and process group, with the compositor's socket in its environment.
+/// </summary>
 public sealed class InitProcess
 {
     private const short SpawnSetSigDefault = 0x04;
@@ -30,12 +33,24 @@ public sealed class InitProcess
         Reaped = reaped;
     }
 
+    /// <summary>
+    /// Gets the process group id, which is also the id of the shell process.
+    /// </summary>
     public int ProcessGroup => _pgid;
 
+    /// <summary>
+    /// Gets a value indicating whether the command runs under the basin subreaper.
+    /// </summary>
     public bool Reaped { get; }
 
+    /// <summary>
+    /// Gets the exit status of the shell process, or <see langword="null"/> before it exits or when no exit watch runs. A process that a signal ended gets 128 plus the signal number.
+    /// </summary>
     public int? ExitStatus { get; private set; }
 
+    /// <summary>
+    /// Occurs once, on the loop, when the shell process exits. The argument is <see cref="ExitStatus"/>. It requires <see cref="WatchExit"/>.
+    /// </summary>
     public event Action<int>? Exited;
 
     [DllImport("libc", SetLastError = true)]
@@ -47,6 +62,12 @@ public sealed class InitProcess
     [DllImport("libc")]
     private static extern int close(int fd);
 
+    /// <summary>
+    /// Watches the shell process through a pidfd on the loop, so that <see cref="Exited"/> can occur. A second call does nothing.
+    /// </summary>
+    /// <param name="loop">The loop that watches the pidfd.</param>
+    /// <returns><see langword="false"/> when the pidfd cannot be opened, for example because the process is gone.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
     public bool WatchExit(ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -129,6 +150,14 @@ public sealed class InitProcess
     [DllImport("libc", SetLastError = true)]
     private static extern int kill(int pid, int signal);
 
+    /// <summary>
+    /// Looks for an executable <c>init</c> file in each named directory under <c>XDG_CONFIG_HOME</c> or <c>~/.config</c>, in order.
+    /// </summary>
+    /// <param name="directories">The directory names to search, for example the binary name.</param>
+    /// <param name="log">The log for the errors and the paths that were tried.</param>
+    /// <param name="found">The path of the first executable <c>init</c>, or <see langword="null"/> when there is none.</param>
+    /// <returns><see langword="false"/> only when an <c>init</c> file exists but is not executable. A search that finds nothing returns <see langword="true"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="directories"/> is <see langword="null"/>.</exception>
     public static bool TryFind(IReadOnlyList<string> directories, BasinLogger log, out string? found)
     {
         ArgumentNullException.ThrowIfNull(directories);
@@ -175,15 +204,49 @@ public sealed class InitProcess
         return true;
     }
 
+    /// <summary>
+    /// Sets the soft open-file limit of the process to 4096, or to the hard limit when that is lower. <see cref="Start(string, string, string?, BasinLogger, IReadOnlyDictionary{string, string}?, X11Route?, bool)"/> gives the child the original limit.
+    /// </summary>
+    /// <param name="log">The log for a failure.</param>
     public static void RaiseFileLimit(BasinLogger log) => FileDescriptorLimit.Raise(log);
 
+    /// <summary>
+    /// Starts a command without an X11 route and without the subreaper.
+    /// </summary>
+    /// <param name="command">The shell command.</param>
+    /// <param name="socket">The value of <c>WAYLAND_DISPLAY</c> for the command.</param>
+    /// <param name="display">The value of <c>DISPLAY</c>, or <see langword="null"/> to keep the inherited one.</param>
+    /// <param name="log">The log for the start and for errors.</param>
+    /// <param name="environment">Extra variables for the command, or <see langword="null"/>.</param>
+    /// <returns>The started process, or <see langword="null"/> when the spawn failed.</returns>
     public static InitProcess? Start(string command, string socket, string? display, BasinLogger log, IReadOnlyDictionary<string, string>? environment = null)
         => Start(command, socket, display, log, environment, null);
 
+    /// <summary>
+    /// Starts a command without the subreaper.
+    /// </summary>
+    /// <param name="command">The shell command.</param>
+    /// <param name="socket">The value of <c>WAYLAND_DISPLAY</c> for the command.</param>
+    /// <param name="display">The value of <c>DISPLAY</c>, or <see langword="null"/> to keep the inherited one. The X11 route replaces it.</param>
+    /// <param name="log">The log for the start and for errors.</param>
+    /// <param name="environment">Extra variables for the command, or <see langword="null"/>.</param>
+    /// <param name="x11">The X11 display and variables for the command, or <see langword="null"/>.</param>
+    /// <returns>The started process, or <see langword="null"/> when the spawn failed.</returns>
     public static InitProcess? Start(
         string command, string socket, string? display, BasinLogger log, IReadOnlyDictionary<string, string>? environment, X11Route? x11)
         => Start(command, socket, display, log, environment, x11, subreaper: false);
 
+    /// <summary>
+    /// Starts a command through <c>posix_spawn</c> with a clean signal mask, a default <c>SIGPIPE</c> handler and a new session. The child gets the process environment with the given variables put in.
+    /// </summary>
+    /// <param name="command">The shell command.</param>
+    /// <param name="socket">The value of <c>WAYLAND_DISPLAY</c> for the command.</param>
+    /// <param name="display">The value of <c>DISPLAY</c>, or <see langword="null"/> to keep the inherited one. The X11 route replaces it.</param>
+    /// <param name="log">The log for the start and for errors.</param>
+    /// <param name="environment">Extra variables for the command, or <see langword="null"/>. The X11 route's variables win over them.</param>
+    /// <param name="x11">The X11 display and variables for the command, or <see langword="null"/>.</param>
+    /// <param name="subreaper">Whether to run the shell under the basin subreaper on Linux. The subreaper adopts orphans and ends the whole tree at exit.</param>
+    /// <returns>The started process, or <see langword="null"/> when the spawn failed.</returns>
     public static InitProcess? Start(
         string command,
         string socket,
@@ -279,6 +342,10 @@ public sealed class InitProcess
         }
     }
 
+    /// <summary>
+    /// Sends <c>SIGTERM</c> to the process group and stops the exit watch. <see cref="Exited"/> does not occur after this call.
+    /// </summary>
+    /// <param name="log">The log for a failure of the signal.</param>
     public void Stop(BasinLogger log)
     {
         if (kill(-_pgid, SignalTerminate) != 0)

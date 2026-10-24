@@ -11,20 +11,46 @@ using Basin.Capabilities;
 
 namespace Basin.UI.Avalonia;
 
+/// <summary>
+/// Starts Avalonia on the Basin windowing platform, so that its windows become compositor chrome surfaces.
+/// Avalonia allows one UI dispatcher per process, so a process can start the platform once.
+/// </summary>
 public static class BasinPlatform
 {
     private static AvaloniaUIHost? _host;
     private static bool _started;
 
+    /// <summary>
+    /// Gets the host that the started platform made.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">The platform is not started.</exception>
     public static AvaloniaUIHost Host =>
         _host ?? throw new InvalidOperationException("The Avalonia platform is not started.");
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Start{TApp}(BasinPlatformOptions, IApplicationLifetime?)"/> has run in this process.
+    /// </summary>
     public static bool IsStarted => _started;
 
+    /// <summary>
+    /// Sets up Avalonia on the Basin platform with no lifetime. The calling thread becomes the Avalonia UI thread.
+    /// </summary>
+    /// <typeparam name="TApp">The Avalonia application type.</typeparam>
+    /// <param name="options">The platform settings.</param>
+    /// <returns>The host that pumps Avalonia and makes chrome surfaces.</returns>
+    /// <exception cref="InvalidOperationException">The platform is already started in this process.</exception>
     public static AvaloniaUIHost Start<TApp>(BasinPlatformOptions options)
         where TApp : Application, new() =>
         Start<TApp>(options, null);
 
+    /// <summary>
+    /// Sets up Avalonia on the Basin platform with Skia. The calling thread becomes the Avalonia UI thread.
+    /// </summary>
+    /// <typeparam name="TApp">The Avalonia application type.</typeparam>
+    /// <param name="options">The platform settings.</param>
+    /// <param name="lifetime">The application lifetime, or <see langword="null"/> to set up without one.</param>
+    /// <returns>The host that pumps Avalonia and makes chrome surfaces.</returns>
+    /// <exception cref="InvalidOperationException">The platform is already started in this process.</exception>
     public static AvaloniaUIHost Start<TApp>(BasinPlatformOptions options, IApplicationLifetime? lifetime)
         where TApp : Application, new()
     {
@@ -51,6 +77,12 @@ public static class BasinPlatform
         return Host;
     }
 
+    /// <summary>
+    /// Makes a chrome host inside an Avalonia application that already runs on another platform. The host does not pump Avalonia.
+    /// </summary>
+    /// <param name="options">The settings. <see cref="BasinPlatformOptions.CompositorAffinity"/> must be set.</param>
+    /// <returns>A new host. The caller owns it and must dispose it.</returns>
+    /// <exception cref="ArgumentException"><see cref="BasinPlatformOptions.CompositorAffinity"/> is <see langword="null"/>.</exception>
     public static AvaloniaUIHost Attach(BasinPlatformOptions options)
     {
         ArgumentNullException.ThrowIfNull(options);
@@ -82,6 +114,12 @@ public static class BasinPlatform
         }
     }
 
+    /// <summary>
+    /// Selects the Basin windowing subsystem and HarfBuzz text shaping on an app builder. It does not mark the platform as started.
+    /// </summary>
+    /// <param name="builder">The app builder.</param>
+    /// <param name="options">The platform settings, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The same builder.</returns>
     public static AppBuilder UseBasin(this AppBuilder builder, BasinPlatformOptions? options = null) =>
         builder
             .UseStandardRuntimePlatformSubsystem()

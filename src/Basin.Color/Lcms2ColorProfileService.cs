@@ -2,16 +2,30 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
+/// <summary>
+/// The <see cref="IColorProfileService"/> on Little CMS. Without liblcms2 it still handles
+/// parametric descriptions and refuses ICC profiles.
+/// </summary>
 public sealed class Lcms2ColorProfileService : IColorProfileService
 {
     private readonly Dictionary<IOutput, ImageDescription> _outputs = [];
 
+    /// <summary>
+    /// Gets the supported features. ICC profiles and transforms are in the set only when liblcms2
+    /// loads.
+    /// </summary>
     public ColorFeatures Features =>
         Lcms2Support.IsAvailable
             ? ColorFeatures.Parametric | ColorFeatures.CustomPrimaries | ColorFeatures.Luminances |
               ColorFeatures.IccProfiles | ColorFeatures.Transforms
             : ColorFeatures.Parametric | ColorFeatures.CustomPrimaries | ColorFeatures.Luminances;
 
+    /// <summary>
+    /// Records the description that an output displays, for <see cref="TryDescribeOutput"/>. A later
+    /// call for the same output replaces it.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <param name="description">The description of what the output displays.</param>
     public void SetOutputDescription(IOutput output, ImageDescription description)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -19,6 +33,7 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
         _outputs[output] = description;
     }
 
+    /// <inheritdoc/>
     public bool TryParseIcc(ReadOnlySpan<byte> profile, out ImageDescription description)
     {
         description = ImageDescription.SdrDefault;
@@ -37,6 +52,13 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
         return true;
     }
 
+    /// <summary>
+    /// Accepts a parametric description that names a transfer function and primaries. It returns the
+    /// parameters unchanged.
+    /// </summary>
+    /// <param name="parameters">The description that holds the parameters the client set.</param>
+    /// <param name="description">The accepted description, which is <paramref name="parameters"/> itself.</param>
+    /// <returns><see langword="true"/> when the parameters name both primaries and a transfer function.</returns>
     public bool TryBuildParametric(ImageDescription parameters, out ImageDescription description)
     {
         ArgumentNullException.ThrowIfNull(parameters);
@@ -46,6 +68,7 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
             && (parameters.PrimariesNamed is not null || parameters.PrimariesCustom is not null);
     }
 
+    /// <inheritdoc/>
     public IColorLut? BuildTransform(
         ImageDescription source,
         ImageDescription output,
@@ -65,6 +88,7 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
         return lut is null ? null : renderer.ImportLut(lut);
     }
 
+    /// <inheritdoc/>
     public ColorLut3D? BuildLut(
         ImageDescription source,
         ImageDescription output,
@@ -83,6 +107,7 @@ public sealed class Lcms2ColorProfileService : IColorProfileService
             : ColorLutBaker.Bake(source, output, ColorLutBaker.DefaultSize, intent);
     }
 
+    /// <inheritdoc/>
     public bool TryDescribeOutput(IOutput output, out ImageDescription description)
     {
         ArgumentNullException.ThrowIfNull(output);

@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_output_manager_v1</c> global. It reports heads and modes, and applies client configurations through <see cref="IOutputConfiguration"/>.
+/// </summary>
 public sealed class OutputManagementManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 4;
 
     private readonly WlServerDisplay _display;
@@ -24,6 +30,14 @@ public sealed class OutputManagementManager : IDisposable
         public required List<(ZwlrOutputModeV1Resource Resource, OutputMode Mode)> Modes;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputManagementManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global and supplies serials.</param>
+    /// <param name="layout">The layout whose changes cause a refresh.</param>
+    /// <param name="outputs">The set of outputs to report as heads.</param>
+    /// <param name="configuration">The configuration that applies client requests, or <see langword="null"/> to fail every apply.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/>, <paramref name="layout"/> or <paramref name="outputs"/> is <see langword="null"/>.</exception>
     public OutputManagementManager(
         WlServerDisplay display, OutputLayout layout, IOutputSet outputs, IOutputConfiguration? configuration)
     {
@@ -39,6 +53,9 @@ public sealed class OutputManagementManager : IDisposable
         outputs.Changed += Sync;
     }
 
+    /// <summary>
+    /// Stops following the layout and the output set, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         _layout.Changed -= Refresh;
@@ -46,6 +63,9 @@ public sealed class OutputManagementManager : IDisposable
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Sends the state of every head to every bound manager, followed by <c>done</c> with a new serial.
+    /// </summary>
     public void Refresh()
     {
         _serial = _display.NextSerial();

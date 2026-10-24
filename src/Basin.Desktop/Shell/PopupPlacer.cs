@@ -3,17 +3,28 @@ using Basin.Shell.Xdg;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Puts xdg popups into the scene under a parent tree and keeps them in place. It constrains them to an output or a given box.
+/// </summary>
 public sealed class PopupPlacer
 {
     private readonly OutputLayout _layout;
     private readonly List<Action> _placements = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PopupPlacer"/> class.
+    /// </summary>
+    /// <param name="layout">The layout whose outputs constrain a popup when no box is given.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="layout"/> is <see langword="null"/>.</exception>
     public PopupPlacer(OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
         _layout = layout;
     }
 
+    /// <summary>
+    /// Places again every popup that was attached with a transform. Call it when a transform changes.
+    /// </summary>
     public void PlaceAll()
     {
         for (var i = _placements.Count - 1; i >= 0; i--)
@@ -22,6 +33,12 @@ public sealed class PopupPlacer
         }
     }
 
+    /// <summary>
+    /// Adds up the geometry offsets of the popups above a popup, up to its first non-popup parent.
+    /// </summary>
+    /// <param name="popup">The popup to measure.</param>
+    /// <returns>The offset in surface-local logical pixels.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="popup"/> is <see langword="null"/>.</exception>
     public static Point ChainOffset(XdgPopupWindow popup)
     {
         ArgumentNullException.ThrowIfNull(popup);
@@ -38,6 +55,17 @@ public sealed class PopupPlacer
         return new Point(x, y);
     }
 
+    /// <summary>
+    /// Creates the popup's scene surface and keeps it placed on commit, geometry change and reposition. The scene surface is destroyed with the popup.
+    /// </summary>
+    /// <param name="popup">The popup to place.</param>
+    /// <param name="parentTree">The tree that holds the popup.</param>
+    /// <param name="origin">The layout position of the parent content, or <see langword="null"/> to use the scene position of <paramref name="parentTree"/>.</param>
+    /// <param name="constrainBox">The box in layout coordinates to keep the popup in, or <see langword="null"/> for the output at the origin.</param>
+    /// <param name="scale">The scale of the parent content. Only values between 0 and 1 have an effect.</param>
+    /// <param name="transform">An extra transform of the parent content, or <see langword="null"/>.</param>
+    /// <returns>The popup's scene surface.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="popup"/> or <paramref name="parentTree"/> is <see langword="null"/>.</exception>
     public SceneSurface Attach(
         XdgPopupWindow popup,
         SceneTree parentTree,

@@ -5,6 +5,9 @@ using Xkb;
 
 namespace Basin.Shell.River;
 
+/// <summary>
+/// The river-xkb-config-v1 global. It lets the window manager validate keymaps and set them on keyboards, and it reports the layout and lock state of each keyboard.
+/// </summary>
 public sealed class RiverXkbConfig : IDisposable
 {
     private readonly RiverWindowManager _manager;
@@ -22,8 +25,18 @@ public sealed class RiverXkbConfig : IDisposable
             OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a window manager holds a live binding to this global.
+    /// </summary>
     public bool IsBound => _resource is { IsDestroyed: false };
 
+    /// <summary>
+    /// Registers a keyboard and announces it to the bound window manager. A handle that is already registered does nothing.
+    /// </summary>
+    /// <param name="handle">The consumer's object for the keyboard.</param>
+    /// <param name="seat">The seat whose keyboard state the keyboard drives.</param>
+    /// <param name="device">The device that receives a new keymap. When it is <see langword="null"/>, the keymap goes to the keyboard of <paramref name="seat"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="handle"/> or <paramref name="seat"/> is <see langword="null"/>.</exception>
     public void AddKeyboard(object handle, Basin.Seat.Seat seat, Basin.Capabilities.IInjectedKeyboard? device = null)
     {
         ArgumentNullException.ThrowIfNull(handle);
@@ -38,6 +51,11 @@ public sealed class RiverXkbConfig : IDisposable
         Announce(keyboard);
     }
 
+    /// <summary>
+    /// Unregisters a keyboard and tells the window manager that it is gone. An unknown handle does nothing.
+    /// </summary>
+    /// <param name="handle">The handle given to <see cref="AddKeyboard"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="handle"/> is <see langword="null"/>.</exception>
     public void RemoveKeyboard(object handle)
     {
         ArgumentNullException.ThrowIfNull(handle);
@@ -48,6 +66,9 @@ public sealed class RiverXkbConfig : IDisposable
         }
     }
 
+    /// <summary>
+    /// Forgets every keyboard and removes the global. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

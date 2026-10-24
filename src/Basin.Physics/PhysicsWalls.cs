@@ -1,7 +1,13 @@
 namespace Basin.Physics;
 
+/// <summary>
+/// Keeps one static wall body in a <see cref="PhysicsWorld"/> around a set of rectangles. It adds fences over the dead zones in the bounding box that no rectangle covers.
+/// </summary>
 public sealed class PhysicsWalls
 {
+    /// <summary>
+    /// The thickness of the outer wall, in logical pixels. A fast body cannot pass through it in one step.
+    /// </summary>
     public const int Thickness = 1000;
 
     private readonly PhysicsWorld _world;
@@ -10,18 +16,35 @@ public sealed class PhysicsWalls
     private readonly List<int> _ys = [];
     private PhysicsBody _body;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PhysicsWalls"/> class. It makes no wall until <see cref="Rebuild(ReadOnlySpan{Box})"/>.
+    /// </summary>
+    /// <param name="world">The world that holds the walls.</param>
     public PhysicsWalls(PhysicsWorld world)
     {
         ArgumentNullException.ThrowIfNull(world);
         _world = world;
     }
 
+    /// <summary>
+    /// Gets the bounding box of the rectangles from the last rebuild. It is empty when no wall exists.
+    /// </summary>
     public Box Bounds { get; private set; }
 
+    /// <summary>
+    /// Gets the fences from the last rebuild. The list is live and changes on the next rebuild.
+    /// </summary>
     public IReadOnlyList<Box> Fences => _fences;
 
+    /// <summary>
+    /// Gets the wall body, which impacts with a wall name. It is <see langword="default"/> when no wall exists.
+    /// </summary>
     public PhysicsBody Body => _body;
 
+    /// <summary>
+    /// Replaces the walls with walls around the boxes of the outputs in a layout. A consumer calls it again on hotplug and on a change of mode, scale or transform.
+    /// </summary>
+    /// <param name="layout">The output layout. Outputs with an empty box are skipped.</param>
     public void Rebuild(OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -40,6 +63,10 @@ public sealed class PhysicsWalls
         Rebuild(list[..count]);
     }
 
+    /// <summary>
+    /// Replaces the walls with an outer wall on <see cref="PhysicsCategory.Edges"/> and fences on <see cref="PhysicsCategory.Fences"/>. An empty span only removes the walls.
+    /// </summary>
+    /// <param name="areas">The rectangles that bodies can occupy, in logical pixels.</param>
     public void Rebuild(ReadOnlySpan<Box> areas)
     {
         Clear();
@@ -68,6 +95,9 @@ public sealed class PhysicsWalls
         }
     }
 
+    /// <summary>
+    /// Destroys the wall body and clears <see cref="Bounds"/> and <see cref="Fences"/>.
+    /// </summary>
     public void Clear()
     {
         _fences.Clear();

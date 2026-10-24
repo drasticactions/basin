@@ -5,10 +5,20 @@ using SkiaSharp;
 
 namespace Basin.UI.Skia;
 
+/// <summary>
+/// A flat, opaque frame look with a title bar, close, maximize and minimize buttons, and a window menu. It keeps the geometry of its last draw, so each window needs its own instance.
+/// </summary>
+/// <param name="theme">The fonts, paints and icons to draw with. The renderer does not own it.</param>
 public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
 {
+    /// <summary>
+    /// Gets <see cref="ISkiaUISurface"/>, because the renderer draws with a Skia canvas.
+    /// </summary>
     public Type SurfaceContract => typeof(ISkiaUISurface);
 
+    /// <summary>
+    /// Gets a value indicating whether every pixel of the frame is opaque. It is always <see langword="true"/>.
+    /// </summary>
     public bool OpaqueChrome => true;
 
     private const int Border = 4;
@@ -48,9 +58,22 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
     private Box _minimize;
     private Box _icon;
 
+    /// <summary>
+    /// Measures the frame: a 4-pixel border on each side, and a 26-pixel title bar on top. The state and the scale do not change it.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The insets in logical pixels.</returns>
     public FrameInsets Measure(in FrameState state, double scale) =>
         new(Border + TitleHeight, Border, Border, Border);
 
+    /// <summary>
+    /// Draws the frame and stores the button boxes for <see cref="PartAt"/> and <see cref="PartBounds"/>. The buttons are left out when the client is too narrow for them.
+    /// </summary>
+    /// <param name="surface">The surface to draw into. It must be an <see cref="ISkiaUISurface"/>.</param>
+    /// <param name="clientBox">The client area in surface coordinates.</param>
+    /// <param name="state">The window state.</param>
+    /// <param name="interaction">The pointer state and the change times.</param>
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
     {
         var skia = (ISkiaUISurface)surface;
@@ -85,6 +108,14 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         }
     }
 
+    /// <summary>
+    /// Finds the frame part at a point of the last draw. The corners take 16 pixels along each edge.
+    /// </summary>
+    /// <param name="x">The horizontal position in surface coordinates.</param>
+    /// <param name="y">The vertical position in surface coordinates.</param>
+    /// <param name="state">The window state.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The part, or <see cref="FramePart.None"/> outside the frame or before the first draw.</returns>
     public FramePart PartAt(double x, double y, in FrameState state, double scale)
     {
         var w = _outerWidth;
@@ -160,6 +191,11 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         return FramePart.Border;
     }
 
+    /// <summary>
+    /// Gives the box of a button in the last draw.
+    /// </summary>
+    /// <param name="part">The part to look up.</param>
+    /// <returns>The box for the close, maximize or minimize button. An empty box for other parts and for a hidden button.</returns>
     public Box PartBounds(FramePart part) => part switch
     {
         FramePart.Close => _close,
@@ -177,9 +213,21 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
           + (state.Capabilities.HasFlag(FrameCapabilities.Maximize) ? 1 : 0)
           + (state.Capabilities.HasFlag(FrameCapabilities.X11Density) ? 1 : 0);
 
+    /// <summary>
+    /// Measures the window menu: 180 pixels wide, with one 30-pixel row for each item.
+    /// </summary>
+    /// <param name="state">The window state. Its capabilities choose the items.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The menu size in logical pixels.</returns>
     public UISurfaceSize MeasureMenu(in FrameState state, double scale) =>
         new(MenuWidth, MenuItemCount(state) * MenuItemHeight + 2 * MenuPadding, scale);
 
+    /// <summary>
+    /// Draws the window menu. The items are Minimize, Maximize or Restore, the X11 density toggle and Close, each only when the window has the capability.
+    /// </summary>
+    /// <param name="surface">The menu surface. It must be an <see cref="ISkiaUISurface"/>.</param>
+    /// <param name="state">The window state.</param>
+    /// <param name="hotItem">The item under the pointer, or -1 for none.</param>
     public void DrawMenu(IUISurface surface, in FrameState state, int hotItem)
     {
         var skia = (ISkiaUISurface)surface;
@@ -220,6 +268,7 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         }
     }
 
+    /// <inheritdoc/>
     public int MenuItemAt(double x, double y, in FrameState state, double scale)
     {
         if (x < 0 || x >= MenuWidth || y < MenuPadding)
@@ -231,6 +280,12 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         return item < MenuItemCount(state) ? item : -1;
     }
 
+    /// <summary>
+    /// Gives the action of a menu item. An index past the last item gives the close action.
+    /// </summary>
+    /// <param name="item">The item index that <see cref="MenuItemAt"/> returned.</param>
+    /// <param name="state">The window state.</param>
+    /// <returns>The action. It is never <see langword="null"/>.</returns>
     public FrameAction? MenuItemAction(int item, in FrameState state) => LabelOf(item, state) switch
     {
         "Close" => new FrameAction(FrameActionKind.Close),
@@ -278,6 +333,11 @@ public sealed class FlatFrameRenderer(FlatFrameTheme theme) : IFrameRenderer
         return "Close";
     }
 
+    /// <summary>
+    /// Names the resize cursor for an edge or a corner.
+    /// </summary>
+    /// <param name="part">The part under the pointer.</param>
+    /// <returns>An X cursor name such as "top_side", or <see langword="null"/> for every other part.</returns>
     public string? CursorFor(FramePart part) => part switch
     {
         FramePart.Top => "top_side",

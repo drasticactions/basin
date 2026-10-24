@@ -6,20 +6,42 @@ using Tomlyn.Model;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// Loads the keyboard layouts: the built-in TOML files embedded in the library, and the user's files that shadow them.
+/// </summary>
 public static class KeyboardLayouts
 {
+    /// <summary>
+    /// The id of the layout that <see cref="XkbGrid.Build"/> makes from the seat's xkb keymap.
+    /// </summary>
     public const string Xkb = "xkb";
 
     private static readonly string[] BuiltIn = ["us-qwerty", "us-dvorak", "se-qwerty", "se-dvorak", "fr-azerty", "de-qwertz"];
 
     private static readonly string[] Windows8BuiltIn = ["win8-standard-en-us", "win8-thumb-en-us", "win8-full-en-us"];
 
+    /// <summary>
+    /// Gets the ids of the six built-in LunaCE layouts.
+    /// </summary>
     public static IReadOnlyList<string> Ids => BuiltIn;
 
+    /// <summary>
+    /// Gets the ids of the three built-in Windows 8 layouts.
+    /// </summary>
     public static IReadOnlyList<string> Windows8Ids => Windows8BuiltIn;
 
+    /// <summary>
+    /// Tests whether an id names a built-in layout.
+    /// </summary>
+    /// <param name="id">The layout id.</param>
+    /// <returns><see langword="true"/> for a LunaCE or a Windows 8 layout.</returns>
     public static bool IsBuiltIn(string id) => Array.IndexOf(BuiltIn, id) >= 0 || Array.IndexOf(Windows8BuiltIn, id) >= 0;
 
+    /// <summary>
+    /// Picks the built-in layout for a locale: <c>fr</c> gives AZERTY, <c>de</c> gives QWERTZ, <c>sv</c> gives Swedish QWERTY, and anything else gives US QWERTY.
+    /// </summary>
+    /// <param name="locale">The locale, for example <c>de_DE.UTF-8</c>, or <see langword="null"/>.</param>
+    /// <returns>The layout id.</returns>
     public static string DefaultFor(string? locale)
     {
         if (string.IsNullOrEmpty(locale))
@@ -45,6 +67,11 @@ public static class KeyboardLayouts
         return "us-qwerty";
     }
 
+    /// <summary>
+    /// Makes a language key label from a language code: the part before a dash or an underscore, with a capital first letter.
+    /// </summary>
+    /// <param name="language">The language code, for example <c>en-US</c>.</param>
+    /// <returns>The label, for example <c>En</c>, or an empty string for an empty code.</returns>
     public static string LanguageLabel(string language)
     {
         if (string.IsNullOrEmpty(language))
@@ -57,6 +84,14 @@ public static class KeyboardLayouts
         return char.ToUpperInvariant(code[0]) + code[1..].ToLowerInvariant();
     }
 
+    /// <summary>
+    /// Loads a layout. A file named <c>ID.toml</c> in the user directory shadows the built-in layout. A user file that cannot be read or parsed is logged, and the built-in layout loads.
+    /// </summary>
+    /// <param name="id">The layout id.</param>
+    /// <param name="userDirectory">The user's layout directory, or <see langword="null"/> for the built-in layouts only.</param>
+    /// <param name="log">The logger for problems in the file, or <see langword="null"/> for the library's logger.</param>
+    /// <returns>The layout, or <see langword="null"/> when no file has the id.</returns>
+    /// <exception cref="ArgumentException"><paramref name="id"/> is <see langword="null"/> or empty.</exception>
     public static KeyboardLayout? Load(string id, string? userDirectory = null, BasinLogger? log = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(id);
@@ -87,6 +122,17 @@ public static class KeyboardLayouts
         return Parse(reader.ReadToEnd(), id, logger, "layouts/" + id + ".toml");
     }
 
+    /// <summary>
+    /// Parses a layout file. An unknown key in the file is logged. A layout with an emoji key gets the built-in emoji pages.
+    /// </summary>
+    /// <param name="text">The TOML text.</param>
+    /// <param name="id">The layout id. An <c>id</c> in the file that differs is logged and ignored.</param>
+    /// <param name="log">The logger for problems in the file, or <see langword="null"/> for the library's logger.</param>
+    /// <param name="source">The file name for messages, or <see langword="null"/>.</param>
+    /// <returns>The layout.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
+    /// <exception cref="FormatException">The file does not describe a valid layout.</exception>
+    /// <exception cref="TomlException">The text is not valid TOML.</exception>
     public static KeyboardLayout Parse(string text, string id, BasinLogger? log = null, string? source = null)
     {
         ArgumentNullException.ThrowIfNull(text);

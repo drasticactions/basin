@@ -4,10 +4,17 @@ using Xkb;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// The default <see cref="ISelectionStore"/>, backed by the data device of one seat.
+/// </summary>
 public sealed class SeatSelectionStore : ISelectionStore
 {
     private readonly Seat _seat;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SeatSelectionStore"/> class. It becomes the data device's store when the device has none.
+    /// </summary>
+    /// <param name="seat">The seat whose selections the store holds.</param>
     public SeatSelectionStore(Seat seat)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -18,8 +25,10 @@ public sealed class SeatSelectionStore : ISelectionStore
         _seat.DataDevice.Store ??= this;
     }
 
+    /// <inheritdoc/>
     public event Action<SelectionKind>? SelectionChanged;
 
+    /// <inheritdoc/>
     public DataSource? Current(SelectionKind kind)
     {
         var source = kind == SelectionKind.Primary
@@ -28,6 +37,7 @@ public sealed class SeatSelectionStore : ISelectionStore
         return source is { IsDestroyed: false } ? source : null;
     }
 
+    /// <inheritdoc/>
     public int GetOffer(SelectionKind kind, Span<string> types)
     {
         if (Current(kind) is not { } source)
@@ -49,6 +59,7 @@ public sealed class SeatSelectionStore : ISelectionStore
         return mimes.Count;
     }
 
+    /// <inheritdoc/>
     public bool SetSelection(SelectionKind kind, DataSource? source, uint serial)
     {
         if (serial != SelectionSerial.Unchecked && !_seat.ValidateSelectionSerial(serial))
@@ -68,6 +79,7 @@ public sealed class SeatSelectionStore : ISelectionStore
         return true;
     }
 
+    /// <inheritdoc/>
     public bool Receive(SelectionKind kind, string mimeType, ClientFd fd)
     {
         ArgumentNullException.ThrowIfNull(mimeType);

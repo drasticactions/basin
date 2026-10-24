@@ -7,6 +7,9 @@ using Wayland.Server;
 
 namespace Basin.Host;
 
+/// <summary>
+/// Drives the outputs of a <see cref="BasinHost"/>: it creates a view per output, chooses scale, transform and scanout buffers, and repaints the scene on each scheduler tick. It also runs the DRM handoff transition and the retain sequence at exit.
+/// </summary>
 public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 {
     private readonly BasinHost _host;
@@ -45,6 +48,15 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
     private bool _hdrMetadataPassthrough;
     private OutputContentType? _contentTypeOverride;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputDriver"/> class and attaches it to the host. No outputs exist until <see cref="CreateInitialOutputs"/> or <see cref="AddView(IOutput)"/>.
+    /// </summary>
+    /// <param name="host">The host whose backend gives the outputs.</param>
+    /// <param name="scene">The scene to render.</param>
+    /// <param name="layout">The layout that places the outputs.</param>
+    /// <param name="renderer">The renderer for every output.</param>
+    /// <param name="deviceAllocator">The GPU allocator for scanout buffers, or <see langword="null"/> to use dumb or shared-memory buffers.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="host"/>, <paramref name="scene"/>, <paramref name="layout"/> or <paramref name="renderer"/> is <see langword="null"/>.</exception>
     public OutputDriver(
         BasinHost host, Scene.Scene scene, OutputLayout layout, IRenderer renderer, IAllocator? deviceAllocator)
     {
@@ -61,12 +73,24 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         host.AttachDriver(this);
     }
 
+    /// <summary>
+    /// Gets the scene that the driver renders.
+    /// </summary>
     public Scene.Scene Scene => _scene;
 
+    /// <summary>
+    /// Gets the renderer for every output.
+    /// </summary>
     public IRenderer Renderer => _renderer;
 
+    /// <summary>
+    /// Gets or sets the capture pack that the driver tells about new outputs and presented damage, or <see langword="null"/> for none.
+    /// </summary>
     public SceneCapturePack? Capture { get; set; }
 
+    /// <summary>
+    /// Gets or sets the frame clock. The driver begins a clock frame at each repaint, and a frame request from the clock schedules a repaint on every output.
+    /// </summary>
     public IFrameClock? Frames
     {
         get => _frames;
@@ -90,12 +114,24 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    /// <summary>
+    /// Gets or sets the color under the scene. The default is opaque black.
+    /// </summary>
     public RenderColor Background { get; set; } = new(0f, 0f, 0f, 1f);
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a fullscreen client buffer can go to the primary plane without composition.
+    /// </summary>
     public bool AllowDirectScanout { get; set; } = true;
 
+    /// <summary>
+    /// Gets the host that the driver belongs to.
+    /// </summary>
     public BasinHost Host => _host;
 
+    /// <summary>
+    /// Gets or sets the content type that every output sends to the display, or <see langword="null"/> to use the hint of a scanned-out surface. A composed frame then sends none. A change applies to existing outputs at once.
+    /// </summary>
     public OutputContentType? ContentTypeOverride
     {
         get => _contentTypeOverride;
@@ -112,8 +148,14 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    /// <summary>
+    /// Gets or sets the function that gives the configured transform of a new output. When it is <see langword="null"/> or returns <see langword="null"/>, the panel orientation applies.
+    /// </summary>
     public Func<IOutput, OutputTransform?>? ConfiguredTransform { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a scanned-out surface's HDR metadata replaces the output's own. It applies only to an output that has HDR metadata. A change applies to existing outputs at once.
+    /// </summary>
     public bool HdrMetadataPassthrough
     {
         get => _hdrMetadataPassthrough;
@@ -130,46 +172,106 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether client buffers can go to overlay planes.
+    /// </summary>
     public bool AllowPlaneOffload { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets when an output paces repaints on content arrival instead of the vblank. The default is <see cref="VrrPacingPolicy.Fullscreen"/>.
+    /// </summary>
     public VrrPacingPolicy VrrPacing { get; set; } = VrrPacingPolicy.Fullscreen;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a frame can tear when the scanout candidate asks for it.
+    /// </summary>
     public bool AllowTearing { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the surface hints that decide tearing and content type, or <see langword="null"/> to find them in the host's services.
+    /// </summary>
     public Capabilities.ISurfaceHints? SurfaceHints { get; set; }
 
+    /// <summary>
+    /// Gets or sets the number of nested or headless outputs that <see cref="CreateInitialOutputs"/> creates. Values less than 1 create one. A DRM backend ignores it.
+    /// </summary>
     public int Requested { get; set; } = 1;
 
+    /// <summary>
+    /// Gets or sets one scale per new output, in order. The last value applies to the outputs after it. When it is empty, <see cref="ConfiguredScale"/> or an automatic scale applies.
+    /// </summary>
     public double[] Scales { get; set; } = [];
 
+    /// <summary>
+    /// Gets or sets the function that gives the configured scale of a new output. When it returns <see langword="null"/>, a DRM output gets an automatic scale, and a nested output follows the host's scale.
+    /// </summary>
     public Func<IOutput, double?>? ConfiguredScale { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the machine has a lid switch. A handheld-class panel on such a machine is scaled as a laptop. The getter probes <c>/sys/class/input</c> once unless a value was set.
+    /// </summary>
     public bool HasLidSwitch
     {
         get => _hasLidSwitch ??= ProbeLidSwitch();
         set => _hasLidSwitch = value;
     }
 
+    /// <summary>
+    /// Gets or sets the mode of each headless output. The default is 1280x720 at 60 Hz.
+    /// </summary>
     public OutputMode HeadlessMode { get; set; } = new(1280, 720, 60_000);
 
+    /// <summary>
+    /// Gets or sets the function that names a nested output from its zero-based index. The default gives <c>basin-1</c>, <c>basin-2</c> and so on.
+    /// </summary>
     public Func<int, string?> NestedName { get; set; } = index => $"basin-{index + 1}";
 
+    /// <summary>
+    /// Gets or sets a value indicating whether each output repaints the whole output on every frame, also without damage.
+    /// </summary>
     public bool ContinuousRepaint { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether only the newest output stays enabled. Adding an output disables the previous one, and removing it enables the previous one again.
+    /// </summary>
     public bool LastOnly { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether outputs render through the <c>Scene.Render</c> oracle on each output frame instead of through a scene output. It must be set before the outputs are added.
+    /// </summary>
     public bool FullRepaint { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a nested output gets the default host window chrome when <see cref="HostChrome"/> is <see langword="null"/>.
+    /// </summary>
     public bool DecorateNested { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets the function that draws the host window chrome of a nested output. The driver disposes the result when the chrome is replaced or the output goes.
+    /// </summary>
     public Func<WaylandOutput, WaylandHostFrame, IDisposable?>? HostChrome { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether repainted regions get a tint, to show the damage.
+    /// </summary>
     public bool DebugDamageTint { get; set; }
 
+    /// <summary>
+    /// Gets or sets the function that places the outputs in the layout at each relayout, or <see langword="null"/> to arrange them left to right.
+    /// </summary>
     public Action<IReadOnlyList<OutputView>>? Arrange { get; set; }
 
+    /// <summary>
+    /// Gets the views in the order that they were added.
+    /// </summary>
     public IReadOnlyList<OutputView> Views => _views;
 
+    /// <summary>
+    /// Finds the view of the output at a layout position.
+    /// </summary>
+    /// <param name="x">The X position in layout coordinates.</param>
+    /// <param name="y">The Y position in layout coordinates.</param>
+    /// <returns>The view, or <see langword="null"/> when no output is at the position.</returns>
     public OutputView? ViewAt(double x, double y)
     {
         if (_layout.OutputAt(x, y) is not { } output)
@@ -188,6 +290,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         return null;
     }
 
+    /// <summary>
+    /// Gets the frame count of the first output that is not secondary, or 0 when there is none.
+    /// </summary>
     public long PrimaryRendered
     {
         get
@@ -204,14 +309,29 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    /// <summary>
+    /// Occurs when a view is added, after it is placed in the layout and wired to its scheduler.
+    /// </summary>
     public event Action<OutputView>? Added;
 
+    /// <summary>
+    /// Occurs when a view is removed, before its scene output, swapchain and global are torn down.
+    /// </summary>
     public event Action<OutputView>? Removed;
 
+    /// <summary>
+    /// Occurs when the last nested output is removed, for example when the user closes its window.
+    /// </summary>
     public event Action? Emptied;
 
+    /// <summary>
+    /// Occurs at each repaint before the scene is committed. Scene damage that a handler makes does not schedule another repaint of the same output.
+    /// </summary>
     public event Action<OutputView>? BeforeRepaint;
 
+    /// <summary>
+    /// Occurs at the end of a repaint. A primary output does not raise it when its commit failed and it schedules another repaint.
+    /// </summary>
     public event Action<OutputView>? Painted;
 
     private Action<SceneOutput>? _presented;
@@ -287,40 +407,94 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    /// <summary>
+    /// Occurs when an output's size or scale changes.
+    /// </summary>
     public event Action<OutputView>? ModeChanged;
 
+    /// <summary>
+    /// Occurs when an output's transform changes. The second argument is the previous transform.
+    /// </summary>
     public event Action<OutputView, OutputTransform>? TransformChanged;
 
+    /// <summary>
+    /// Occurs before each frame commit of a primary output. A handler can add state, for example HDR metadata, to the commit.
+    /// </summary>
     public event Action<OutputView, OutputState>? StampFrame;
 
+    /// <summary>
+    /// Occurs before the enabling commit of a DRM output, once for each mode that is tried. A handler can set the configured mode, HDR or colorspace.
+    /// </summary>
     public event Action<DrmOutput, OutputState>? StampModeset;
 
+    /// <summary>
+    /// Occurs after each relayout, when every view has its new box.
+    /// </summary>
     public event Action? LayoutChanged;
 
+    /// <summary>
+    /// Occurs when the driver chooses device or dumb buffers for an output, and when the plane refuses the device buffers at the first frame. A shared-memory fallback raises nothing.
+    /// </summary>
     public event Action<OutputView, ScanoutChoice>? ScanoutChanged;
 
+    /// <summary>
+    /// Occurs when a nested output takes a new scale from the host window.
+    /// </summary>
     public event Action<OutputView>? HostScaleFollowed;
 
+    /// <summary>
+    /// Occurs when an output refuses a scale. The second argument is the refused scale.
+    /// </summary>
     public event Action<OutputView, double>? ScaleRefused;
 
+    /// <summary>
+    /// Occurs when a DRM output accepts none of its modes. The output gets no view.
+    /// </summary>
     public event Action<DrmOutput>? ModesetRefused;
 
+    /// <summary>
+    /// Occurs once per DRM output at its first frame commit when it started from a lit state.
+    /// </summary>
     public event Action<HandoffInheritance>? HandoffInherited;
 
+    /// <summary>
+    /// Occurs when an output that inherited a lit state runs no transition. The second argument is the reason.
+    /// </summary>
     public event Action<OutputView, string>? HandoffSkipped;
 
+    /// <summary>
+    /// Occurs when a handoff transition is created on an output.
+    /// </summary>
     public event Action<OutputView>? HandoffStarted;
 
+    /// <summary>
+    /// Occurs when a handoff transition ends and its node is removed.
+    /// </summary>
     public event Action<OutputView>? HandoffEnded;
 
+    /// <summary>
+    /// Gets or sets the transition from an inherited frame, or <see langword="null"/> to cut to the first frame. The default is a 400 ms <see cref="CrossfadeTransition"/>.
+    /// </summary>
     public IHandoffTransition? Handoff { get; set; } = new CrossfadeTransition(TimeSpan.FromMilliseconds(400));
 
+    /// <summary>
+    /// Gets or sets what starts the transition clock. The default is <see cref="Host.HandoffHold.Ready"/>.
+    /// </summary>
     public HandoffHold HandoffHold { get; set; }
 
+    /// <summary>
+    /// Gets or sets the longest time that the hold keeps the inherited frame at full opacity. The default is 3 seconds.
+    /// </summary>
     public TimeSpan HandoffHoldLimit { get; set; } = TimeSpan.FromSeconds(3);
 
+    /// <summary>
+    /// Gets or sets the tree that the inherited frame goes into, or <see langword="null"/> for a new top-level tree over the consumer's trees.
+    /// </summary>
     public SceneTree? HandoffLayer { get; set; }
 
+    /// <summary>
+    /// Gets or sets the clock in nanoseconds that times the transitions and the outro. The default is the monotonic clock.
+    /// </summary>
     public Func<long> HandoffClock { get; set; } = static () => MonotonicClock.Nanos;
 
     private bool _handoffReleased;
@@ -328,8 +502,18 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
 
     private RetainRun? _retain;
 
+    /// <summary>
+    /// Gets a value indicating whether the retain sequence runs.
+    /// </summary>
     public bool Retaining => _retain is { Finished: false };
 
+    /// <summary>
+    /// Starts the exit sequence: the outro on each primary output, one flattened frame per output, and a wait for its flip. Then a DRM backend gets the retain exit mode and <paramref name="done"/> runs. A second call does nothing.
+    /// </summary>
+    /// <param name="outro">The animation to run first, or <see langword="null"/> for none.</param>
+    /// <param name="budget">The longest time for the sequence. When it runs out, the frame that is lit stays lit and <paramref name="done"/> runs.</param>
+    /// <param name="done">The function that runs exactly once when the sequence ends. The loop must keep dispatching until then.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="done"/> is <see langword="null"/>.</exception>
     public void RetainAndStop(IHandoffOutro? outro, TimeSpan budget, Action done)
     {
         ArgumentNullException.ThrowIfNull(done);
@@ -477,18 +661,37 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         run.Done();
     }
 
+    /// <summary>
+    /// Sets the transition and the hold limit from configuration values. Negative values count as zero.
+    /// </summary>
+    /// <param name="crossfade">Whether to crossfade. <see langword="false"/> cuts to the first frame.</param>
+    /// <param name="durationMs">The crossfade length in milliseconds.</param>
+    /// <param name="holdLimitMs">The hold limit in milliseconds.</param>
     public void ConfigureHandoff(bool crossfade, int durationMs, int holdLimitMs)
     {
         Handoff = crossfade ? new CrossfadeTransition(TimeSpan.FromMilliseconds(Math.Max(0, durationMs))) : null;
         HandoffHoldLimit = TimeSpan.FromMilliseconds(Math.Max(0, holdLimitMs));
     }
 
+    /// <summary>
+    /// Releases a <see cref="Host.HandoffHold.Signal"/> hold, so that the transitions start at the next repaint.
+    /// </summary>
     public void ReleaseHandoff()
     {
         _handoffReleased = true;
         KickHandoffs();
     }
 
+    /// <summary>
+    /// Starts a transition from a frame on an output, for example a frame that the compositor made itself. The driver takes ownership of <paramref name="owner"/> in all cases.
+    /// </summary>
+    /// <param name="view">The output to show the frame on.</param>
+    /// <param name="frame">The buffer to show.</param>
+    /// <param name="sourceWidth">The width in pixels of the part of the buffer to show, or 0 or less for the whole width.</param>
+    /// <param name="sourceHeight">The height in pixels of the part of the buffer to show, or 0 or less for the whole height.</param>
+    /// <param name="owner">An object to dispose when the transition ends, or <see langword="null"/>.</param>
+    /// <returns><see langword="false"/> when <see cref="Handoff"/> is <see langword="null"/>, the output already runs a transition, or its box is empty. <paramref name="owner"/> is then disposed at once.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="view"/> or <paramref name="frame"/> is <see langword="null"/>.</exception>
     public bool StartHandoff(OutputView view, IBuffer frame, int sourceWidth, int sourceHeight, IDisposable? owner = null) =>
         StartHandoff(view, frame, sourceWidth, sourceHeight, null, owner);
 
@@ -617,12 +820,24 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         inherited.Dispose();
     }
 
+    /// <summary>
+    /// Occurs when <see cref="AdoptSecondaryCards"/> starts a backend on another card.
+    /// </summary>
     public event Action<DrmDeviceInfo>? CardAdopted;
 
+    /// <summary>
+    /// Occurs when a backend on another card fails to start. The second argument is the reason.
+    /// </summary>
     public event Action<DrmDeviceInfo, string>? CardRefused;
 
+    /// <summary>
+    /// Occurs when an output of a secondary card is enabled, before its view is added.
+    /// </summary>
     public event Action<DrmOutput>? SecondaryOutputAdded;
 
+    /// <summary>
+    /// Starts a DRM backend on every other card with connectors, and adds their outputs as secondary views with dumb buffers. It does nothing without a DRM backend and a session.
+    /// </summary>
     public void AdoptSecondaryCards()
     {
         if (_host.Drm is not { } primary || _host.Session is not { } session)
@@ -685,6 +900,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         _ = AddView(output, allocator, secondary: true);
     }
 
+    /// <summary>
+    /// Adds a view for each output of the backend. A DRM backend also gets its later hotplugged outputs, and an inherited frame starts a transition. A nested or headless backend gets <see cref="Requested"/> new outputs.
+    /// </summary>
     public void CreateInitialOutputs()
     {
         if (_host.Drm is { } drm)
@@ -722,6 +940,11 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         _initialCreated = true;
     }
 
+    /// <summary>
+    /// Finds the view of an output.
+    /// </summary>
+    /// <param name="output">The backend output.</param>
+    /// <returns>The view, or <see langword="null"/> when the output has none.</returns>
     public OutputView? ViewOf(IOutput output)
     {
         foreach (var view in _views)
@@ -735,8 +958,21 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         return null;
     }
 
+    /// <summary>
+    /// Adds a primary view for an output with a scanout allocator that the driver chooses.
+    /// </summary>
+    /// <param name="output">The enabled backend output.</param>
+    /// <returns>The new view.</returns>
     public OutputView AddView(IOutput output) => AddView(output, null, secondary: false);
 
+    /// <summary>
+    /// Adds a view for an output: it applies scale and transform, places the output in the layout, chooses the scanout buffers and schedules the first repaint.
+    /// </summary>
+    /// <param name="output">The enabled backend output.</param>
+    /// <param name="allocator">The allocator for linear swapchain buffers, or <see langword="null"/> to let the driver choose.</param>
+    /// <param name="secondary">Whether the output is on a secondary card.</param>
+    /// <returns>The new view.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public OutputView AddView(IOutput output, IAllocator? allocator, bool secondary = false)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -859,6 +1095,12 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         return 1;
     }
 
+    /// <summary>
+    /// Commits a new scale to an output, then lays out again and schedules a repaint. A refusal raises <see cref="ScaleRefused"/> and changes nothing.
+    /// </summary>
+    /// <param name="view">The output to scale.</param>
+    /// <param name="scale">The new scale.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="view"/> is <see langword="null"/>.</exception>
     public void SetScale(OutputView view, double scale)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -894,6 +1136,11 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         HostScaleFollowed?.Invoke(view);
     }
 
+    /// <summary>
+    /// Removes a view and tears down its scene output, swapchain and global. The global is retired, so clients can still release it.
+    /// </summary>
+    /// <param name="view">The view to remove.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="view"/> is <see langword="null"/>.</exception>
     public void RemoveView(OutputView view)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -919,6 +1166,11 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         Relayout();
     }
 
+    /// <summary>
+    /// Repaints the whole output now, without waiting for the scheduler.
+    /// </summary>
+    /// <param name="view">The output to repaint.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="view"/> is <see langword="null"/>.</exception>
     public void RepaintNow(OutputView view)
     {
         ArgumentNullException.ThrowIfNull(view);
@@ -933,6 +1185,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         Repaint(view);
     }
 
+    /// <summary>
+    /// Schedules a repaint on every output.
+    /// </summary>
     public void ScheduleAll()
     {
         foreach (var view in _views)
@@ -941,6 +1196,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         }
     }
 
+    /// <summary>
+    /// Places the outputs through <see cref="Arrange"/> or left to right, updates each view's box and raises <see cref="LayoutChanged"/>.
+    /// </summary>
     public void Relayout()
     {
         if (Arrange is { } arrange)
@@ -960,6 +1218,9 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         LayoutChanged?.Invoke();
     }
 
+    /// <summary>
+    /// Ends a running retain sequence without calling its done function, tears down every view, and disposes the owned allocators and secondary cards. It does not dispose the host, the scene or the renderer.
+    /// </summary>
     public void Dispose()
     {
         if (_retain is { Finished: false } retain)
@@ -995,8 +1256,20 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
         _frameState.Dispose();
     }
 
+    /// <summary>
+    /// Enables a DRM output with its start mode, or with the first other mode that passes a test commit.
+    /// </summary>
+    /// <param name="card">The output to enable.</param>
+    /// <returns><see langword="false"/> when no mode passes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="card"/> is <see langword="null"/>.</exception>
     public static bool EnableWithMode(DrmOutput card) => EnableWithMode(card, null);
 
+    /// <summary>
+    /// Enables a DRM output like <see cref="EnableWithMode(DrmOutput)"/>, and raises <see cref="StampModeset"/> for each mode that it tries.
+    /// </summary>
+    /// <param name="card">The output to enable.</param>
+    /// <returns><see langword="false"/> when no mode passes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="card"/> is <see langword="null"/>.</exception>
     public bool EnableWithStamp(DrmOutput card) => EnableWithMode(card, StampModeset);
 
     private static bool EnableWithMode(DrmOutput card, Action<DrmOutput, OutputState>? stamp)

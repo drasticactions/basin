@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's sheet animation for a modal dialog. The dialog unfolds from a hinge at its top edge and fades in, and the reverse closes it.
+/// </summary>
 public sealed class SheetEffect
 {
     private const string NodeName = "sheet";
@@ -15,10 +18,25 @@ public sealed class SheetEffect
     private double _parentDrop;
     private SceneTransform? _node;
 
+    /// <summary>
+    /// Gets a value indicating whether an animation has a live node that <see cref="Step"/> still drives.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets a value indicating whether the current or last animation is a close.
+    /// </summary>
     public bool IsHiding => _hiding;
 
+    /// <summary>
+    /// Starts an animation that is anchored at a given tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the dialog.</param>
+    /// <param name="hiding"><see langword="true"/> for a close, <see langword="false"/> for an open.</param>
+    /// <param name="parentDrop">The distance, in pixels, that the dialog moves up when it is folded.</param>
+    /// <param name="now">The tick that the animation starts at.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled, and then nothing starts.</returns>
     public bool Begin(TransformStack stack, bool hiding, double parentDrop, in FrameTick now, AnimationDuration duration)
     {
         if (!Begin(stack, hiding, parentDrop, duration))
@@ -30,6 +48,15 @@ public sealed class SheetEffect
         return true;
     }
 
+    /// <summary>
+    /// Starts a linear animation and applies its first pose. The first <see cref="Step"/> anchors the start.
+    /// </summary>
+    /// <param name="stack">The transform stack of the dialog.</param>
+    /// <param name="hiding"><see langword="true"/> for a close, <see langword="false"/> for an open.</param>
+    /// <param name="parentDrop">The distance, in pixels, that the dialog moves up when it is folded.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled, and then nothing starts.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Begin(TransformStack stack, bool hiding, double parentDrop, AnimationDuration duration)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -48,6 +75,10 @@ public sealed class SheetEffect
         return true;
     }
 
+    /// <summary>
+    /// Changes an open into a close or a close into an open, and continues from the current pose.
+    /// </summary>
+    /// <param name="now">The tick of the change.</param>
     public void Reverse(in FrameTick now)
     {
         _thread.Assert();
@@ -55,6 +86,12 @@ public sealed class SheetEffect
         _timeline.RestartPreservingProgress(now);
     }
 
+    /// <summary>
+    /// Applies the pose for a tick. When an open ends, the node is removed. When a close ends, the node keeps the folded pose until <see cref="End"/>.
+    /// </summary>
+    /// <param name="stack">The transform stack of the dialog.</param>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the animation runs, and <see langword="false"/> when it ended or no animation runs.</returns>
     public bool Step(TransformStack stack, in FrameTick tick)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -79,6 +116,10 @@ public sealed class SheetEffect
         return false;
     }
 
+    /// <summary>
+    /// Removes the transform node at once, whatever the progress.
+    /// </summary>
+    /// <param name="stack">The transform stack of the dialog.</param>
     public void End(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);

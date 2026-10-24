@@ -7,8 +7,14 @@ using static PipeWire.Native.Pipewire;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Plays the sound effects of a compositor through one PipeWire output stream, F32 planar stereo at 48 kHz, with <see cref="Slots"/> mixing slots. The mix runs on the compositor thread and allocates nothing.
+/// </summary>
 public sealed unsafe class SoundPlayer : IDisposable
 {
+    /// <summary>
+    /// The number of sounds that can play at the same time.
+    /// </summary>
     public const int Slots = 16;
 
     private const int Channels = 2;
@@ -32,6 +38,16 @@ public sealed unsafe class SoundPlayer : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Creates the player stream on a core of its own on the remote of the session, and waits until it has a node. The stream stays inactive until a sound plays. Do not call it inside a PipeWire callback, because it pumps the loop.
+    /// </summary>
+    /// <param name="session">The session that supplies the context and the remote.</param>
+    /// <param name="name">The node and media name. <see cref="AudioStreams"/> never reports a node with this name.</param>
+    /// <param name="error">Why creation failed, or <see langword="null"/> on success.</param>
+    /// <param name="role">The <c>media.role</c> of the stream, or <see langword="null"/> for none.</param>
+    /// <returns>The player, or <see langword="null"/> when PipeWire refuses the stream or creates no node within 2 seconds.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="session"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/>, empty or white space.</exception>
     public static SoundPlayer? Create(AudioSession session, string name, out string? error, string? role = "Game")
     {
         ArgumentNullException.ThrowIfNull(session);
@@ -84,12 +100,24 @@ public sealed unsafe class SoundPlayer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the node name of the player stream.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// Gets the PipeWire global id of the player node. Pass it to <see cref="SpatialVoice.Attach(uint)"/> to route the player through a voice.
+    /// </summary>
     public uint NodeId => _stream.NodeId;
 
+    /// <summary>
+    /// Gets the <c>object.serial</c> of the player node.
+    /// </summary>
     public ulong Serial => _stream.ObjectSerial;
 
+    /// <summary>
+    /// Gets the number of slots that play a clip now.
+    /// </summary>
     public int Playing
     {
         get
@@ -104,8 +132,18 @@ public sealed unsafe class SoundPlayer : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the number of calls to <see cref="Play"/> that started a sound since creation.
+    /// </summary>
     public long Started => _started;
 
+    /// <summary>
+    /// Starts a clip in a free slot. When all slots play, it replaces the sound that has played the most samples. It allocates nothing and activates the stream when it is inactive.
+    /// </summary>
+    /// <param name="clip">The clip to play.</param>
+    /// <param name="placement">The gain, pan, low-pass and speed of this sound.</param>
+    /// <returns><see langword="true"/> when the sound started. <see langword="false"/> when the player is disposed, the clip is empty, or the gain is at or below <see cref="VoiceParams.SilentDb"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="clip"/> is <see langword="null"/>.</exception>
     public bool Play(SoundClip clip, in SoundPlacement placement)
     {
         ArgumentNullException.ThrowIfNull(clip);
@@ -157,11 +195,17 @@ public sealed unsafe class SoundPlayer : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Stops every sound at once. The stream goes inactive at the next mix.
+    /// </summary>
     public void StopAll()
     {
         Array.Clear(_slots);
     }
 
+    /// <summary>
+    /// Destroys the stream and its core, and removes the node name from the session. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

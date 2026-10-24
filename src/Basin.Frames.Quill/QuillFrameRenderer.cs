@@ -7,6 +7,12 @@ using Prowl.Vector;
 
 namespace Basin.Frames.Quill;
 
+/// <summary>
+/// A server-side frame look that Quill draws. It has an opaque, a frosted and a glass mode.
+/// </summary>
+/// <remarks>
+/// The renderer keeps the layout and the glass animation state of the last drawn frame. Give each window its own instance.
+/// </remarks>
 public sealed class QuillFrameRenderer : IFrameRenderer
 {
     private readonly QuillFrameTheme _base;
@@ -24,6 +30,11 @@ public sealed class QuillFrameRenderer : IFrameRenderer
     private bool _glintResting = true;
     private double _emphasis = 1;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="QuillFrameRenderer"/> class.
+    /// </summary>
+    /// <param name="theme">The theme for every color scheme that has no theme of its own. The window menu always uses it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="theme"/> is <see langword="null"/>.</exception>
     public QuillFrameRenderer(QuillFrameTheme theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
@@ -32,12 +43,24 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         _menu = new QuillFrameMenu(theme);
     }
 
+    /// <summary>
+    /// Gets the surface type that the renderer draws into: <see cref="IQuillUISurface"/>.
+    /// </summary>
     public Type SurfaceContract => typeof(IQuillUISurface);
 
+    /// <summary>
+    /// Gets the theme that the constructor took.
+    /// </summary>
     public QuillFrameTheme Theme => _base;
 
+    /// <summary>
+    /// Gets or sets the theme for a window with the light color scheme. When it is <see langword="null"/>, the window uses <see cref="Theme"/>.
+    /// </summary>
     public QuillFrameTheme? LightTheme { get; set; }
 
+    /// <summary>
+    /// Gets or sets the theme for a window with the dark color scheme. When it is <see langword="null"/>, the window uses <see cref="Theme"/>.
+    /// </summary>
     public QuillFrameTheme? DarkTheme { get; set; }
 
     private QuillFrameTheme ThemeFor(FrameColorScheme scheme) => scheme switch
@@ -47,10 +70,24 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         _ => _base,
     };
 
+    /// <summary>
+    /// Gets the layout of the last drawn frame. The renderer changes the same instance on each draw.
+    /// </summary>
     public QuillFrameGeometry Geometry => _geometry;
 
+    /// <summary>
+    /// Gets a value indicating whether every pixel of the last drawn frame is opaque. It is <see langword="false"/> before the first draw, and with rounded corners, a shaded window, frost or glass.
+    /// </summary>
     public bool OpaqueChrome => _laidOut && !_geometry.HasRoundedCorner && !_shaded && !_theme.Frosted && !_theme.Glass;
 
+    /// <summary>
+    /// Fills the rounded frame area for a backdrop effect. Only a frosted theme that is not glass asks for one, and only after the first draw.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <param name="into">The region to fill in surface coordinates. The renderer clears it first.</param>
+    /// <returns><see langword="true"/> when the frame wants a backdrop effect.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="into"/> is <see langword="null"/>.</exception>
     public bool BackdropRegion(in FrameState state, double scale, PixmanRegion32 into)
     {
         ArgumentNullException.ThrowIfNull(into);
@@ -64,6 +101,13 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         return RoundedRegion.Fill(into, _geometry.Width, _geometry.Height, radius);
     }
 
+    /// <summary>
+    /// Describes the last drawn frame as a glass shape, with the client hole, the edge band and the pointer highlight. Only a glass theme gives a shape.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <param name="shape">The shape when the call returns <see langword="true"/>, otherwise the default value.</param>
+    /// <returns><see langword="true"/> when the theme is glass and a frame was drawn.</returns>
     public bool BackdropShape(in FrameState state, double scale, out FrameBackdropShape shape)
     {
         if (!_theme.Glass || !_laidOut)
@@ -92,6 +136,12 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         return true;
     }
 
+    /// <summary>
+    /// Tells whether a glass fade or the pointer highlight is still moving. An opaque or frosted theme never animates.
+    /// </summary>
+    /// <param name="state">The window state.</param>
+    /// <param name="interaction">The pointer state and the change times.</param>
+    /// <returns><see langword="true"/> while a glass fade runs or the highlight has not reached the pointer.</returns>
     public bool Animating(in FrameState state, in FrameInteraction interaction)
     {
         if (!_theme.Glass)
@@ -107,12 +157,14 @@ public sealed class QuillFrameRenderer : IFrameRenderer
             || !GlintSettled(interaction);
     }
 
+    /// <inheritdoc/>
     public FrameInsets Measure(in FrameState state, double scale) => new(
         _theme.Border + _theme.TitleHeight,
         _theme.Border,
         state.Shaded ? 0 : _theme.Border,
         _theme.Border);
 
+    /// <inheritdoc/>
     public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
     {
         _theme = ThemeFor(state.ColorScheme);
@@ -138,6 +190,7 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         }
     }
 
+    /// <inheritdoc/>
     public FramePart PartAt(double x, double y, in FrameState state, double scale)
     {
         if (!_laidOut)
@@ -203,6 +256,7 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         return FramePart.Border;
     }
 
+    /// <inheritdoc/>
     public Box PartBounds(FramePart part)
     {
         var bounds = _geometry.BoundsOf(part);
@@ -216,6 +270,7 @@ public sealed class QuillFrameRenderer : IFrameRenderer
 
     private const int GlowReach = 4;
 
+    /// <inheritdoc/>
     public string? CursorFor(FramePart part) => part switch
     {
         FramePart.Top => "top_side",
@@ -229,8 +284,10 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         _ => null,
     };
 
+    /// <inheritdoc/>
     public UISurfaceSize MeasureMenu(in FrameState state, double scale) => _menu.Measure(state, scale);
 
+    /// <inheritdoc/>
     public void DrawMenu(IUISurface surface, in FrameState state, int hotItem)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -238,8 +295,10 @@ public sealed class QuillFrameRenderer : IFrameRenderer
         _menu.Draw(quill, Face(), state, hotItem);
     }
 
+    /// <inheritdoc/>
     public int MenuItemAt(double x, double y, in FrameState state, double scale) => _menu.ItemAt(x, y, state, scale);
 
+    /// <inheritdoc/>
     public FrameAction? MenuItemAction(int item, in FrameState state) => _menu.ActionOf(item, state);
 
     private void Layout(in Box clientBox, in FrameState state)

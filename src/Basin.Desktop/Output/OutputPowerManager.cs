@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_output_power_manager_v1</c> global. It turns outputs on and off through <see cref="IOutputPower"/>.
+/// </summary>
 public sealed class OutputPowerManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorInvalidMode = 1;
@@ -15,6 +21,12 @@ public sealed class OutputPowerManager : IDisposable
     private readonly IOutputPower? _power;
     private readonly List<(ZwlrOutputPowerV1Resource Control, IOutput Output)> _controls = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputPowerManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="power">The power implementation. With <see langword="null"/>, each power control fails at once.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public OutputPowerManager(WlServerDisplay display, IOutputPower? power)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -26,6 +38,9 @@ public sealed class OutputPowerManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops following power changes and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_power is { } live)
@@ -36,6 +51,10 @@ public sealed class OutputPowerManager : IDisposable
         _global.Dispose();
     }
 
+    /// <summary>
+    /// Sends the current power mode of an output to every control for it. Without a power implementation, the mode follows <see cref="IOutput.Enabled"/>.
+    /// </summary>
+    /// <param name="output">The output whose mode changed.</param>
     public void NotifyMode(IOutput output)
     {
         var on = _power?.IsOn(output) ?? output.Enabled;

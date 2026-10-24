@@ -1,11 +1,35 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Writes solid quads, lines and rings as mesh triangles for the input visualizers.
+/// </summary>
 public static class FeedbackShapes
 {
+    /// <summary>
+    /// Gets the number of vertices that <see cref="WriteQuad"/> and <see cref="WriteLine"/> write.
+    /// </summary>
     public static int QuadVertexCount => 6;
 
+    /// <summary>
+    /// Returns the number of vertices that <see cref="WriteRing"/> writes.
+    /// </summary>
+    /// <param name="segments">The segment count. A count below 3 counts as 3.</param>
+    /// <returns>Six vertices for each segment.</returns>
     public static int RingVertexCount(int segments) => Math.Max(3, segments) * 6;
 
+    /// <summary>
+    /// Writes a quad as two triangles with no texture coordinates. The corners go around the quad in order.
+    /// </summary>
+    /// <param name="into">The destination, at least six vertices long.</param>
+    /// <param name="x0">The X coordinate of the first corner.</param>
+    /// <param name="y0">The Y coordinate of the first corner.</param>
+    /// <param name="x1">The X coordinate of the second corner.</param>
+    /// <param name="y1">The Y coordinate of the second corner.</param>
+    /// <param name="x2">The X coordinate of the third corner.</param>
+    /// <param name="y2">The Y coordinate of the third corner.</param>
+    /// <param name="x3">The X coordinate of the fourth corner.</param>
+    /// <param name="y3">The Y coordinate of the fourth corner.</param>
+    /// <param name="color">The vertex color, premultiplied.</param>
     public static void WriteQuad(
         Span<MeshVertex> into,
         double x0,
@@ -26,6 +50,16 @@ public static class FeedbackShapes
         into[5] = new MeshVertex((float)x3, (float)y3, 0f, 0f, color);
     }
 
+    /// <summary>
+    /// Writes a line segment as a quad. A segment shorter than a millionth of a pixel draws horizontally.
+    /// </summary>
+    /// <param name="into">The destination, at least six vertices long.</param>
+    /// <param name="x0">The X coordinate of the start.</param>
+    /// <param name="y0">The Y coordinate of the start.</param>
+    /// <param name="x1">The X coordinate of the end.</param>
+    /// <param name="y1">The Y coordinate of the end.</param>
+    /// <param name="width">The line width. The method draws at least one pixel.</param>
+    /// <param name="color">The vertex color, premultiplied.</param>
     public static void WriteLine(
         Span<MeshVertex> into, double x0, double y0, double x1, double y1, double width, in RenderColor color)
     {
@@ -45,6 +79,16 @@ public static class FeedbackShapes
         WriteQuad(into, x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny, color);
     }
 
+    /// <summary>
+    /// Writes a ring as one quad for each segment.
+    /// </summary>
+    /// <param name="into">The destination, at least <see cref="RingVertexCount"/> vertices long.</param>
+    /// <param name="centerX">The X coordinate of the center.</param>
+    /// <param name="centerY">The Y coordinate of the center.</param>
+    /// <param name="radius">The radius of the middle of the ring.</param>
+    /// <param name="width">The ring width. The method draws at least one pixel.</param>
+    /// <param name="color">The vertex color, premultiplied.</param>
+    /// <param name="segments">The segment count. A count below 3 counts as 3.</param>
     public static void WriteRing(
         Span<MeshVertex> into,
         double centerX,
@@ -76,6 +120,12 @@ public static class FeedbackShapes
         }
     }
 
+    /// <summary>
+    /// Scales every channel of a color by an alpha.
+    /// </summary>
+    /// <param name="color">The color to scale.</param>
+    /// <param name="alpha">The factor. The method clamps it to the range from 0 to 1.</param>
+    /// <returns>The scaled color.</returns>
     public static RenderColor Premultiplied(in RenderColor color, double alpha)
     {
         var a = (float)Math.Clamp(alpha, 0, 1);

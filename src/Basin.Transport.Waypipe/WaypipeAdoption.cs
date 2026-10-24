@@ -2,6 +2,9 @@ using Wayland.Server;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// Turns waypipe channels into Wayland clients of one display and hides the globals that each channel cannot carry. Use it on the compositor thread.
+/// </summary>
 public sealed class WaypipeAdoption : IDisposable
 {
     private const string DmabufInterface = "zwp_linux_dmabuf_v1";
@@ -15,6 +18,14 @@ public sealed class WaypipeAdoption : IDisposable
     private LinuxDmabufGlobal? _synthetic;
     private bool _filtering;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WaypipeAdoption"/> class. The global filter is installed at the first <see cref="Adopt"/>.
+    /// </summary>
+    /// <param name="display">The display that gets the remote clients.</param>
+    /// <param name="buffers">The buffer registry for the substitute dmabuf global.</param>
+    /// <param name="compositor">The compositor global that the substitute dmabuf global uses, or <see langword="null"/>.</param>
+    /// <param name="hostHasDmabuf">A value indicating whether the display already has a dmabuf global. When <see langword="false"/>, a channel with dmabuf gets a substitute global.</param>
+    /// <param name="inner">An earlier global filter that still applies first, or <see langword="null"/>.</param>
     public WaypipeAdoption(
         WlServerDisplay display,
         ClientBufferRegistry buffers,
@@ -31,8 +42,16 @@ public sealed class WaypipeAdoption : IDisposable
         _inner = inner;
     }
 
+    /// <summary>
+    /// Gets the number of adopted clients that are not destroyed.
+    /// </summary>
     public int Count => _clients.Count;
 
+    /// <summary>
+    /// Creates a Wayland client on the channel transport.
+    /// </summary>
+    /// <param name="channel">The channel to adopt. The caller keeps ownership of it.</param>
+    /// <returns>The new client. Its destruction removes it from this adoption.</returns>
     public WlClient Adopt(WaypipeChannel channel)
     {
         ArgumentNullException.ThrowIfNull(channel);
@@ -58,6 +77,9 @@ public sealed class WaypipeAdoption : IDisposable
         return client;
     }
 
+    /// <summary>
+    /// Destroys every adopted client, restores the earlier global filter and removes the substitute dmabuf global.
+    /// </summary>
     public void Dispose()
     {
         foreach (var client in _clients.Keys.ToArray())

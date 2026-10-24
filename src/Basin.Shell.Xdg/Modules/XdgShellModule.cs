@@ -2,16 +2,28 @@ using Basin.Capabilities;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// Installs <c>xdg_wm_base</c>. It registers the <see cref="XdgShell"/> and its <see cref="XdgToplevelSource"/>, and adds the source to the <see cref="AggregateToplevelModel"/>. It makes that model the default <see cref="IToplevelModel"/> when no aggregate model is registered.
+/// </summary>
 public sealed class XdgShellModule : IProtocolModule
 {
+    /// <inheritdoc/>
     public string WireInterface => "xdg_wm_base";
 
+    /// <inheritdoc/>
     public int Version => XdgShell.Version;
 
+    /// <summary>
+    /// Gets the global that <see cref="Install"/> created. It is <see langword="null"/> before the install.
+    /// </summary>
     public XdgShell? Shell { get; private set; }
 
+    /// <summary>
+    /// Gets the toplevel source that <see cref="Install"/> created over <see cref="Shell"/>. It is <see langword="null"/> before the install.
+    /// </summary>
     public XdgToplevelSource? Toplevels { get; private set; }
 
+    /// <inheritdoc/>
     public IDisposable Install(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);

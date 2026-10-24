@@ -3,6 +3,10 @@ using SDL3;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Sets the SDL host cursor from a cursor shape, an xcursor name or a client cursor surface.
+/// System cursors are created once and cached. Only the 20 system cursors of SDL 3.4 are used.
+/// </summary>
 public sealed unsafe class SdlCursor : IDisposable
 {
     private const int SystemCursors = (int)SDL.SystemCursor.WResize + 1;
@@ -12,16 +16,38 @@ public sealed unsafe class SdlCursor : IDisposable
     private bool _hidden;
     private bool _disposed;
 
+    /// <summary>
+    /// Gets the SDL cursor handle that was set last. It is 0 before the first cursor.
+    /// </summary>
     public nint Current { get; private set; }
 
+    /// <summary>
+    /// Gets the system cursor that was set last. It is <see langword="null"/> while a surface image is the cursor.
+    /// </summary>
     public SDL.SystemCursor? CurrentSystem { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Hide"/> hid the cursor and no cursor showed it again.
+    /// </summary>
     public bool IsHidden => _hidden;
 
+    /// <summary>
+    /// Shows the system cursor that is nearest to a cursor shape.
+    /// </summary>
+    /// <param name="shape">The cursor shape that a client or the shell asked for.</param>
     public void Show(CursorShape shape) => ShowSystem(Map(shape));
 
+    /// <summary>
+    /// Shows the system cursor that is nearest to an xcursor name. An unknown name gives the default cursor.
+    /// </summary>
+    /// <param name="name">The xcursor or CSS cursor name.</param>
     public void ShowNamed(string name) => ShowSystem(Map(name));
 
+    /// <summary>
+    /// Shows a system cursor and shows a hidden cursor again. An id outside the SDL 3.4 range gives the default cursor.
+    /// </summary>
+    /// <param name="id">The SDL system cursor.</param>
+    /// <exception cref="ObjectDisposedException">The cursor is disposed.</exception>
     public void ShowSystem(SDL.SystemCursor id)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -41,6 +67,15 @@ public sealed unsafe class SdlCursor : IDisposable
         ReleaseImage();
     }
 
+    /// <summary>
+    /// Shows the current buffer of a cursor surface as a color cursor at the logical size of the surface.
+    /// A buffer with a larger scale goes on as an alternate image, so SDL can pick the image that fits the display.
+    /// </summary>
+    /// <param name="surface">The cursor surface. Its buffer must allow read access.</param>
+    /// <param name="hotspotX">The horizontal hotspot in surface-local logical units.</param>
+    /// <param name="hotspotY">The vertical hotspot in surface-local logical units.</param>
+    /// <returns><see langword="false"/> when the surface has no readable buffer or SDL cannot create the cursor. The previous cursor then stays.</returns>
+    /// <exception cref="ObjectDisposedException">The cursor is disposed.</exception>
     public bool ShowImage(Surface surface, int hotspotX, int hotspotY)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -99,6 +134,10 @@ public sealed unsafe class SdlCursor : IDisposable
         }
     }
 
+    /// <summary>
+    /// Hides the host cursor until the next cursor is shown.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The cursor is disposed.</exception>
     public void Hide()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -165,6 +204,11 @@ public sealed unsafe class SdlCursor : IDisposable
         return target;
     }
 
+    /// <summary>
+    /// Maps a cursor shape to the nearest of the 20 SDL 3.4 system cursors.
+    /// </summary>
+    /// <param name="shape">The cursor shape.</param>
+    /// <returns>The system cursor, or <see cref="SDL.SystemCursor.Default"/> when no cursor is near.</returns>
     public static SDL.SystemCursor Map(CursorShape shape) => shape switch
     {
         CursorShape.Pointer => SDL.SystemCursor.Pointer,
@@ -189,6 +233,11 @@ public sealed unsafe class SdlCursor : IDisposable
         _ => SDL.SystemCursor.Default,
     };
 
+    /// <summary>
+    /// Maps an xcursor or CSS cursor name to the nearest of the 20 SDL 3.4 system cursors.
+    /// </summary>
+    /// <param name="name">The cursor name.</param>
+    /// <returns>The system cursor, or <see cref="SDL.SystemCursor.Default"/> for an unknown name.</returns>
     public static SDL.SystemCursor Map(string name) => name switch
     {
         "fleur" or "move" or "grabbing" or "grab" => SDL.SystemCursor.Move,
@@ -211,6 +260,9 @@ public sealed unsafe class SdlCursor : IDisposable
         _ => SDL.SystemCursor.Default,
     };
 
+    /// <summary>
+    /// Restores the SDL default cursor and destroys every cursor that this object created. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

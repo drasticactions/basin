@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Drives a session lock with the scene. It puts each lock surface on its output in a lock tree, clears focus on lock and gives a mapped lock surface keyboard focus.
+/// </summary>
 public sealed class SessionLockSceneDriver : ISessionLockDriver
 {
     private readonly BasinServices? _services;
@@ -12,6 +15,15 @@ public sealed class SessionLockSceneDriver : ISessionLockDriver
     private Seat.Seat? _seat;
     private SessionLockManager? _manager;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SessionLockSceneDriver"/> class that drives <paramref name="manager"/> at once.
+    /// </summary>
+    /// <param name="manager">The lock manager to drive.</param>
+    /// <param name="seat">The seat whose focus the lock clears.</param>
+    /// <param name="lockTree">The scene tree that holds the lock surfaces.</param>
+    /// <param name="layout">The layout that places the lock surfaces.</param>
+    /// <param name="setLocked">The callback that shows or hides normal content. The argument is <see langword="true"/> on lock.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public SessionLockSceneDriver(
         SessionLockManager manager,
         Seat.Seat seat,
@@ -26,6 +38,14 @@ public sealed class SessionLockSceneDriver : ISessionLockDriver
         AttachTo(manager);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SessionLockSceneDriver"/> class and registers it as the <see cref="ISessionLockDriver"/>. The seat comes from the services on first lock.
+    /// </summary>
+    /// <param name="services">The registry to register in and to find the <see cref="Seat.Seat"/> in.</param>
+    /// <param name="lockTree">The scene tree that holds the lock surfaces.</param>
+    /// <param name="layout">The layout that places the lock surfaces.</param>
+    /// <param name="setLocked">The callback that shows or hides normal content. The argument is <see langword="true"/> on lock.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public SessionLockSceneDriver(
         BasinServices services,
         SceneTree lockTree,
@@ -48,22 +68,43 @@ public sealed class SessionLockSceneDriver : ISessionLockDriver
         _setLocked = setLocked;
     }
 
+    /// <summary>
+    /// Gets or sets the text input manager whose focus the lock clears, or <see langword="null"/>.
+    /// </summary>
     public TextInputManager? TextInput { get; set; }
 
+    /// <summary>
+    /// Occurs when the manager presents the lock, and on <see cref="LockNow"/>.
+    /// </summary>
     public event Action? Locked;
 
+    /// <summary>
+    /// Occurs after the driver removes the lock surfaces and calls the callback with <see langword="false"/>.
+    /// </summary>
     public event Action? Unlocked;
 
+    /// <summary>
+    /// Occurs when the locking client dies without an unlock.
+    /// </summary>
     public event Action? Abandoned;
 
+    /// <summary>
+    /// Occurs when the driver puts a new lock surface in the lock tree.
+    /// </summary>
     public event Action<LockSurface, SceneSurface>? LockSurfaceAdded;
 
+    /// <summary>
+    /// Locks without a lock client: it hides content, clears focus and raises <see cref="Locked"/>.
+    /// </summary>
     public void LockNow()
     {
         OnLockRequested();
         Locked?.Invoke();
     }
 
+    /// <summary>
+    /// Unlocks without a lock client: it removes the lock surfaces, shows content and raises <see cref="Unlocked"/>.
+    /// </summary>
     public void UnlockNow() => OnUnlocked();
 
     void ISessionLockDriver.Attach(SessionLockManager manager)
@@ -72,6 +113,9 @@ public sealed class SessionLockSceneDriver : ISessionLockDriver
         AttachTo(manager);
     }
 
+    /// <summary>
+    /// Moves each lock surface to its output's box and configures it to the box size. Call it when the layout changes.
+    /// </summary>
     public void Reconfigure()
     {
         foreach (var (lockSurface, lockScene) in _surfaces)

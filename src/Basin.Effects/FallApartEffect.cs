@@ -3,8 +3,14 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The KWin fall-apart close animation. The window breaks into blocks that fly outward, spin and fade.
+/// </summary>
 public sealed class FallApartEffect : IMeshTransform
 {
+    /// <summary>
+    /// The KWin default block size in pixels.
+    /// </summary>
     public const int DefaultBlockSize = 40;
 
     private const string NodeName = "fallapart";
@@ -17,12 +23,29 @@ public sealed class FallApartEffect : IMeshTransform
     private double _eased;
     private SceneTransform? _node;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FallApartEffect"/> class.
+    /// </summary>
+    /// <param name="blockSize">The side of one block in pixels. The constructor clamps it to at least 1.</param>
     public FallApartEffect(int blockSize = DefaultBlockSize) => _blockSize = Math.Clamp(blockSize, 1, 100000);
 
+    /// <summary>
+    /// Gets the side of one block in pixels.
+    /// </summary>
     public int BlockSize => _blockSize;
 
+    /// <summary>
+    /// Gets a value indicating whether the effect holds a live transform node.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Starts the animation anchored exactly at a tick.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="now">The tick that anchors the start.</param>
+    /// <param name="duration">The animation duration.</param>
+    /// <returns><see langword="false"/> when the duration is disabled and nothing starts.</returns>
     public bool Begin(TransformStack stack, in FrameTick now, AnimationDuration duration)
     {
         if (!Begin(stack, duration))
@@ -34,6 +57,13 @@ public sealed class FallApartEffect : IMeshTransform
         return true;
     }
 
+    /// <summary>
+    /// Starts the animation with an unanchored timeline, so the first step already moves. A second call reuses the node.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="duration">The animation duration.</param>
+    /// <returns><see langword="false"/> when the duration is disabled and nothing starts.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Begin(TransformStack stack, AnimationDuration duration)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -54,6 +84,11 @@ public sealed class FallApartEffect : IMeshTransform
         return true;
     }
 
+    /// <summary>
+    /// Advances the animation and redraws the mesh. The travel and the fade use a cubic of the progress, the spin uses the raw progress.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the animation needs more frames. The consumer then calls <see cref="End"/>.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -69,6 +104,11 @@ public sealed class FallApartEffect : IMeshTransform
         return _timeline.Running(tick);
     }
 
+    /// <summary>
+    /// Removes the effect node from the stack.
+    /// </summary>
+    /// <param name="stack">The transform stack that <see cref="Begin(TransformStack, AnimationDuration)"/> took.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void End(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -82,6 +122,7 @@ public sealed class FallApartEffect : IMeshTransform
         _node = null;
     }
 
+    /// <inheritdoc/>
     public Box MapBounds(in Box childBounds)
     {
         var reach = (int)Math.Ceiling(_eased * 64 * 110) + Math.Max(childBounds.Width, childBounds.Height);
@@ -92,12 +133,14 @@ public sealed class FallApartEffect : IMeshTransform
             childBounds.Height + (2 * reach));
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box childBounds)
     {
         _grid.Layout(childBounds, _blockSize);
         return _grid.VertexCount;
     }
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box childBounds, Span<MeshVertex> into)
     {
         _grid.Layout(childBounds, _blockSize);

@@ -1,5 +1,8 @@
 namespace Basin;
 
+/// <summary>
+/// An Xcursor theme with the themes that it inherits, loaded at one nominal size. Cursors load from disk on first use and stay cached.
+/// </summary>
 public sealed class XcursorTheme
 {
     private const uint Magic = 0x72756358;
@@ -15,6 +18,13 @@ public sealed class XcursorTheme
         _size = size;
     }
 
+    /// <summary>
+    /// Finds a theme and the themes that it inherits. The <c>default</c> theme is always searched last.
+    /// </summary>
+    /// <param name="theme">The theme name. <see langword="null"/> means <c>XCURSOR_THEME</c>, or <c>default</c> when that is not set.</param>
+    /// <param name="size">The nominal size in pixels to load.</param>
+    /// <param name="searchPaths">The icon directories to search. <see langword="null"/> means <c>XCURSOR_PATH</c> or the standard directories.</param>
+    /// <returns>The theme, or <see langword="null"/> when no theme directory has cursors.</returns>
     public static XcursorTheme? Load(string? theme, int size, IReadOnlyList<string>? searchPaths = null)
     {
         var roots = searchPaths?.ToList() ?? DefaultSearchPaths();
@@ -29,6 +39,11 @@ public sealed class XcursorTheme
         return directories.Count > 0 ? new XcursorTheme(directories, size) : null;
     }
 
+    /// <summary>
+    /// Loads a cursor from the first theme directory that has a file with that name. A miss is cached too.
+    /// </summary>
+    /// <param name="name">The cursor file name, for example <c>left_ptr</c>.</param>
+    /// <returns>The cursor, or <see langword="null"/> when no directory has a valid file.</returns>
     public XcursorCursor? Get(string name)
     {
         if (_cache.TryGetValue(name, out var cached))
@@ -62,6 +77,12 @@ public sealed class XcursorTheme
         return cursor;
     }
 
+    /// <summary>
+    /// Reads the frames of the nominal size nearest to a preferred size from Xcursor file data.
+    /// </summary>
+    /// <param name="data">The bytes of the Xcursor file.</param>
+    /// <param name="preferredSize">The nominal size to match.</param>
+    /// <returns>The cursor, or <see langword="null"/> when the data is not valid or a frame is larger than 1024 pixels.</returns>
     public static XcursorCursor? Parse(ReadOnlySpan<byte> data, int preferredSize)
     {
         if (data.Length < 16 || BitConverter.ToUInt32(data) != Magic)

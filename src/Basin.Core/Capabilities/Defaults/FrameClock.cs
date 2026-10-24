@@ -1,15 +1,24 @@
 namespace Basin.Capabilities.Defaults;
 
+/// <summary>
+/// Forwards the frame start and end of each output to the registered sinks, in the order of registration. A frame request raises <see cref="FrameRequested"/>.
+/// </summary>
 public sealed class FrameClock : IFrameClock
 {
     private IFrameSink[] _sinks = [];
 
+    /// <summary>
+    /// Gets the number of registered sinks.
+    /// </summary>
     public int SinkCount => _sinks.Length;
 
+    /// <inheritdoc/>
     public event Action? FrameRequested;
 
+    /// <inheritdoc/>
     public void RequestFrame() => FrameRequested?.Invoke();
 
+    /// <inheritdoc/>
     public void Add(IFrameSink sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -24,6 +33,7 @@ public sealed class FrameClock : IFrameClock
         _sinks = grown;
     }
 
+    /// <inheritdoc/>
     public void Remove(IFrameSink sink)
     {
         ArgumentNullException.ThrowIfNull(sink);
@@ -39,6 +49,7 @@ public sealed class FrameClock : IFrameClock
         _sinks = shrunk;
     }
 
+    /// <inheritdoc/>
     public void BeginFrame(IOutput output, long predictedVblankNanos)
     {
         var sinks = _sinks;
@@ -48,6 +59,7 @@ public sealed class FrameClock : IFrameClock
         }
     }
 
+    /// <inheritdoc/>
     public void EndFrame(IOutput output, long presentedNanos)
     {
         var sinks = _sinks;

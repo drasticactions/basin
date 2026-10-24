@@ -3,21 +3,46 @@ using SkiaSharp;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// Decodes each theme image once into a premultiplied BGRA <see cref="MsStylesBitmap"/>, and once more for each transparency key. It holds managed arrays only.
+/// </summary>
 public sealed class MsStylesImageCache
 {
+    /// <summary>
+    /// The key value that asks for the image with no transparency key.
+    /// </summary>
     public const int NoKey = -1;
 
+    /// <summary>
+    /// The default transparency key, magenta, as a COLORREF (0x00BBGGRR).
+    /// </summary>
     public const int DefaultKey = 0xff00ff;
 
     private readonly Dictionary<(int Image, int Key), MsStylesBitmap?> _byImage = [];
     private readonly List<MsStylesBitmap> _bitmaps = [];
 
+    /// <summary>
+    /// Gets the number of bitmaps in the cache. Handles run from 0 to this number less 1.
+    /// </summary>
     public int Count => _bitmaps.Count;
 
+    /// <summary>
+    /// Gets the number of images that failed to decode. Each image counts once.
+    /// </summary>
     public int DecodeFailures { get; private set; }
 
+    /// <summary>
+    /// Gets a bitmap by its <see cref="MsStylesBitmap.Handle"/>.
+    /// </summary>
+    /// <param name="handle">The handle that a draw operation carries.</param>
     public MsStylesBitmap this[int handle] => _bitmaps[handle];
 
+    /// <summary>
+    /// Gets the decoded bitmap for a theme image, and decodes it on the first request. The result, including a failure, is cached.
+    /// </summary>
+    /// <param name="image">The theme image.</param>
+    /// <param name="keyColor">The transparency key as a COLORREF, or <see cref="NoKey"/>. A key has no effect on an image with alpha.</param>
+    /// <returns>The bitmap, or <see langword="null"/> when the image cannot be decoded.</returns>
     public MsStylesBitmap? Get(in MsStylesImage image, int keyColor = NoKey)
     {
         if (_byImage.TryGetValue((image.Id, keyColor), out var cached))
@@ -30,6 +55,10 @@ public sealed class MsStylesImageCache
         return decoded;
     }
 
+    /// <summary>
+    /// Premultiplies BGRA pixels in place, with rounding.
+    /// </summary>
+    /// <param name="bgra">The pixels, four bytes each, with straight alpha.</param>
     public static void Premultiply(byte[] bgra)
     {
         for (var i = 0; i < bgra.Length; i += 4)

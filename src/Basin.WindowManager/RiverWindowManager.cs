@@ -4,8 +4,14 @@ using Wayland;
 
 namespace Basin.WindowManager;
 
+/// <summary>
+/// A window-manager connection to a compositor that serves <c>river_window_manager_v1</c>, and the loop that drives it. Every member must run on the thread that created it.
+/// </summary>
 public sealed class RiverWindowManager : IDisposable
 {
+    /// <summary>
+    /// The highest <c>river_window_manager_v1</c> version that this library binds.
+    /// </summary>
     public const uint MaxVersion = 5;
 
     private readonly WmEventLoop _loop = new();
@@ -36,11 +42,22 @@ public sealed class RiverWindowManager : IDisposable
     private bool _sessionLocked;
     private bool _sessionLockChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RiverWindowManager"/> class. It connects to a compositor socket and binds the window-management globals with a blocking roundtrip.
+    /// </summary>
+    /// <param name="socket">The socket name, or <see langword="null"/> for the one in <c>WAYLAND_DISPLAY</c>.</param>
+    /// <exception cref="InvalidOperationException">The compositor does not serve <c>river_window_manager_v1</c>.</exception>
     public RiverWindowManager(string? socket = null)
         : this(WlDisplay.Connect(socket!), null, uint.MaxValue, uint.MaxValue)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RiverWindowManager"/> class over a connected socket fd.
+    /// </summary>
+    /// <param name="fd">A connected Wayland socket. The connection takes ownership of it.</param>
+    /// <param name="pumpServer">For a compositor on the same thread: a step of its dispatch, which the constructor calls in place of a blocking roundtrip. <see langword="null"/> uses a roundtrip.</param>
+    /// <exception cref="InvalidOperationException">The compositor does not serve <c>river_window_manager_v1</c>.</exception>
     public RiverWindowManager(int fd, Action? pumpServer = null)
         : this(WlDisplay.ConnectToFd(fd), pumpServer, uint.MaxValue, uint.MaxValue)
     {
@@ -129,42 +146,100 @@ public sealed class RiverWindowManager : IDisposable
         _wm.Seat += (_, e) => OnSeatCreated(e.Id);
     }
 
+    /// <summary>
+    /// Gets the bound version of <c>river_window_manager_v1</c>. Requests that need a higher version throw <see cref="NotSupportedException"/>.
+    /// </summary>
     public uint Version { get; }
 
+    /// <summary>
+    /// Gets the bound <c>wl_compositor</c>, or <see langword="null"/> when the compositor does not serve it.
+    /// </summary>
     public WlCompositor? Compositor { get; }
 
+    /// <summary>
+    /// Gets the bound <c>wl_shm</c>, or <see langword="null"/> when the compositor does not serve it.
+    /// </summary>
     public WlShm? Shm { get; }
 
+    /// <summary>
+    /// Gets the connection's registry, for a manager that binds more globals itself.
+    /// </summary>
     public WlRegistry Registry => _registry;
 
+    /// <summary>
+    /// Gets the Wayland connection. The manager owns it and disposes it in <see cref="Dispose"/>.
+    /// </summary>
     public WlDisplay Display => _display;
 
+    /// <summary>
+    /// Gets the key and pointer bindings. It is always present, and <see cref="WmBindings.IsSupported"/> says whether key bindings work.
+    /// </summary>
     public WmBindings Bindings { get; }
 
+    /// <summary>
+    /// Gets the river layer shell, or <see langword="null"/> when the compositor does not serve it.
+    /// </summary>
     public WmLayerShell? LayerShell { get; }
 
+    /// <summary>
+    /// Gets the client for background blur. It is always present, and its <see cref="WmBackgroundEffects.Bound"/> property says whether the compositor serves the global.
+    /// </summary>
     public WmBackgroundEffects BackgroundEffects { get; }
 
+    /// <summary>
+    /// Gets the loop that <see cref="Run"/> drives, for the manager's own fds, timers and idle work.
+    /// </summary>
     public IWmEventLoop Loop => _loop;
 
+    /// <summary>
+    /// Gets a value indicating whether the session is locked, as of the last lock event that arrived.
+    /// </summary>
     public bool SessionIsLocked => _sessionLocked;
 
+    /// <summary>
+    /// Gets the sequence that is in progress now.
+    /// </summary>
     public WmSequence Sequence => _sequence;
 
+    /// <summary>
+    /// Gets the time that each manage callback took, which the compositor waits for.
+    /// </summary>
     public WmLatency ManageLatency { get; } = new();
 
+    /// <summary>
+    /// Gets the time that each render callback took, which the compositor waits for.
+    /// </summary>
     public WmLatency RenderLatency { get; } = new();
 
+    /// <summary>
+    /// Occurs for each manage sequence, after window, output and seat state is applied and their request events fired. The library finishes the sequence when the handler returns or throws.
+    /// </summary>
     public event Action<ManageContext>? Manage;
 
+    /// <summary>
+    /// Occurs for each render sequence, after window state is applied. The library finishes the sequence when the handler returns or throws.
+    /// </summary>
     public event Action<RenderContext>? Render;
 
+    /// <summary>
+    /// Occurs at the start of a manage sequence when the session became locked since the previous one.
+    /// </summary>
     public event Action? SessionLocked;
 
+    /// <summary>
+    /// Occurs at the start of a manage sequence when the session became unlocked since the previous one.
+    /// </summary>
     public event Action? SessionUnlocked;
 
+    /// <summary>
+    /// Occurs when the compositor refuses window management, for example because another manager runs. <see cref="Run"/> then returns.
+    /// </summary>
     public event Action? Unavailable;
 
+    /// <summary>
+    /// Dispatches the connection and the loop until the compositor finishes, refuses window management or the connection fails.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The manager is disposed.</exception>
     public void Run()
     {
         WmThreadAffinity.Assert();
@@ -222,6 +297,13 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gives a surface the shell-surface role, for a bar, a menu or other chrome that the manager draws.
+    /// </summary>
+    /// <param name="surface">A surface with no role and no buffer attached or committed yet.</param>
+    /// <returns>The shell surface, which the caller owns and disposes.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="surface"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The manager is disposed.</exception>
     public WmShellSurface CreateShellSurface(WlSurface surface)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -230,6 +312,9 @@ public sealed class RiverWindowManager : IDisposable
         return new WmShellSurface(this, _wm.GetShellSurface(surface), surface);
     }
 
+    /// <summary>
+    /// Reads what the socket holds now and dispatches it, without blocking. It is for a manager that shares a thread with its compositor and cannot call <see cref="Run"/>.
+    /// </summary>
     public void DispatchPending()
     {
         WmThreadAffinity.Assert();
@@ -280,6 +365,10 @@ public sealed class RiverWindowManager : IDisposable
     [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "poll", SetLastError = true)]
     private static extern unsafe int Poll(PollFd* fds, nuint count, int timeout);
 
+    /// <summary>
+    /// Asks the compositor for a manage sequence, for a change it cannot see. It does nothing after the compositor finished. Do not use it for a repaint.
+    /// </summary>
+    /// <exception cref="ObjectDisposedException">The manager is disposed.</exception>
     public void RequestManage()
     {
         WmThreadAffinity.Assert();
@@ -290,6 +379,10 @@ public sealed class RiverWindowManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Asks the compositor to end the session and exit, which disconnects every client. Use it only when the user asks to log out.
+    /// </summary>
+    /// <exception cref="NotSupportedException">The bound protocol version is lower than 4.</exception>
     public void ExitSession()
     {
         WmThreadAffinity.Assert();
@@ -298,6 +391,9 @@ public sealed class RiverWindowManager : IDisposable
         _display.Flush();
     }
 
+    /// <summary>
+    /// Tells the compositor that the manager wants no more events. <see cref="Run"/> returns when the compositor confirms. A second call does nothing.
+    /// </summary>
     public void Stop()
     {
         WmThreadAffinity.Assert();
@@ -311,6 +407,9 @@ public sealed class RiverWindowManager : IDisposable
         _display.Flush();
     }
 
+    /// <summary>
+    /// Destroys every protocol object and closes the connection. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

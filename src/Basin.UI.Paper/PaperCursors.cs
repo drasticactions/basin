@@ -2,8 +2,16 @@ using Prowl.PaperUI;
 
 namespace Basin.UI.Paper;
 
+/// <summary>
+/// Maps Paper cursors to xcursor names.
+/// </summary>
 public static class PaperCursors
 {
+    /// <summary>
+    /// Gets the xcursor name for a Paper cursor.
+    /// </summary>
+    /// <param name="cursor">The cursor that Paper asked for.</param>
+    /// <returns>The xcursor name. A cursor with no match gives <c>default</c>.</returns>
     public static string NameOf(PaperCursor cursor) => cursor switch
     {
         PaperCursor.Inherit => "default",

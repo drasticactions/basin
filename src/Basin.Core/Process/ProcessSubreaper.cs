@@ -2,8 +2,14 @@ using System.Runtime.InteropServices;
 
 namespace Basin;
 
+/// <summary>
+/// Runs a command under a small reaper process that adopts and stops all its descendants. A compositor uses it so that no client remains after the session ends.
+/// </summary>
 public static class ProcessSubreaper
 {
+    /// <summary>
+    /// The command-line word that makes a basin program run as the reaper. The program must call <see cref="Run"/> when its first argument is this word.
+    /// </summary>
     public const string Mode = "--basin-reaper";
 
     private const int PrSetPdeathsig = 1;
@@ -37,8 +43,17 @@ public static class ProcessSubreaper
         IntPtr[] argv,
         IntPtr[] envp);
 
+    /// <summary>
+    /// Makes the current process a child subreaper, so that orphaned descendants become its children.
+    /// </summary>
+    /// <returns><see langword="false"/> when <c>prctl</c> failed.</returns>
     public static bool Become() => prctl(PrSetChildSubreaper, 1, 0, 0, 0) == 0;
 
+    /// <summary>
+    /// Makes the arguments that start this program as a reaper around a command. It throws <see cref="InvalidOperationException"/> when the process path is unknown.
+    /// </summary>
+    /// <param name="command">The program and the arguments to run under the reaper.</param>
+    /// <returns>The full argument list, which starts with the path of this program.</returns>
     public static IReadOnlyList<string> ReaperArgv(IReadOnlyList<string> command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -56,6 +71,11 @@ public static class ProcessSubreaper
         return argv;
     }
 
+    /// <summary>
+    /// Lists all descendants of a process through <c>/proc/PID/task/TID/children</c>.
+    /// </summary>
+    /// <param name="pid">The process ID.</param>
+    /// <returns>The descendant process IDs, parents before their children.</returns>
     public static List<int> Descendants(int pid)
     {
         var found = new List<int>();
@@ -63,6 +83,11 @@ public static class ProcessSubreaper
         return found;
     }
 
+    /// <summary>
+    /// Sends a signal to every descendant of the current process.
+    /// </summary>
+    /// <param name="signal">The signal number.</param>
+    /// <returns>The number of descendants that were found.</returns>
     public static int SignalDescendants(int signal)
     {
         var descendants = Descendants(getpid());
@@ -74,6 +99,11 @@ public static class ProcessSubreaper
         return descendants.Count;
     }
 
+    /// <summary>
+    /// Runs as the reaper. It starts the command after <c>--</c>, waits for it, then stops the remaining descendants with SIGTERM and, after 2 seconds, SIGKILL.
+    /// </summary>
+    /// <param name="args">The arguments of the reaper process.</param>
+    /// <returns>The exit code of the command, 128 plus the signal number when a signal ended it, or 127 when it did not start.</returns>
     [System.Runtime.Versioning.SupportedOSPlatform("linux")]
     public static int Run(string[] args)
     {

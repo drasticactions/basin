@@ -1,7 +1,16 @@
 namespace Basin.Capabilities;
 
+/// <summary>
+/// Maps a <see cref="CursorShape"/> to the cursor name that X cursor themes use.
+/// </summary>
 public static class CursorShapeNames
 {
+    /// <summary>
+    /// Gets the X cursor theme name for a shape, for example <c>hand2</c> for <see cref="CursorShape.Pointer"/>.
+    /// An unknown value and <see cref="CursorShape.Default"/> give <c>left_ptr</c>.
+    /// </summary>
+    /// <param name="shape">The shape to name.</param>
+    /// <returns>The theme cursor name. It is never <see langword="null"/>.</returns>
     public static string NameOf(CursorShape shape) => shape switch
     {
         CursorShape.ContextMenu => "context-menu",

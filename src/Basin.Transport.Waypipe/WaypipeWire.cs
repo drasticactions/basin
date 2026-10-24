@@ -2,12 +2,24 @@ using System.Buffers.Binary;
 
 namespace Basin.Transport.Waypipe;
 
+/// <summary>
+/// Encodes and decodes the fixed fields of the waypipe wire format.
+/// </summary>
 public static class WaypipeWire
 {
+    /// <summary>
+    /// The highest wire version that this transport speaks.
+    /// </summary>
     public const uint ProtocolVersion = 0x11;
 
+    /// <summary>
+    /// The lowest wire version that this transport accepts from a peer.
+    /// </summary>
     public const uint MinimumProtocolVersion = 0x10;
 
+    /// <summary>
+    /// The length in bytes of the connection header that opens a channel.
+    /// </summary>
     public const int ConnectionHeaderLength = 16;
 
     private const uint FixedBit = 1u << 7;
@@ -17,14 +29,37 @@ public static class WaypipeWire
     private const uint VideoMask = 0x7u << 11;
     private const uint NoVideo = 0x1u << 11;
 
+    /// <summary>
+    /// Encodes a frame header word from a message type and a length.
+    /// </summary>
+    /// <param name="type">The message type.</param>
+    /// <param name="length">The length of the frame in bytes, with the header word and without padding.</param>
+    /// <returns>The header word, in host order.</returns>
     public static uint Header(WaypipeMessageType type, int length) =>
         ((uint)length << 5) | ((uint)type & 0x1f);
 
+    /// <summary>
+    /// Decodes a frame header word.
+    /// </summary>
+    /// <param name="header">The header word, in host order.</param>
+    /// <returns>The frame length without padding, and the message type.</returns>
     public static (int Length, WaypipeMessageType Type) ParseHeader(uint header) =>
         ((int)(header >> 5), (WaypipeMessageType)(header & 0x1f));
 
+    /// <summary>
+    /// Rounds a frame length up to the next multiple of four bytes.
+    /// </summary>
+    /// <param name="length">The unpadded length in bytes.</param>
+    /// <returns>The padded length in bytes.</returns>
     public static int Padded(int length) => (length + 3) & ~3;
 
+    /// <summary>
+    /// Reads and checks the connection header that a peer sends first.
+    /// </summary>
+    /// <param name="bytes">At least <see cref="ConnectionHeaderLength"/> bytes from the start of the stream.</param>
+    /// <param name="expected">The compression that this channel uses. The peer must use the same.</param>
+    /// <returns>The parsed header, with the version clamped to <see cref="ProtocolVersion"/>.</returns>
+    /// <exception cref="WaypipeException">The header is short, has the wrong byte order, has a version below <see cref="MinimumProtocolVersion"/>, a different compression or an unknown video mode.</exception>
     public static WaypipeConnectionHeader ParseConnectionHeader(
         ReadOnlySpan<byte> bytes, WaypipeCompression expected)
     {
@@ -70,6 +105,15 @@ public static class WaypipeWire
             Math.Min(version, ProtocolVersion), compression, videoCodec, (lead & NoDmabufBit) != 0);
     }
 
+    /// <summary>
+    /// Writes a connection header into the first <see cref="ConnectionHeaderLength"/> bytes of a buffer.
+    /// </summary>
+    /// <param name="bytes">The destination. It must hold at least <see cref="ConnectionHeaderLength"/> bytes.</param>
+    /// <param name="version">The wire version to announce.</param>
+    /// <param name="compression">The compression to announce.</param>
+    /// <param name="refusesDmabuf">A value that sets the flag that turns off dmabuf transfer.</param>
+    /// <param name="video">The video codec to announce, or <see cref="WaypipeVideoCodec.None"/>.</param>
+    /// <exception cref="ArgumentException"><paramref name="bytes"/> is shorter than <see cref="ConnectionHeaderLength"/>.</exception>
     public static void WriteConnectionHeader(
         Span<byte> bytes,
         uint version,
@@ -100,10 +144,27 @@ public static class WaypipeWire
         BinaryPrimitives.WriteUInt32LittleEndian(bytes, lead);
     }
 
+    /// <summary>
+    /// Reads the descriptor count that waypipe tags into the second word of a Wayland message.
+    /// </summary>
+    /// <param name="header2">The second header word of a Wayland message, which holds the size and the opcode.</param>
+    /// <returns>The number of descriptors that the message carries, from 0 through 31.</returns>
     public static int TaggedFdCount(uint header2) => (int)((header2 & 0xf800) >> 11);
 
+    /// <summary>
+    /// Removes the descriptor count tag from the second word of a Wayland message.
+    /// </summary>
+    /// <param name="header2">The tagged second header word.</param>
+    /// <returns>The header word as libwayland expects it.</returns>
     public static uint StripFdTag(uint header2) => header2 & ~0xf800u;
 
+    /// <summary>
+    /// Writes a descriptor count tag into the second word of a Wayland message and replaces any earlier tag.
+    /// </summary>
+    /// <param name="header2">The second header word of a Wayland message.</param>
+    /// <param name="fds">The number of descriptors, from 0 through 31.</param>
+    /// <returns>The tagged header word.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="fds"/> is negative or greater than 31.</exception>
     public static uint TagFdCount(uint header2, int fds)
     {
         ArgumentOutOfRangeException.ThrowIfNegative(fds);
@@ -111,5 +172,10 @@ public static class WaypipeWire
         return StripFdTag(header2) | ((uint)fds << 11);
     }
 
+    /// <summary>
+    /// Reads the message size from the second word of a Wayland message.
+    /// </summary>
+    /// <param name="header2">The second header word of a Wayland message.</param>
+    /// <returns>The size of the message in bytes, with its header.</returns>
     public static int MessageLength(uint header2) => (int)(header2 >> 16);
 }

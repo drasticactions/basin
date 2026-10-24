@@ -2,6 +2,10 @@ using System.Runtime.InteropServices;
 
 namespace Basin.Backend.Hosted;
 
+/// <summary>
+/// Watches the poll descriptor of the compositor loop on a background thread and raises <see cref="Ready"/> when clients have data.
+/// A host uses it to schedule a tick while the compositor is idle.
+/// </summary>
 public sealed class HostedWakeSource : IDisposable
 {
     private readonly int _fd = -1;
@@ -10,6 +14,13 @@ public sealed class HostedWakeSource : IDisposable
     private volatile bool _stopping;
     private volatile bool _suspended;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HostedWakeSource"/> class.
+    /// It starts the watch thread only when the platform has descriptors and threads and the loop has a poll descriptor.
+    /// </summary>
+    /// <param name="loop">The compositor loop to watch.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The system did not create the wake pipe.</exception>
     public HostedWakeSource(ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -43,12 +54,25 @@ public sealed class HostedWakeSource : IDisposable
         _thread.Start();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a watch thread runs. When it is <see langword="false"/>, <see cref="Ready"/> never occurs.
+    /// </summary>
     public bool IsWatching { get; }
 
+    /// <summary>
+    /// Occurs on the watch thread, not on the compositor thread, when the loop descriptor is readable.
+    /// It can occur again each millisecond until the loop is dispatched. A handler must not touch compositor state.
+    /// </summary>
     public event Action? Ready;
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Ready"/> is stopped by <see cref="Suspend"/>.
+    /// </summary>
     public bool IsSuspended => _suspended;
 
+    /// <summary>
+    /// Stops <see cref="Ready"/> until <see cref="Resume"/>. The watch thread keeps running. Calling it twice has no other effect.
+    /// </summary>
     public void Suspend()
     {
         if (_suspended)
@@ -60,6 +84,9 @@ public sealed class HostedWakeSource : IDisposable
         Poke();
     }
 
+    /// <summary>
+    /// Starts <see cref="Ready"/> again after <see cref="Suspend"/>. Calling it twice has no other effect.
+    /// </summary>
     public void Resume()
     {
         if (!_suspended)
@@ -83,6 +110,9 @@ public sealed class HostedWakeSource : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the watch thread, waits up to one second for it and closes the wake pipe.
+    /// </summary>
     public void Dispose()
     {
         if (_stopping)

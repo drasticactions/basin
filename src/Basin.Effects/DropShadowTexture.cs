@@ -1,5 +1,8 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// A nine-patch shadow raster that does not depend on the window size. Every window at one scale can share one texture.
+/// </summary>
 public sealed class DropShadowTexture : IDisposable
 {
     private const double GaussianScale = 3.0 * 2.5066282746310002 / 4.0 * 1.5;
@@ -24,24 +27,58 @@ public sealed class DropShadowTexture : IDisposable
         PaddingBottom = bottom;
     }
 
+    /// <summary>
+    /// Gets the ARGB8888 buffer with the window area punched out.
+    /// </summary>
     public IBuffer Buffer => _buffer ?? throw new ObjectDisposedException(nameof(DropShadowTexture));
 
+    /// <summary>
+    /// Gets the device scale that the texture was built for.
+    /// </summary>
     public double Scale { get; }
 
+    /// <summary>
+    /// Gets the width of the buffer in device pixels, or 0 after <see cref="Dispose"/>.
+    /// </summary>
     public int Width => _buffer?.Width ?? 0;
 
+    /// <summary>
+    /// Gets the height of the buffer in device pixels, or 0 after <see cref="Dispose"/>.
+    /// </summary>
     public int Height => _buffer?.Height ?? 0;
 
+    /// <summary>
+    /// Gets the one-pixel center of the nine-patch, in device pixels.
+    /// </summary>
     public Box Center { get; }
 
+    /// <summary>
+    /// Gets how far the shadow reaches past the left edge of the window, in logical pixels.
+    /// </summary>
     public double PaddingLeft { get; }
 
+    /// <summary>
+    /// Gets how far the shadow reaches past the top edge of the window, in logical pixels.
+    /// </summary>
     public double PaddingTop { get; }
 
+    /// <summary>
+    /// Gets how far the shadow reaches past the right edge of the window, in logical pixels.
+    /// </summary>
     public double PaddingRight { get; }
 
+    /// <summary>
+    /// Gets how far the shadow reaches past the bottom edge of the window, in logical pixels.
+    /// </summary>
     public double PaddingBottom { get; }
 
+    /// <summary>
+    /// Renders the two layers into one texture. The work is raster work on the CPU, so build once for each scale and reuse the result.
+    /// </summary>
+    /// <param name="options">The layers, the color and the window corner.</param>
+    /// <param name="scale">The device scale. It must be positive.</param>
+    /// <returns>The texture, which the caller owns, or <see langword="null"/> when both layers have zero opacity.</returns>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="scale"/> is zero or less.</exception>
     public static DropShadowTexture? Build(in DropShadowOptions options, double scale)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(scale, 0);
@@ -142,6 +179,9 @@ public sealed class DropShadowTexture : IDisposable
             Math.Max(0, padBottom) / scale);
     }
 
+    /// <summary>
+    /// Destroys the buffer. After this call <see cref="Buffer"/> throws <see cref="ObjectDisposedException"/>.
+    /// </summary>
     public void Dispose()
     {
         _buffer?.Destroy();

@@ -4,10 +4,17 @@ using Avalonia.Interactivity;
 
 namespace Basin.Portal.Prompts.Avalonia;
 
+/// <summary>
+/// The Avalonia view of a <see cref="SourcePromptModel"/>. Escape cancels and Enter accepts.
+/// The Up and Down keys move through the rows, and Space toggles a row when more than one selection is allowed.
+/// </summary>
 public sealed partial class SourcePromptView : UserControl
 {
     private int _cursor = -1;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SourcePromptView"/> class. The view takes keyboard focus when it attaches.
+    /// </summary>
     public SourcePromptView()
     {
         InitializeComponent();

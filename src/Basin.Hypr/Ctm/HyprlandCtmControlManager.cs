@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Hypr;
 
+/// <summary>
+/// Advertises <c>hyprland_ctm_control_manager_v1</c>. Only one client at a time can own the matrices. A second client gets <c>blocked</c> on version 2 and is ignored.
+/// </summary>
 public sealed class HyprlandCtmControlManager : IDisposable
 {
+    /// <summary>
+    /// The highest protocol version that the global advertises.
+    /// </summary>
     public const int Version = 2;
 
     private readonly WlGlobal _global;
@@ -14,6 +20,13 @@ public sealed class HyprlandCtmControlManager : IDisposable
     private readonly Dictionary<IOutput, double[]> _matrices = [];
     private HyprlandCtmControlManagerV1Resource? _owner;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="HyprlandCtmControlManager"/> class.
+    /// </summary>
+    /// <param name="display">The display that hosts the global.</param>
+    /// <param name="layout">The layout whose outputs a commit updates.</param>
+    /// <param name="ctm">The control that applies and resets each matrix.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public HyprlandCtmControlManager(WlServerDisplay display, OutputLayout layout, ICtmControl ctm)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -24,8 +37,14 @@ public sealed class HyprlandCtmControlManager : IDisposable
         _global = display.CreateGlobal(HyprlandCtmControlManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a live client owns the matrices. When the owner goes away, every output in the layout is reset.
+    /// </summary>
     public bool HasOwner => _owner is { IsDestroyed: false };
 
+    /// <summary>
+    /// Destroys the global. It does not reset the matrices of the outputs.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

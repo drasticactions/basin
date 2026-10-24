@@ -9,8 +9,14 @@ using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
+/// <summary>
+/// Serves <c>zwp_linux_dmabuf_v1</c>: dmabuf buffer import, the format table, and default and per-surface feedback.
+/// </summary>
 public sealed class LinuxDmabufGlobal : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 6;
 
     [DllImport("libc", SetLastError = true)]
@@ -32,6 +38,16 @@ public sealed class LinuxDmabufGlobal : IDisposable
     private readonly Dictionary<Surface, List<ZwpLinuxDmabufFeedbackV1Resource>> _surfaceFeedbacks = [];
     private readonly Dictionary<Surface, byte[]> _scanoutTranches = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinuxDmabufGlobal"/> class for a main device given by path. It throws <see cref="InvalidOperationException"/> when the path has no device number.
+    /// </summary>
+    /// <param name="display">The display that the global belongs to.</param>
+    /// <param name="registry">The registry that maps client buffer resources to buffers.</param>
+    /// <param name="formats">The formats and modifiers that the main device can import.</param>
+    /// <param name="mainDevicePath">The path of the main DRM device node.</param>
+    /// <param name="ledger">The ledger that records the descriptors of client planes, or <see langword="null"/>.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces for per-surface feedback, or <see langword="null"/>.</param>
+    /// <param name="extraDeviceTranches">More devices and their formats, advertised as extra feedback tranches.</param>
     public LinuxDmabufGlobal(
         WlServerDisplay display,
         ClientBufferRegistry registry,
@@ -44,6 +60,16 @@ public sealed class LinuxDmabufGlobal : IDisposable
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LinuxDmabufGlobal"/> class for a main device given by number.
+    /// </summary>
+    /// <param name="display">The display that the global belongs to.</param>
+    /// <param name="registry">The registry that maps client buffer resources to buffers.</param>
+    /// <param name="formats">The formats and modifiers that the main device can import.</param>
+    /// <param name="mainDevice">The <c>dev_t</c> of the main DRM device.</param>
+    /// <param name="ledger">The ledger that records the descriptors of client planes, or <see langword="null"/>.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces for per-surface feedback, or <see langword="null"/>.</param>
+    /// <param name="extraDeviceTranches">More devices and their formats, advertised as extra feedback tranches.</param>
     public LinuxDmabufGlobal(
         WlServerDisplay display,
         ClientBufferRegistry registry,
@@ -126,6 +152,9 @@ public sealed class LinuxDmabufGlobal : IDisposable
         _global = display.CreateGlobal(ZwpLinuxDmabufV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Destroys the global and the shared memory of the format tables.
+    /// </summary>
     public void Dispose()
     {
         _global.Dispose();
@@ -200,6 +229,11 @@ public sealed class LinuxDmabufGlobal : IDisposable
         };
     }
 
+    /// <summary>
+    /// Sets the formats that a plane can scan out for a surface, and sends new feedback to its feedback objects when the tranche changes.
+    /// </summary>
+    /// <param name="surface">The surface.</param>
+    /// <param name="scanoutFormats">The formats that a plane accepts, or <see langword="null"/> to remove the scanout tranche.</param>
     public void SetScanoutTargets(Surface surface, DrmFormatSet? scanoutFormats)
     {
         byte[]? indices = null;
@@ -359,6 +393,11 @@ public sealed class LinuxDmabufGlobal : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Tests whether a Wayland global is the one that this object made.
+    /// </summary>
+    /// <param name="global">The global to test.</param>
+    /// <returns><see langword="true"/> for the global of this object.</returns>
     public bool Owns(WlGlobal global) => ReferenceEquals(global, _global);
 
     internal bool IsSupported(DrmFormat format, ulong modifier) =>

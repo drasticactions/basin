@@ -1,7 +1,17 @@
 namespace Basin.SoftKeyboard.Avalonia;
 
+/// <summary>
+/// Gives the default text label of a key cap.
+/// </summary>
 public static class SoftKeyLabels
 {
+    /// <summary>
+    /// Gets the cap's own label when it has one. Otherwise it gets the text, in capitals when the engine shows capitals, or a symbol for a function.
+    /// </summary>
+    /// <param name="engine">The engine whose state picks capitals.</param>
+    /// <param name="cap">The cap to label.</param>
+    /// <returns>The label. It is empty for the space bar and for a function with no default label.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="engine"/> or <paramref name="cap"/> is <see langword="null"/>.</exception>
     public static string For(SoftKeyboardEngine engine, KeyCap cap)
     {
         ArgumentNullException.ThrowIfNull(engine);

@@ -3,6 +3,9 @@ using Basin.Capabilities;
 
 namespace Basin.Seat.Backends;
 
+/// <summary>
+/// Applies input rules to devices at start, on hotplug and on reload, over a backend configuration. Runtime overrides win over rules, and rules win over device defaults.
+/// </summary>
 public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSettingSources, IDisposable
 {
     private static readonly int SettingCount = InputSettingNames.Settings.Length;
@@ -39,22 +42,50 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
     private bool _fallbackKeymapSet;
     private bool _baselineAdopted;
 
+    /// <inheritdoc/>
     public event Action<InputDeviceInfo>? DeviceAdded;
 
+    /// <inheritdoc/>
     public event Action<ulong>? DeviceRemoved;
 
+    /// <inheritdoc/>
     public event Action<ulong, InputSetting>? Changed;
 
+    /// <summary>
+    /// Occurs once per rule, device and setting when a rule names a setting that the device does not support or a value that the backend refuses.
+    /// </summary>
     public event Action<InputRuleOutcome>? Rejected;
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Attach"/> has run.
+    /// </summary>
     public bool IsAttached => _attached;
 
+    /// <summary>
+    /// Gets the rules from the last <see cref="Apply"/>, in their given order.
+    /// </summary>
     public IReadOnlyList<InputRule> Rules => _rules;
 
+    /// <summary>
+    /// Gets a value indicating whether a rule that names no device sets a keymap field. The binder then keeps the parent's keymap off the seat.
+    /// </summary>
     public bool NamesSeatKeymap { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether a rule that names no device sets the repeat rate or delay.
+    /// </summary>
     public bool NamesSeatRepeat { get; private set; }
 
+    /// <summary>
+    /// Connects the configurator to the seat, the binder and the backend, and applies the rules to every known device. It takes the binder's scroll factor and output name callbacks.
+    /// </summary>
+    /// <param name="seat">The seat whose keyboard gets the keymap and repeat settings.</param>
+    /// <param name="binder">The binder that reports devices and reads the per-device callbacks.</param>
+    /// <param name="backend">The libinput configuration, or <see langword="null"/> for a nested or headless run.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="seat"/> or <paramref name="binder"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The configurator is disposed.</exception>
+    /// <exception cref="InvalidOperationException">The configurator is attached already.</exception>
+    /// <exception cref="ArgumentException"><paramref name="backend"/> is this configurator.</exception>
     public void Attach(Seat seat, SeatBinder binder, IInputDeviceConfiguration? backend)
     {
         ArgumentNullException.ThrowIfNull(seat);
@@ -120,6 +151,12 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         }
     }
 
+    /// <summary>
+    /// Replaces the rules and applies them to every device. Before <see cref="Attach"/>, it only stores them. A key that no rule names any more returns to its default, and runtime overrides stay.
+    /// </summary>
+    /// <param name="rules">The new rules, in file order.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="rules"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ObjectDisposedException">The configurator is disposed.</exception>
     public void Apply(IReadOnlyList<InputRule> rules)
     {
         ArgumentNullException.ThrowIfNull(rules);
@@ -141,6 +178,11 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         }
     }
 
+    /// <summary>
+    /// Takes a repeat rate and delay as the baseline under the rules, for example the parent's repeat in a nested run.
+    /// </summary>
+    /// <param name="rate">The repeat rate in keys per second.</param>
+    /// <param name="delay">The repeat delay in milliseconds.</param>
     public void AdoptRepeatInfo(int rate, int delay)
     {
         _baselineRepeat = (rate, delay);
@@ -157,6 +199,7 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         }
     }
 
+    /// <inheritdoc/>
     public InputSettingLayer SourceOf(ulong deviceId, InputSetting setting)
     {
         if (!_devices.TryGetValue(deviceId, out var state))
@@ -172,9 +215,11 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return state.HasConfig[(int)setting] ? InputSettingLayer.Config : InputSettingLayer.Default;
     }
 
+    /// <inheritdoc/>
     public IReadOnlyList<int> RulesFor(ulong deviceId) =>
         _devices.TryGetValue(deviceId, out var state) ? state.Matched : [];
 
+    /// <inheritdoc/>
     public int Enumerate(Span<InputDeviceInfo> devices)
     {
         if (_devices.Count > devices.Length)
@@ -191,6 +236,7 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return written;
     }
 
+    /// <inheritdoc/>
     public InputSettingSupport Support(ulong deviceId, InputSetting setting)
     {
         if (!_devices.TryGetValue(deviceId, out var state))
@@ -206,6 +252,7 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return SupportsLocal(state, setting) ? InputSettingSupport.Yes : InputSettingSupport.None;
     }
 
+    /// <inheritdoc/>
     public bool TryGet(ulong deviceId, InputSetting setting, out InputSettingValue value)
     {
         value = default;
@@ -228,6 +275,7 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return true;
     }
 
+    /// <inheritdoc/>
     public bool TryGetDefault(ulong deviceId, InputSetting setting, out InputSettingValue value)
     {
         value = default;
@@ -250,6 +298,13 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return true;
     }
 
+    /// <summary>
+    /// Sets a runtime override for a device setting. The override survives a reload and ends with the device.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="setting">The setting to change.</param>
+    /// <param name="value">The new value.</param>
+    /// <returns><see cref="InputSettingResult.Unsupported"/> before <see cref="Attach"/> or for a setting the device lacks, and <see cref="InputSettingResult.Invalid"/> for an unknown device or a refused value.</returns>
     public InputSettingResult Set(ulong deviceId, InputSetting setting, in InputSettingValue value)
     {
         if (!_attached)
@@ -293,6 +348,12 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return InputSettingResult.Success;
     }
 
+    /// <summary>
+    /// Removes the runtime override of a device setting, so that the rule value or the default comes back.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="setting">The setting to reset.</param>
+    /// <returns><see cref="InputSettingResult.Unsupported"/> before <see cref="Attach"/> or for a setting the device lacks, and <see cref="InputSettingResult.Invalid"/> for an unknown device.</returns>
     public InputSettingResult Reset(ulong deviceId, InputSetting setting)
     {
         if (!_attached)
@@ -320,6 +381,14 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
         return InputSettingResult.Success;
     }
 
+    /// <summary>
+    /// Sets a custom acceleration curve as a runtime override and records the custom profile.
+    /// </summary>
+    /// <param name="deviceId">The device identifier.</param>
+    /// <param name="type">The acceleration type that the curve applies to.</param>
+    /// <param name="step">The distance between two curve points.</param>
+    /// <param name="points">The curve points.</param>
+    /// <returns><see cref="InputSettingResult.Unsupported"/> before <see cref="Attach"/> or without a backend, and <see cref="InputSettingResult.Invalid"/> for an unknown device.</returns>
     public InputSettingResult SetAccelCurve(ulong deviceId, InputAccelCurveType type, double step, ReadOnlySpan<double> points)
     {
         if (!_attached)
@@ -352,6 +421,9 @@ public sealed class InputConfigurator : IInputDeviceConfiguration, IInputSetting
     internal double ScrollFactorFor(ulong deviceId) =>
         _devices.TryGetValue(deviceId, out var state) ? state.ScrollFactor : 1.0;
 
+    /// <summary>
+    /// Detaches from the binder and the backend, gives back the binder callbacks, and disposes the keyboard devices that the configurator made.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

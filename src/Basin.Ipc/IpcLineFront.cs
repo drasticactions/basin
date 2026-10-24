@@ -7,6 +7,9 @@ using static Basin.Ipc.IpcLog;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// Runs the methods from text lines, such as the compositor's stdin, and prints each reply and event through the report channel.
+/// </summary>
 public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposable
 {
     private readonly IpcServer _server;
@@ -40,12 +43,26 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the front is not disposed.
+    /// </summary>
     public bool IsOpen => !_disposed;
 
+    /// <summary>
+    /// Gets a value indicating whether the front still watches its descriptor. It stops at end of file, at a read error or at <see cref="Stop"/>.
+    /// </summary>
     public bool IsReading => _source is { IsRemoved: false };
 
+    /// <summary>
+    /// Gets the client state of the front. Its owned resources live until the front is disposed.
+    /// </summary>
     public IpcClientState State { get; } = new();
 
+    /// <summary>
+    /// Formats a reply as one line: <c>ERR code message</c>, or <c>OK method key=value ...</c> for the top-level keys of the result.
+    /// </summary>
+    /// <param name="reply">The finished reply.</param>
+    /// <returns>The line.</returns>
     public static string Describe(IpcReply reply)
     {
         ArgumentNullException.ThrowIfNull(reply);
@@ -78,6 +95,11 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         return text.ToString();
     }
 
+    /// <summary>
+    /// Reads the <c>lines</c> array of a result, as <see cref="IpcLineReport"/> writes it.
+    /// </summary>
+    /// <param name="reply">The finished reply.</param>
+    /// <returns>The lines, or an empty list for an error or a result with no <c>lines</c>.</returns>
     public static IReadOnlyList<string> Lines(IpcReply reply)
     {
         ArgumentNullException.ThrowIfNull(reply);
@@ -101,6 +123,11 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         return lines;
     }
 
+    /// <summary>
+    /// Runs one line. <c>ipc METHOD {json}</c> calls any method. Another line matches the line forms by its first word. A line that matches nothing prints an <c>ERR</c> line.
+    /// </summary>
+    /// <param name="line">The line, without its line break.</param>
+    /// <exception cref="ObjectDisposedException">The front is disposed.</exception>
     public void Execute(string line)
     {
         ArgumentNullException.ThrowIfNull(line);
@@ -147,6 +174,10 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
             : $"ERR {IpcErrorCodes.UnknownMethod} {tokens[0]}");
     }
 
+    /// <summary>
+    /// Prints a finished reply through its formatter, or through <see cref="Describe"/> when it has none. The front closes the reply's descriptors.
+    /// </summary>
+    /// <param name="reply">The finished reply.</param>
     public void Deliver(IpcReply reply)
     {
         ArgumentNullException.ThrowIfNull(reply);
@@ -168,6 +199,9 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         }
     }
 
+    /// <summary>
+    /// Stops reading the descriptor. <see cref="Execute"/> still runs lines, and events still print.
+    /// </summary>
     public void Stop()
     {
         if (_source is { IsRemoved: false } source)
@@ -178,6 +212,9 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         _source = null;
     }
 
+    /// <summary>
+    /// Stops reading, removes the front's subscriptions and disposes its client state.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)
@@ -193,6 +230,11 @@ public sealed class IpcLineFront : IIpcReplySink, IIpcEventSubscriber, IDisposab
         State.Dispose();
     }
 
+    /// <summary>
+    /// Prints an event through the line formatter of its name, or as <c>EVENT name data</c>.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="message">The event envelope.</param>
     public void OnEvent(string name, ReadOnlySpan<byte> message)
     {
         if (_disposed || !IpcJson.TryFindProperty(message, "data"u8, out var data))

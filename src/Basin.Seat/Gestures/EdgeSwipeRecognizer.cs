@@ -1,7 +1,16 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Recognizes one finger that swipes inward from an edge of an area. It keeps the first events back until it can tell a swipe from an ordinary touch.
+/// </summary>
+/// <remarks>
+/// Distances are in the area's units and the length settings are multiplied by <see cref="Scale"/>. The recognizer tracks one contact at a time and does not allocate.
+/// </remarks>
 public sealed class EdgeSwipeRecognizer
 {
+    /// <summary>
+    /// The largest number of samples kept back for one candidate. A candidate that fills it is declined.
+    /// </summary>
     public const int WithheldCapacity = 32;
 
     private readonly EdgeSwipeSample[] _withheld = new EdgeSwipeSample[WithheldCapacity];
@@ -23,44 +32,104 @@ public sealed class EdgeSwipeRecognizer
     private bool _reachedIn;
     private bool _backedOut;
 
+    /// <summary>
+    /// Gets or sets the width of the band along each edge in which a touch down can start a swipe, before <see cref="Scale"/>.
+    /// </summary>
     public double BandWidth { get; set; } = 20;
 
+    /// <summary>
+    /// Gets or sets the factor applied to every length setting, for example the output scale.
+    /// </summary>
     public double Scale { get; set; } = 1;
 
+    /// <summary>
+    /// Gets or sets the edges on which a swipe can start. When a touch is in the band of two edges, the nearer edge wins.
+    /// </summary>
     public ScreenEdges Edges { get; set; } = ScreenEdges.All;
 
+    /// <summary>
+    /// Gets or sets the inward travel at which a candidate becomes a claimed swipe, before <see cref="Scale"/>.
+    /// </summary>
     public double ClaimDistance { get; set; } = 8;
 
+    /// <summary>
+    /// Gets or sets the inward distance from the edge at which <see cref="Progress"/> reaches 1, before <see cref="Scale"/>.
+    /// </summary>
     public double RevealDistance { get; set; } = 150;
 
+    /// <summary>
+    /// Gets or sets the travel along the edge that a candidate can make before it is declined, before <see cref="Scale"/>. The drift must also exceed the inward travel.
+    /// </summary>
     public double AlongSlop { get; set; } = 16;
 
+    /// <summary>
+    /// Gets or sets the time in milliseconds that a candidate can stay undecided. A later motion declines it.
+    /// </summary>
     public uint WithholdMillis { get; set; } = 100;
 
+    /// <summary>
+    /// Gets or sets the progress at or past which a release gives <see cref="EdgeSwipeOutcome.In"/>.
+    /// </summary>
     public double CommitFraction { get; set; } = 0.5;
 
+    /// <summary>
+    /// Gets or sets the progress at or below which a swipe that reached the commit fraction counts as gone back.
+    /// </summary>
     public double ReturnFraction { get; set; } = 0.15;
 
+    /// <summary>
+    /// Gets or sets the progress at which the finger must stay to give <see cref="EdgeSwipeOutcome.Hold"/>.
+    /// </summary>
     public double HoldFraction { get; set; } = 0.33;
 
+    /// <summary>
+    /// Gets or sets how far the progress can move from <see cref="HoldFraction"/> and still count as a hold.
+    /// </summary>
     public double HoldTolerance { get; set; } = 0.12;
 
+    /// <summary>
+    /// Gets or sets the time in milliseconds that the finger must stay near <see cref="HoldFraction"/> to count as a hold.
+    /// </summary>
     public uint HoldMillis { get; set; } = 400;
 
+    /// <summary>
+    /// Gets or sets the inward speed in units per second, before <see cref="Scale"/>, at which a short release still gives <see cref="EdgeSwipeOutcome.In"/>.
+    /// </summary>
     public double FlingPerSecond { get; set; } = 1200;
 
+    /// <summary>
+    /// Gets or sets the fraction of the area width that each side zone covers.
+    /// </summary>
     public double SideZoneFraction { get; set; } = 0.25;
 
+    /// <summary>
+    /// Gets or sets the fraction of the area height at or below which the bottom zone starts.
+    /// </summary>
     public double BottomZoneFraction { get; set; } = 0.75;
 
+    /// <summary>
+    /// Gets the edge of the current or last swipe.
+    /// </summary>
     public ScreenEdge Edge => _edge;
 
+    /// <summary>
+    /// Gets a value indicating whether a contact is withheld and not yet claimed or declined.
+    /// </summary>
     public bool IsCandidate => _phase == Phase.Candidate;
 
+    /// <summary>
+    /// Gets a value indicating whether the recognizer owns a contact as a swipe.
+    /// </summary>
     public bool IsClaimed => _phase == Phase.Claimed;
 
+    /// <summary>
+    /// Gets the id of the contact that the recognizer tracks or last tracked.
+    /// </summary>
     public int ContactId => _id;
 
+    /// <summary>
+    /// Gets the inward distance from the edge divided by the reveal distance, clamped to the range 0 to 1.
+    /// </summary>
     public double Progress
     {
         get
@@ -76,16 +145,41 @@ public sealed class EdgeSwipeRecognizer
         }
     }
 
+    /// <summary>
+    /// Gets the smoothed inward speed in area units per second. It is zero until two samples exist.
+    /// </summary>
     public double Velocity => _tracker.Smoothed.X;
 
+    /// <summary>
+    /// Gets the last horizontal position of the contact in area-local coordinates.
+    /// </summary>
     public double X => _releaseX;
 
+    /// <summary>
+    /// Gets the last vertical position of the contact in area-local coordinates.
+    /// </summary>
     public double Y => _releaseY;
 
+    /// <summary>
+    /// Gets the result of the last claimed swipe. It is <see cref="EdgeSwipeOutcome.None"/> until a swipe finishes.
+    /// </summary>
     public EdgeSwipeOutcome Outcome { get; private set; }
 
+    /// <summary>
+    /// Gets the zone of the area in which the last claimed swipe was released.
+    /// </summary>
     public EdgeSwipeZone Zone { get; private set; }
 
+    /// <summary>
+    /// Offers a touch down. A down in the band of an enabled edge becomes a candidate and is withheld.
+    /// </summary>
+    /// <param name="id">The contact id.</param>
+    /// <param name="x">The horizontal position in area-local coordinates.</param>
+    /// <param name="y">The vertical position in area-local coordinates.</param>
+    /// <param name="width">The area width.</param>
+    /// <param name="height">The area height.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <returns><see cref="EdgeSwipeAction.Withhold"/> for a candidate. <see cref="EdgeSwipeAction.Ignore"/> when a contact is already tracked, the area is empty or the point is not near an edge.</returns>
     public EdgeSwipeAction Begin(int id, double x, double y, double width, double height, uint timeMs)
     {
         if (_phase != Phase.Idle || width <= 0 || height <= 0)
@@ -122,6 +216,14 @@ public sealed class EdgeSwipeRecognizer
         return EdgeSwipeAction.Withhold;
     }
 
+    /// <summary>
+    /// Offers a motion of the tracked contact. A candidate is claimed, declined or kept back. A claimed swipe updates its progress.
+    /// </summary>
+    /// <param name="id">The contact id. Other contacts give <see cref="EdgeSwipeAction.Ignore"/>.</param>
+    /// <param name="x">The horizontal position in area-local coordinates.</param>
+    /// <param name="y">The vertical position in area-local coordinates.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <returns>What the caller must do with the event.</returns>
     public EdgeSwipeAction Update(int id, double x, double y, uint timeMs)
     {
         if (_phase == Phase.Idle || id != _id)
@@ -163,6 +265,13 @@ public sealed class EdgeSwipeRecognizer
         return EdgeSwipeAction.Track;
     }
 
+    /// <summary>
+    /// Offers the lift of the tracked contact. A candidate is declined and a claimed swipe settles its <see cref="Outcome"/> and <see cref="Zone"/>.
+    /// </summary>
+    /// <param name="id">The contact id. Other contacts give <see cref="EdgeSwipeAction.Ignore"/>.</param>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="cancelled"><see langword="true"/> when the contact was cancelled. A cancelled candidate is dropped with no replay.</param>
+    /// <returns><see cref="EdgeSwipeAction.Decline"/> for a candidate, <see cref="EdgeSwipeAction.Finish"/> for a claimed swipe.</returns>
     public EdgeSwipeAction End(int id, uint timeMs, bool cancelled = false)
     {
         if (_phase == Phase.Idle || id != _id)
@@ -189,6 +298,11 @@ public sealed class EdgeSwipeRecognizer
         return EdgeSwipeAction.Finish;
     }
 
+    /// <summary>
+    /// Moves the withheld samples into a buffer and forgets them. A declined lift adds a final sample with <c>Down</c> false.
+    /// </summary>
+    /// <param name="into">The buffer. Samples that do not fit are lost.</param>
+    /// <returns>The number of samples written.</returns>
     public int TakeWithheld(Span<EdgeSwipeSample> into)
     {
         var count = Math.Min(_withheldCount, into.Length);
@@ -201,6 +315,9 @@ public sealed class EdgeSwipeRecognizer
         return count;
     }
 
+    /// <summary>
+    /// Drops the tracked contact and its withheld samples without a result.
+    /// </summary>
     public void Abort() => Reset();
 
     private void Reset()

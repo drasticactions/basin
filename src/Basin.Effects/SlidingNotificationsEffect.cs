@@ -4,10 +4,19 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's sliding notifications effect. A notification slides in or out and the others reflow, each through a spring-damper translation.
+/// </summary>
 public sealed class SlidingNotificationsEffect
 {
+    /// <summary>
+    /// The spring constant of a slide, before the division by the animation factor.
+    /// </summary>
     public const double SlideSpringConstant = 900.0;
 
+    /// <summary>
+    /// The spring constant of a reflow, before the division by the animation factor.
+    /// </summary>
     public const double ReflowSpringConstant = 2000.0;
 
     private const string SlideNode = "notification-slide";
@@ -19,8 +28,23 @@ public sealed class SlidingNotificationsEffect
     private long _lastNanos;
     private bool _hasLast;
 
+    /// <summary>
+    /// Gets a value indicating whether a slide or a reflow still moves.
+    /// </summary>
     public bool IsActive => _entries.Count > 0;
 
+    /// <summary>
+    /// Starts a slide of a notification. It replaces an earlier slide of the same window.
+    /// </summary>
+    /// <param name="stack">The transform stack of the notification.</param>
+    /// <param name="fromX">The start horizontal offset, in pixels.</param>
+    /// <param name="fromY">The start vertical offset, in pixels.</param>
+    /// <param name="toX">The end horizontal offset, in pixels.</param>
+    /// <param name="toY">The end vertical offset, in pixels.</param>
+    /// <param name="durationFactor">The animation factor of the desktop. It divides the spring constant. Zero or less jumps to the end.</param>
+    /// <param name="removeWhenSettled"><see langword="true"/> to remove the node at the end. <see langword="false"/> keeps the end offset, for example for a slide out.</param>
+    /// <returns><see langword="true"/> when a motion started, and <see langword="false"/> when it jumped to the end.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Slide(
         TransformStack stack,
         double fromX,
@@ -35,6 +59,14 @@ public sealed class SlidingNotificationsEffect
         return Begin(stack, SlideNode, SlideSpringConstant, fromX, fromY, toX, toY, durationFactor, removeWhenSettled);
     }
 
+    /// <summary>
+    /// Starts a vertical reflow of a notification from an offset back to its place. The node stays at offset zero after the end.
+    /// </summary>
+    /// <param name="stack">The transform stack of the notification.</param>
+    /// <param name="fromY">The start vertical offset, in pixels.</param>
+    /// <param name="durationFactor">The animation factor of the desktop. It divides the spring constant. Zero or less jumps to the end.</param>
+    /// <returns><see langword="true"/> when a motion started, and <see langword="false"/> when it jumped to the end.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Reflow(TransformStack stack, double fromY, double durationFactor)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -42,6 +74,11 @@ public sealed class SlidingNotificationsEffect
         return Begin(stack, ReflowNode, ReflowSpringConstant, 0, fromY, 0, 0, durationFactor, removeWhenSettled: false);
     }
 
+    /// <summary>
+    /// Advances every motion by the time since the last tick. A motion that stops snaps to its end offset.
+    /// </summary>
+    /// <param name="tick">The frame tick. The first tick only starts the clock.</param>
+    /// <returns>The value of <see cref="IsActive"/> after the step.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -90,6 +127,11 @@ public sealed class SlidingNotificationsEffect
         return IsActive;
     }
 
+    /// <summary>
+    /// Stops every motion of a notification and removes its nodes.
+    /// </summary>
+    /// <param name="stack">The transform stack of the notification.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void Release(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);

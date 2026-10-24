@@ -2,16 +2,26 @@ using Basin.Capabilities;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// Installs <c>zwlr_layer_shell_v1</c>. It requires an <see cref="ILayerShellDriver"/>, attaches the new <see cref="LayerShell"/> to it, and registers a default <see cref="ILayerDirectory"/>.
+/// </summary>
 public sealed class LayerShellModule : IProtocolModule
 {
+    /// <inheritdoc/>
     public string WireInterface => "zwlr_layer_shell_v1";
 
+    /// <inheritdoc/>
     public int Version => LayerShell.Version;
 
+    /// <inheritdoc/>
     public IReadOnlyList<Type> Drivers => [typeof(ILayerShellDriver)];
 
+    /// <summary>
+    /// Gets the global that <see cref="Install"/> created. It is <see langword="null"/> before the install.
+    /// </summary>
     public LayerShell? Shell { get; private set; }
 
+    /// <inheritdoc/>
     public IDisposable Install(BasinServices services)
     {
         ArgumentNullException.ThrowIfNull(services);

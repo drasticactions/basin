@@ -3,6 +3,9 @@ using Avalonia.Controls;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// A borderless host window that shows one layer surface, stacked by its <see cref="HostStackingBand"/>.
+/// </summary>
 public sealed class LayerWindow : Window
 {
     private readonly ToplevelWindows _manager;

@@ -3,6 +3,9 @@ using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
+/// <summary>
+/// Paces the repaints of one output against its flips. With no damage it arms no timer and does no work. It disposes itself when the output is destroyed.
+/// </summary>
 public sealed class OutputScheduler : IDisposable
 {
     private readonly ICompositorEventLoop _loop;
@@ -27,6 +30,11 @@ public sealed class OutputScheduler : IDisposable
     private bool _disposed;
     private bool _idleRaised = true;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OutputScheduler"/> class and subscribes to the frame, repaint and destroy events of the output.
+    /// </summary>
+    /// <param name="loop">The event loop that runs the timer and the idle callbacks.</param>
+    /// <param name="output">The output to pace.</param>
     public OutputScheduler(ICompositorEventLoop loop, IOutput output)
     {
         _loop = loop;
@@ -37,24 +45,55 @@ public sealed class OutputScheduler : IDisposable
         output.Destroyed += Dispose;
     }
 
+    /// <summary>
+    /// Occurs when the consumer must render and commit a frame. It always runs from an idle callback or the timer, never from inside <see cref="ScheduleRepaint"/>.
+    /// </summary>
     public event Action? Repaint;
 
+    /// <summary>
+    /// Occurs once each time the scheduler goes from busy to idle. It does not repeat while the output stays idle.
+    /// </summary>
     public event Action? Idle;
 
+    /// <summary>
+    /// Gets a value indicating whether no repaint is queued, armed, running or waiting for a flip.
+    /// </summary>
     public bool IsIdle => !_repaintQueued && !_commitInFlight && !_timerArmed && !_idleQueued && !_firing;
 
+    /// <summary>
+    /// Gets the number of committed frames that missed their vblank since the scheduler started.
+    /// </summary>
     public long MissedVblanks { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the smallest render lead in milliseconds. The lead is the time before the predicted vblank at which a repaint fires.
+    /// </summary>
     public int RenderAheadMillis { get; set; } = 2;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a repaint fires when damage arrives, not at a deadline. Use it for variable refresh and tearing, where the panel scans out on arrival.
+    /// </summary>
     public bool ArrivalMode { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="NotifyRenderTime"/> gave at least one sample, so the lead comes from measured render times.
+    /// </summary>
     public bool MeasuresRenderTime => _renderSamples > 0;
 
+    /// <summary>
+    /// Gets the render lead in nanoseconds without the boost that a missed vblank adds.
+    /// </summary>
     public long RenderLeadNanos => BaseLeadNanos();
 
+    /// <summary>
+    /// Gets the render lead in nanoseconds that the next deadline uses, with the boost, clamped between 1 ms and one interval less 1 ms.
+    /// </summary>
     public long EffectiveLeadNanos => RenderAheadNanos(IntervalNanos());
 
+    /// <summary>
+    /// Reports the time from the start of a repaint to the end of its GPU work. The lead becomes the largest of the last 120 reports plus 1.5 ms.
+    /// </summary>
+    /// <param name="nanos">The render time in nanoseconds. Zero or a negative value is ignored.</param>
     public void NotifyRenderTime(long nanos)
     {
         if (nanos <= 0)
@@ -89,6 +128,9 @@ public sealed class OutputScheduler : IDisposable
 
     private const long LateFireNanos = 2_000_000;
 
+    /// <summary>
+    /// Asks for a repaint. Damage while idle repaints at the end of the current dispatch. While frames flow, the repaint fires at the deadline before the predicted vblank.
+    /// </summary>
     public void ScheduleRepaint()
     {
         if (_disposed || _repaintQueued)
@@ -132,6 +174,9 @@ public sealed class OutputScheduler : IDisposable
         QueueIdle();
     }
 
+    /// <summary>
+    /// Gets the monotonic time in nanoseconds of the next predicted vblank. It is zero before the first flip with fixed pacing.
+    /// </summary>
     public long PredictedVblankNanos
     {
         get
@@ -169,12 +214,19 @@ public sealed class OutputScheduler : IDisposable
         return refreshMilliHz > 0 ? 1_000_000.0 / refreshMilliHz : 16.0;
     }
 
+    /// <summary>
+    /// Tells the scheduler that the repaint committed a frame, so the next repaint waits for its flip.
+    /// </summary>
     public void NotifyCommitted()
     {
         _commitInFlight = true;
         _commits++;
     }
 
+    /// <summary>
+    /// Gives the hardware timestamp of the last flip, which anchors the vblank prediction.
+    /// </summary>
+    /// <param name="presentedNanos">The flip time on the monotonic clock in nanoseconds. Zero or a negative value is ignored.</param>
     public void NotifyPresented(long presentedNanos)
     {
         if (presentedNanos > 0)
@@ -183,6 +235,9 @@ public sealed class OutputScheduler : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops the timer and unsubscribes from the output. No <see cref="Repaint"/> fires after it.
+    /// </summary>
     public void Dispose()
     {
         if (!_disposed)

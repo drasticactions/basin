@@ -8,6 +8,9 @@ using static Basin.Screencast.PipeWire.PipeWireLog;
 
 namespace Basin.Screencast.PipeWire;
 
+/// <summary>
+/// Publishes capture sources as PipeWire video source nodes. It runs the PipeWire loop as an fd on the compositor loop, and sends a frame when the source has damage.
+/// </summary>
 public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, ICaptureDamageObserver, IDisposable
 {
     private const int CursorMaxSize = 256;
@@ -49,6 +52,16 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Loads PipeWire, connects to the daemon, and starts to observe damage on <paramref name="capture"/>.
+    /// </summary>
+    /// <param name="loop">The compositor loop that drives the PipeWire loop.</param>
+    /// <param name="capture">The capture that fills each stream buffer.</param>
+    /// <param name="layout">The layout that maps a region source onto outputs.</param>
+    /// <param name="dmabufAllocator">The allocator for dmabuf stream buffers, or <see langword="null"/> to offer shared memory buffers only.</param>
+    /// <param name="clientName">The PipeWire application and node name. The default is <c>basin</c>.</param>
+    /// <returns>The publisher that the caller must dispose, or <see langword="null"/> when the library is missing or the connection fails.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/>, <paramref name="capture"/> or <paramref name="layout"/> is <see langword="null"/>.</exception>
     public static PipeWireScreencastPublisher? TryCreate(
         ICompositorEventLoop loop,
         IScreenCapture capture,
@@ -88,8 +101,18 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
     }
 
+    /// <summary>
+    /// Gets the number of streams that are published and not closed.
+    /// </summary>
     public int StreamCount => _streams.Count;
 
+    /// <summary>
+    /// Reads the state that the PipeWire consumer negotiated for a stream.
+    /// </summary>
+    /// <param name="streamId">The id from <see cref="ScreencastRequest.StreamId"/>.</param>
+    /// <param name="dmabuf"><see langword="true"/> when the consumer chose dmabuf buffers.</param>
+    /// <param name="nodeId">The PipeWire node id of the stream, or 0 when the stream has no node.</param>
+    /// <returns><see langword="true"/> when the stream exists, otherwise <see langword="false"/>.</returns>
     public bool TryGetNegotiated(ulong streamId, out bool dmabuf, out uint nodeId)
     {
         if (_streams.TryGetValue(streamId, out var entry))
@@ -104,6 +127,13 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         return false;
     }
 
+    /// <summary>
+    /// Creates a PipeWire video source node for a capture source. The call blocks the compositor thread for up to 2 seconds until PipeWire assigns the node id.
+    /// </summary>
+    /// <param name="request">The stream id, the source and the cursor mode.</param>
+    /// <param name="info">The node id and serial of the new stream, or the failure reason when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="true"/> when the node exists, otherwise <see langword="false"/>. A stream id that is already published fails.</returns>
+    /// <exception cref="ObjectDisposedException">The publisher is disposed.</exception>
     public bool TryPublish(in ScreencastRequest request, out ScreencastStreamInfo info)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -205,6 +235,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         return true;
     }
 
+    /// <inheritdoc/>
     public void Close(ulong streamId)
     {
         if (_streams.Remove(streamId, out var entry))
@@ -215,6 +246,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
     }
 
+    /// <inheritdoc/>
     public void OnSourceDamaged(IOutput output, Box damage)
     {
         var any = false;
@@ -235,6 +267,7 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
     }
 
+    /// <inheritdoc/>
     public void OnCursorChanged()
     {
         _cursorSerial++;
@@ -254,6 +287,9 @@ public sealed unsafe class PipeWireScreencastPublisher : IScreencastPublisher, I
         }
     }
 
+    /// <summary>
+    /// Destroys every stream, stops observing the capture, and disconnects from PipeWire.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

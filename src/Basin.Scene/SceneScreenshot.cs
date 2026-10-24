@@ -2,8 +2,21 @@ using Basin.Diagnostics;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Writes PNG files from the scene or from the buffers that an output presented.
+/// </summary>
 public static class SceneScreenshot
 {
+    /// <summary>
+    /// Renders the scene as an output shows it, on a black background, and writes it as an 8-bit PNG file.
+    /// </summary>
+    /// <param name="scene">The scene to render.</param>
+    /// <param name="renderer">The renderer that draws.</param>
+    /// <param name="output">The output whose mode and projection to use.</param>
+    /// <param name="path">The file to write.</param>
+    /// <param name="cursor">The cursor to draw on top, if any.</param>
+    /// <returns><see langword="false"/> when the render fails.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public static bool Write(Scene scene, IRenderer renderer, IOutput output, string path, in CursorBlit cursor = default)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -15,6 +28,19 @@ public static class SceneScreenshot
         }, cursor);
     }
 
+    /// <summary>
+    /// Renders the scene into an 8-bit buffer and writes it as a PNG file. An HDR color description in <paramref name="options"/> is replaced with the SDR default.
+    /// </summary>
+    /// <param name="scene">The scene to render.</param>
+    /// <param name="renderer">The renderer that draws.</param>
+    /// <param name="path">The file to write.</param>
+    /// <param name="width">The image width, in physical pixels.</param>
+    /// <param name="height">The image height, in physical pixels.</param>
+    /// <param name="options">The background, projection and color settings.</param>
+    /// <param name="cursor">The cursor to draw on top, if any.</param>
+    /// <returns><see langword="false"/> when the render fails.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scene"/> or <paramref name="renderer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
     public static bool Write(
         Scene scene,
         IRenderer renderer,
@@ -53,6 +79,20 @@ public static class SceneScreenshot
         }
     }
 
+    /// <summary>
+    /// Renders the scene into a half-float buffer and writes it as a 16-bit PNG file with color and HDR metadata chunks.
+    /// </summary>
+    /// <param name="scene">The scene to render.</param>
+    /// <param name="renderer">The renderer that draws.</param>
+    /// <param name="path">The file to write.</param>
+    /// <param name="width">The image width, in physical pixels.</param>
+    /// <param name="height">The image height, in physical pixels.</param>
+    /// <param name="options">The background, projection and color settings. The color description goes into the PNG.</param>
+    /// <param name="hdr">The HDR static metadata to write, or <see langword="null"/>.</param>
+    /// <param name="cursor">The cursor to draw on top, if any.</param>
+    /// <returns><see langword="false"/> when the renderer cannot render half-float, the render fails, or the pixels cannot be read.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="scene"/> or <paramref name="renderer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
     public static bool Write16(
         Scene scene,
         IRenderer renderer,
@@ -98,6 +138,15 @@ public static class SceneScreenshot
         }
     }
 
+    /// <summary>
+    /// Writes a presented buffer as a PNG file. Content on overlay planes is not included.
+    /// </summary>
+    /// <param name="presented">The buffer that the output last presented, or <see langword="null"/>.</param>
+    /// <param name="renderer">The renderer that reads the buffer back.</param>
+    /// <param name="path">The file to write.</param>
+    /// <returns>The outcome. No file is written unless it is <see cref="ScreenshotOutcome.Written"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
     public static ScreenshotOutcome WritePresented(IBuffer? presented, IRenderer renderer, string path)
     {
         ArgumentNullException.ThrowIfNull(renderer);
@@ -113,14 +162,43 @@ public static class SceneScreenshot
             : ScreenshotOutcome.Unreadable;
     }
 
+    /// <summary>
+    /// Writes a presented buffer as a PNG file, with the accepted overlay plane layers composited on top.
+    /// </summary>
+    /// <param name="presented">The buffer that the output last presented, or <see langword="null"/>.</param>
+    /// <param name="layers">The overlay layers of the same commit, or <see langword="null"/>.</param>
+    /// <param name="renderer">The renderer that reads and composites the buffers.</param>
+    /// <param name="path">The file to write.</param>
+    /// <returns>The outcome. No file is written unless it is <see cref="ScreenshotOutcome.Written"/>.</returns>
     public static ScreenshotOutcome WritePresented(
         IBuffer? presented, IReadOnlyList<OutputLayer>? layers, IRenderer renderer, string path) =>
         WritePresented(presented, layers, renderer, path, out _);
 
+    /// <summary>
+    /// Writes a presented buffer as a PNG file, with the accepted overlay plane layers composited on top, and counts those layers.
+    /// </summary>
+    /// <param name="presented">The buffer that the output last presented, or <see langword="null"/>.</param>
+    /// <param name="layers">The overlay layers of the same commit, or <see langword="null"/>.</param>
+    /// <param name="renderer">The renderer that reads and composites the buffers.</param>
+    /// <param name="path">The file to write.</param>
+    /// <param name="planes">The number of planes composited over the primary buffer.</param>
+    /// <returns>The outcome. No file is written unless it is <see cref="ScreenshotOutcome.Written"/>.</returns>
     public static ScreenshotOutcome WritePresented(
         IBuffer? presented, IReadOnlyList<OutputLayer>? layers, IRenderer renderer, string path, out int planes) =>
         WritePresented(presented, layers, default, renderer, path, out planes);
 
+    /// <summary>
+    /// Writes a presented buffer as a PNG file, with the accepted overlay plane layers and the cursor plane composited on top.
+    /// </summary>
+    /// <param name="presented">The buffer that the output last presented, or <see langword="null"/>.</param>
+    /// <param name="layers">The overlay layers of the same commit, or <see langword="null"/>.</param>
+    /// <param name="cursor">The cursor plane image and position, if any.</param>
+    /// <param name="renderer">The renderer that reads and composites the buffers.</param>
+    /// <param name="path">The file to write.</param>
+    /// <param name="planes">The number of planes composited over the primary buffer, the cursor included.</param>
+    /// <returns>The outcome. No file is written unless it is <see cref="ScreenshotOutcome.Written"/>.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="renderer"/> is <see langword="null"/>.</exception>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
     public static ScreenshotOutcome WritePresented(
         IBuffer? presented,
         IReadOnlyList<OutputLayer>? layers,

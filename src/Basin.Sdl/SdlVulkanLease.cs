@@ -7,6 +7,10 @@ using static Basin.Sdl.SdlLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Draws into the images of a swapchain that the lease owns, with FIFO present.
+/// Every image that Skia touches is in the color attachment layout, so the lease never reads an image back.
+/// </summary>
 public sealed unsafe class SdlVulkanLease : ISdlRenderLease
 {
     private const ulong AcquireTimeoutNs = 1_000_000_000UL;
@@ -64,13 +68,22 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _extent = new Extent2D((uint)width, (uint)height);
     }
 
+    /// <inheritdoc/>
     public string Name => SdlRenderDevices.Vulkan;
 
     private SdlHdrState _requested = SdlHdrState.Sdr;
     private bool _hdrActive;
 
+    /// <summary>
+    /// Gets the HDR state of the current swapchain. A change from <see cref="TrySetHdr"/> takes effect when <see cref="Begin"/> rebuilds the swapchain.
+    /// </summary>
     public SdlHdrState Hdr => _hdrActive ? _requested : SdlHdrState.Sdr;
 
+    /// <summary>
+    /// Requests HDR10 or SDR. A change of the enabled flag marks the swapchain for a rebuild at the next <see cref="Begin"/>.
+    /// </summary>
+    /// <param name="state">The requested state.</param>
+    /// <returns><see langword="false"/> when HDR is requested and the surface offers no HDR10 format that Skia can draw.</returns>
     public bool TrySetHdr(in SdlHdrState state)
     {
         if (state.Enabled != _requested.Enabled)
@@ -116,8 +129,16 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         return formats;
     }
 
+    /// <summary>
+    /// Gets the Vulkan format of the current swapchain images. It is undefined before the first <see cref="Begin"/>.
+    /// </summary>
     public Format SurfaceFormat => _format;
 
+    /// <summary>
+    /// Sets the size of the swapchain. A new size marks the swapchain for a rebuild at the next <see cref="Begin"/>.
+    /// </summary>
+    /// <param name="pixelWidth">The width in device pixels. A value below 1 counts as 1.</param>
+    /// <param name="pixelHeight">The height in device pixels. A value below 1 counts as 1.</param>
     public void Resize(int pixelWidth, int pixelHeight)
     {
         var extent = new Extent2D((uint)Math.Max(1, pixelWidth), (uint)Math.Max(1, pixelHeight));
@@ -128,10 +149,29 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         }
     }
 
+    /// <summary>
+    /// Does nothing, because Vulkan has no current context.
+    /// </summary>
+    /// <returns>Always <see langword="true"/>.</returns>
     public bool MakeCurrent() => true;
 
+    /// <summary>
+    /// Does not read a swapchain image back. The caller must render the frame offscreen instead.
+    /// </summary>
+    /// <param name="info">The size and format to read. It is not used.</param>
+    /// <param name="pixels">The memory that receives the pixels. It is not used.</param>
+    /// <param name="rowBytes">The stride of <paramref name="pixels"/> in bytes. It is not used.</param>
+    /// <returns>Always <see langword="false"/>.</returns>
     public bool ReadPixels(SKImageInfo info, nint pixels, int rowBytes) => false;
 
+    /// <summary>
+    /// Acquires the next swapchain image and starts a frame on it. The acquire waits on the CPU for at most one second.
+    /// An out-of-date swapchain is rebuilt once. A device loss abandons the context.
+    /// </summary>
+    /// <param name="canvas">The canvas over the acquired image, in device pixels.</param>
+    /// <param name="context">The shared Skia context of the device.</param>
+    /// <param name="age">The number of frames since the image was last presented, or 0 for an image that was never presented.</param>
+    /// <returns><see langword="false"/> when the context is missing or lost, or no image can be acquired.</returns>
     public bool Begin(out SKCanvas canvas, out GRContext? context, out int age)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -227,6 +267,10 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         return surface;
     }
 
+    /// <summary>
+    /// Flushes Skia synchronously, moves the image to the present layout and queues it. Without an acquired image it does nothing.
+    /// A device loss abandons the context.
+    /// </summary>
     public void Present()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -433,6 +477,9 @@ public sealed unsafe class SdlVulkanLease : ISdlRenderLease
         _presentedAt = [];
     }
 
+    /// <summary>
+    /// Waits for the device to go idle and destroys the swapchain, the command objects and the surface. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

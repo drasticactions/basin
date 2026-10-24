@@ -4,8 +4,14 @@ using Wayland;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// An <c>xdg_popup</c> role object. It places the popup from its positioner and runs the popup grab. The consumer places the popup in the scene and sets the constraint box.
+/// </summary>
 public sealed class XdgPopupWindow
 {
+    /// <summary>
+    /// The role name that a popup sets on its <see cref="Basin.Surface"/>.
+    /// </summary>
     public const string RoleName = "xdg_popup";
 
     private XdgPositionerRules _rules;
@@ -34,18 +40,36 @@ public sealed class XdgPopupWindow
         };
     }
 
+    /// <summary>
+    /// Gets the <c>xdg_surface</c> state under the popup.
+    /// </summary>
     public XdgSurfaceState Xdg { get; }
 
+    /// <summary>
+    /// Gets the <c>wl_surface</c> of the popup.
+    /// </summary>
     public Surface Surface => Xdg.Surface;
 
     internal XdgPopupResource Resource { get; }
 
+    /// <summary>
+    /// Gets the <c>xdg_surface</c> that the client named as the parent. It is <see langword="null"/> for a popup without a parent, for example one that a layer surface adopts.
+    /// </summary>
     public XdgSurfaceState? Parent { get; }
 
+    /// <summary>
+    /// Gets the layer surface that adopted the popup with <c>get_popup</c>, or <see langword="null"/> when none did.
+    /// </summary>
     public LayerSurface? LayerParent { get; internal set; }
 
+    /// <summary>
+    /// Gets the box of the popup's window geometry, relative to the parent's window-geometry origin, in logical pixels.
+    /// </summary>
     public Box Geometry { get; private set; }
 
+    /// <summary>
+    /// Gets the position of the popup's surface origin relative to the parent's window-geometry origin. It is <see cref="Geometry"/> less the popup's own geometry offset, and is the position to give a scene node.
+    /// </summary>
     public Point SurfacePosition
     {
         get
@@ -55,14 +79,30 @@ public sealed class XdgPopupWindow
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the popup took an explicit grab with a valid serial.
+    /// </summary>
     public bool HasGrab => _grab is not null;
 
+    /// <summary>
+    /// Occurs when the client destroys the popup's role object.
+    /// </summary>
     public event Action? Destroyed;
 
+    /// <summary>
+    /// Occurs after a reposition or an <see cref="Unconstrain"/> changes <see cref="Geometry"/> and the new configure is sent.
+    /// </summary>
     public event Action? GeometryChanged;
 
+    /// <summary>
+    /// Occurs when the client repositions the popup, after the new positioner rules replace the old ones. A handler calls <see cref="Unconstrain"/> here, before the configure goes out.
+    /// </summary>
     public event Action? Repositioned;
 
+    /// <summary>
+    /// Applies the positioner's constraint adjustments against a box and sends a configure when the geometry changes. In a <see cref="Repositioned"/> handler, the configure waits for the end of the reposition.
+    /// </summary>
+    /// <param name="constraint">The box to keep the popup in, in the same coordinates as <see cref="Geometry"/>.</param>
     public void Unconstrain(Box constraint)
     {
         var geometry = _rules.Constrain(constraint);
@@ -79,6 +119,9 @@ public sealed class XdgPopupWindow
         }
     }
 
+    /// <summary>
+    /// Dismisses the popup and every popup above it in the grab chain, and sends <c>popup_done</c>. Later calls do nothing. The client must destroy the popup.
+    /// </summary>
     public void Dismiss()
     {
         if (_dismissed)

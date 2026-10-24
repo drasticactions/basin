@@ -7,6 +7,9 @@ using Basin.Shell.Xdg;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// A borderless, topmost host window that shows the icon of a client drag and follows the host pointer.
+/// </summary>
 public sealed class DragIconWindow : Window
 {
     private readonly BasinToplevelView _view;

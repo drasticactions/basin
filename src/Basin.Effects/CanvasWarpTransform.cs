@@ -2,8 +2,14 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The mesh transform that draws a window through the canvas warps of its output. It holds one warp for each edge and maps both ways, so hit testing follows the drawn shape.
+/// </summary>
 public sealed class CanvasWarpTransform : IInvertibleMeshTransform
 {
+    /// <summary>
+    /// The least corner radius of the rim, as a fraction of the zone. The row and column fans are capped by depth to keep it.
+    /// </summary>
     public const double RimRadius = 0.5;
 
     private const int CornerIterations = 40;
@@ -21,72 +27,132 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
     private double _stretchY = 1.0;
     private double _viewScale = 1.0;
 
+    /// <summary>
+    /// Gets or sets the warp of the left edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Left { get; set; }
 
+    /// <summary>
+    /// Gets or sets the warp of the right edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Right { get; set; }
 
+    /// <summary>
+    /// Gets or sets the warp of the top edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Top { get; set; }
 
+    /// <summary>
+    /// Gets or sets the warp of the bottom edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Bottom { get; set; }
 
+    /// <summary>
+    /// Gets or sets the canvas X position of the node. The consumer writes it on every move and then notifies the node.
+    /// </summary>
     public int SceneX { get; set; }
 
+    /// <summary>
+    /// Gets or sets the canvas Y position of the node. The consumer writes it on every move and then notifies the node.
+    /// </summary>
     public int SceneY { get; set; }
 
+    /// <summary>
+    /// Gets or sets the uniform scale about the pre-scale anchor that applies before the warp. The setter keeps it in the range above 0 and up to 1, and reads anything else as 1.
+    /// </summary>
     public double PreScale
     {
         get => _preScale;
         set => _preScale = value > 0 && double.IsFinite(value) ? Math.Min(value, 1.0) : 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets an extra X scale before the warp, which keeps a window square in the separable map. The setter keeps it in the range above 0 and up to 1.
+    /// </summary>
     public double PreStretchX
     {
         get => _stretchX;
         set => _stretchX = value > 0 && double.IsFinite(value) ? Math.Min(value, 1.0) : 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets an extra Y scale before the warp, which keeps a window square in the separable map. The setter keeps it in the range above 0 and up to 1.
+    /// </summary>
     public double PreStretchY
     {
         get => _stretchY;
         set => _stretchY = value > 0 && double.IsFinite(value) ? Math.Min(value, 1.0) : 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the map is one curve for each axis, with no row fan and no corner ring.
+    /// </summary>
     public bool Separable { get; set; }
 
+    /// <summary>
+    /// Gets or sets the uniform zoom about the view center that applies after the warp. The setter reads a value that is not positive and finite as 1.
+    /// </summary>
     public double ViewScale
     {
         get => _viewScale;
         set => _viewScale = value > 0 && double.IsFinite(value) ? value : 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets the X coordinate of the zoom center on screen.
+    /// </summary>
     public double ViewCenterX { get; set; }
 
+    /// <summary>
+    /// Gets or sets the Y coordinate of the zoom center on screen.
+    /// </summary>
     public double ViewCenterY { get; set; }
 
+    /// <summary>
+    /// Gets or sets the canvas X coordinate that the pre-scale leaves in place.
+    /// </summary>
     public double PreAnchorX { get; set; }
 
+    /// <summary>
+    /// Gets or sets the canvas Y coordinate that the pre-scale leaves in place.
+    /// </summary>
     public double PreAnchorY { get; set; }
 
+    /// <summary>
+    /// Gets or sets the cap on the row fan for this window, on top of the rim cap. The default is no cap, and the setter keeps it at 1 or above.
+    /// </summary>
     public double MaxFan
     {
         get => _maxFan;
         set => _maxFan = Math.Max(1.0, value);
     }
 
+    /// <summary>
+    /// Gets or sets the cap on the column fan for this window, on top of the rim cap. The default is no cap, and the setter keeps it at 1 or above.
+    /// </summary>
     public double MaxColumnFan
     {
         get => _maxColumnFan;
         set => _maxColumnFan = Math.Max(1.0, value);
     }
 
+    /// <summary>
+    /// Gets or sets how round the corner rings are, from 0 for a square corner to 1 for quarter ellipses. The setter clamps the value.
+    /// </summary>
     public double CornerRadius
     {
         get => _cornerRadius;
         set => _cornerRadius = Math.Clamp(value, 0.0, 1.0);
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the ring radius shrinks with depth, so that the rim is square.
+    /// </summary>
     public bool CornerTaper { get; set; }
 
+    /// <summary>
+    /// Gets the depth along the diagonal at which a corner park lands on the rim, as a fraction of the extension.
+    /// </summary>
     public double RimDiagonal
     {
         get
@@ -96,6 +162,11 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         }
     }
 
+    /// <summary>
+    /// Returns how deep a corner line reaches before the rim.
+    /// </summary>
+    /// <param name="across">The depth of the line on the other axis, as a fraction of the extension.</param>
+    /// <returns>The depth on this axis, as a fraction of the extension. It is 1 on the straight leg of the ring.</returns>
     public double CornerReach(double across)
     {
         var radius = RadiusAt(1.0);
@@ -112,57 +183,130 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
     private double RadiusAt(double level) =>
         CornerTaper ? _cornerRadius * (1.0 - Math.Clamp(level, 0.0, 1.0)) : _cornerRadius;
 
+    /// <summary>
+    /// Gets or sets the mesh cell size in canvas pixels inside a zone. The setter keeps it at 1 or above.
+    /// </summary>
     public int CellSize
     {
         get => _cellSize;
         set => _cellSize = Math.Max(1, value);
     }
 
+    /// <summary>
+    /// Maps a canvas X coordinate to the screen through the left or right warp alone. It applies no pre-scale and no zoom.
+    /// </summary>
+    /// <param name="canvasX">The canvas X coordinate.</param>
+    /// <returns>The screen X coordinate.</returns>
     public double ToScreen(double canvasX) => SideAt(canvasX) is { } side ? side.ToScreen(canvasX) : canvasX;
 
+    /// <summary>
+    /// Maps a screen X coordinate back to the canvas through the left or right warp alone.
+    /// </summary>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <returns>The canvas X coordinate.</returns>
     public double ToCanvas(double screenX) => SideAtScreen(screenX) is { } side ? side.ToCanvas(screenX) : screenX;
 
+    /// <summary>
+    /// Returns the row fan at a canvas X coordinate, with the window cap and the rim cap applied.
+    /// </summary>
+    /// <param name="canvasX">The canvas X coordinate.</param>
+    /// <returns>1 outside the left and right zones.</returns>
     public double FanAt(double canvasX) =>
         SideAt(canvasX) is { } side ? RowFan(side, side.FanAt(canvasX), side.DepthAt(canvasX)) : 1.0;
 
+    /// <summary>
+    /// Returns the column fan at a canvas Y coordinate, with the window cap and the rim cap applied.
+    /// </summary>
+    /// <param name="canvasY">The canvas Y coordinate.</param>
+    /// <returns>1 outside the top and bottom zones.</returns>
     public double ColumnFanAt(double canvasY) =>
         EndAt(canvasY) is { } end ? ColumnFan(end, end.FanAt(canvasY), end.DepthAt(canvasY)) : 1.0;
 
+    /// <summary>
+    /// Returns the capped row fan at a screen X coordinate.
+    /// </summary>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <returns>1 outside the left and right zones.</returns>
     public double FanAtScreen(double screenX) =>
         SideAtScreen(screenX) is { } side ? RowFan(side, side.FanAtScreen(screenX), side.DepthAtScreen(screenX)) : 1.0;
 
+    /// <summary>
+    /// Maps the Y coordinate of a canvas point to the screen through the capped row fan of a side zone.
+    /// </summary><param name="canvasX">The canvas X coordinate.</param>
+    /// <param name="canvasY">The canvas Y coordinate.</param>
+    /// <returns>The screen Y coordinate. It equals the input outside the side zones.</returns>
     public double ToScreenY(double canvasX, double canvasY) =>
         SideAt(canvasX) is { } side
             ? side.Center + ((canvasY - side.Center) * RowFan(side, side.FanAt(canvasX), side.DepthAt(canvasX)))
             : canvasY;
 
+    /// <summary>
+    /// Maps the Y coordinate of a screen point back to the canvas through the capped row fan of a side zone.
+    /// </summary>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <param name="screenY">The screen Y coordinate.</param>
+    /// <returns>The canvas Y coordinate. It equals the input outside the side zones.</returns>
     public double ToCanvasY(double screenX, double screenY) =>
         SideAtScreen(screenX) is { } side
             ? side.Center + ((screenY - side.Center) / RowFan(side, side.FanAtScreen(screenX), side.DepthAtScreen(screenX)))
             : screenY;
 
+    /// <summary>
+    /// Maps a canvas point to the screen through the pre-scale, the warp with its corners, and the zoom.
+    /// </summary><param name="canvasX">The canvas X coordinate.</param>
+    /// <param name="canvasY">The canvas Y coordinate.</param>
+    /// <returns>The screen point.</returns>
     public (double X, double Y) ToScreenPoint(double canvasX, double canvasY)
     {
         var (x, y) = Warp(PreX(canvasX), PreY(canvasY));
         return (ZoomX(x), ZoomY(y));
     }
 
+    /// <summary>
+    /// Maps a screen point back to the canvas. It is the inverse of <see cref="ToScreenPoint"/>. In a corner it searches by bisection.
+    /// </summary>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <param name="screenY">The screen Y coordinate.</param>
+    /// <returns>The canvas point.</returns>
     public (double X, double Y) ToCanvasPoint(double screenX, double screenY)
     {
         var (x, y) = Unwarp(UnzoomX(screenX), UnzoomY(screenY));
         return (UnPreX(x), UnPreY(y));
     }
 
+    /// <summary>
+    /// Maps a point in the unzoomed frame back to the canvas. It is <see cref="ToCanvasPoint"/> without the zoom.
+    /// </summary>
+    /// <param name="warpX">The X coordinate in the unzoomed frame.</param>
+    /// <param name="warpY">The Y coordinate in the unzoomed frame.</param>
+    /// <returns>The canvas point.</returns>
     public (double X, double Y) FromWarpPoint(double warpX, double warpY)
     {
         var (x, y) = Unwarp(warpX, warpY);
         return (UnPreX(x), UnPreY(y));
     }
 
+    /// <summary>
+    /// Applies the view zoom to a point in the unzoomed frame.
+    /// </summary>
+    /// <param name="warpX">The X coordinate in the unzoomed frame.</param>
+    /// <param name="warpY">The Y coordinate in the unzoomed frame.</param>
+    /// <returns>The screen point.</returns>
     public (double X, double Y) Zoom(double warpX, double warpY) => (ZoomX(warpX), ZoomY(warpY));
 
+    /// <summary>
+    /// Removes the view zoom from a screen point.
+    /// </summary>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <param name="screenY">The screen Y coordinate.</param>
+    /// <returns>The point in the unzoomed frame, where the warps have their seams.</returns>
     public (double X, double Y) Unzoom(double screenX, double screenY) => (UnzoomX(screenX), UnzoomY(screenY));
 
+    /// <summary>
+    /// Returns the local scale of each axis at a canvas point. For each axis it takes the smaller of the two zone scales.
+    /// </summary><param name="canvasX">The canvas X coordinate.</param>
+    /// <param name="canvasY">The canvas Y coordinate.</param>
+    /// <returns>The X and Y scales, each 1 outside its zones.</returns>
     public (double X, double Y) LocalScale(double canvasX, double canvasY) =>
         (Math.Min(Left?.ScaleAt(canvasX) ?? 1.0, Right?.ScaleAt(canvasX) ?? 1.0),
          Math.Min(Top?.ScaleAt(canvasY) ?? 1.0, Bottom?.ScaleAt(canvasY) ?? 1.0));
@@ -291,8 +435,18 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return CornerToCanvas(side, end, screenX, screenY);
     }
 
+    /// <summary>
+    /// Returns whether the transform leaves a box exactly as it is. A consumer then sets the deformer to <see langword="null"/> so the window keeps scanout.
+    /// </summary>
+    /// <param name="childBounds">The child bounds in node coordinates.</param>
+    /// <returns><see langword="true"/> when the zoom is 1 and <see cref="IsFlatFor"/> is <see langword="true"/>.</returns>
     public bool IsIdentityFor(in Box childBounds) => _viewScale == 1.0 && IsFlatFor(childBounds);
 
+    /// <summary>
+    /// Returns whether a pre-scaled box is clear of every zone. It ignores the zoom.
+    /// </summary>
+    /// <param name="childBounds">The child bounds in node coordinates.</param>
+    /// <returns><see langword="true"/> when no edge of the box lies past any seam.</returns>
     public bool IsFlatFor(in Box childBounds)
     {
         var x0 = PreX(SceneX + childBounds.X);
@@ -322,6 +476,11 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return true;
     }
 
+    /// <summary>
+    /// Returns whether every zone that holds the box is a terrace with the whole box past its far edge, within one canvas pixel.
+    /// </summary>
+    /// <param name="childBounds">The child bounds in node coordinates.</param>
+    /// <returns><see langword="false"/> when no zone holds the box or a zone holds it on its slope.</returns>
     public bool IsPastFeet(in Box childBounds)
     {
         var x0 = PreX(SceneX + childBounds.X);
@@ -333,8 +492,17 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
             PastFoot(Top, y0, y1, ref held) && PastFoot(Bottom, y0, y1, ref held) && held;
     }
 
+    /// <summary>
+    /// Returns the affine map of the shelf that holds a box, with the pre-scale and the zoom. On a side shelf it equals the mesh to rounding.
+    /// </summary>
+    /// <param name="childBounds">The child bounds in node coordinates.</param>
+    /// <returns>The placement matrix. In a corner of a map that is not separable it only approximates the mesh.</returns>
     public RenderTransform ShelfPlacement(in Box childBounds) => Zoomed(WarpShelfPlacement(childBounds));
 
+    /// <summary>
+    /// Returns the matrix of a window in the flat center: the pre-scale composed with the zoom.
+    /// </summary>
+    /// <returns>An axis-aligned scale, which lets a zoomed window at rest take a plane.</returns>
     public RenderTransform ViewPlacement()
     {
         var fx = FactorX;
@@ -404,6 +572,11 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
                 0, 0, 1);
     }
 
+    /// <summary>
+    /// Returns the diagonal of the local derivative of the map at a canvas point, with the zoom. It leaves out the fan terms.
+    /// </summary><param name="canvasX">The canvas X coordinate.</param>
+    /// <param name="canvasY">The canvas Y coordinate.</param>
+    /// <returns>The screen pixels that one canvas pixel covers along X and along Y, each at least 0.01.</returns>
     public (double X, double Y) AxisStretch(double canvasX, double canvasY)
     {
         const double step = 0.5;
@@ -412,6 +585,10 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return (Math.Max(right * _viewScale / (2.0 * step), 0.01), Math.Max(down * _viewScale / (2.0 * step), 0.01));
     }
 
+    /// <summary>
+    /// Returns a flat rectangle placement for a window on a slope. The pre-scale anchor draws where the map puts it, at the smaller local scale.
+    /// </summary>
+    /// <returns>The placement matrix, with the zoom. On a shelf it equals <see cref="ShelfPlacement"/>.</returns>
     public RenderTransform FlatPlacement()
     {
         var (localX, localY) = LocalScale(PreAnchorX, PreAnchorY);
@@ -440,6 +617,7 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         : high is { IsIdentity: false } && (high.ContainsCanvas(start) || high.ContainsCanvas(end)) ? high
         : null;
 
+    /// <inheritdoc/>
     public Box MapBounds(in Box childBounds)
     {
         if (childBounds.IsEmpty)
@@ -491,6 +669,7 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return new Box(left, top, Math.Max(1, right - left), Math.Max(1, bottom - top));
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box childBounds)
     {
         if (childBounds.IsEmpty)
@@ -507,6 +686,7 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         return Spans(x0, x1, leftSeam, rightSeam) * Spans(y0, y1, topSeam, bottomSeam) * 6;
     }
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box childBounds, Span<MeshVertex> into)
     {
         if (childBounds.IsEmpty)
@@ -538,6 +718,7 @@ public sealed class CanvasWarpTransform : IInvertibleMeshTransform
         }
     }
 
+    /// <inheritdoc/>
     public bool TryMapToSource(in Box childBounds, double x, double y, out double sourceX, out double sourceY)
     {
         var (canvasX, canvasY) = ToCanvasPoint(x + SceneX, y + SceneY);

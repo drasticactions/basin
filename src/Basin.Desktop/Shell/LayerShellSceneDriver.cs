@@ -3,6 +3,9 @@ using Basin.Shell.Xdg;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Drives a layer shell with the scene. It puts mapped layer surfaces into scene trees, arranges them per output and reports the usable area that is left.
+/// </summary>
 public sealed class LayerShellSceneDriver : ILayerShellDriver
 {
     private readonly OutputLayout _layout;
@@ -18,6 +21,13 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
     private bool _again;
     private LayerShell? _shell;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayerShellSceneDriver"/> class that drives <paramref name="shell"/> at once.
+    /// </summary>
+    /// <param name="shell">The layer shell to drive.</param>
+    /// <param name="layout">The layout whose outputs the surfaces cover.</param>
+    /// <param name="treeFor">The function that chooses the scene tree for a surface.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public LayerShellSceneDriver(LayerShell shell, OutputLayout layout, Func<LayerSurface, SceneTree> treeFor)
         : this(layout, treeFor)
     {
@@ -25,11 +35,25 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         AttachTo(shell);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayerShellSceneDriver"/> class that drives <paramref name="shell"/> at once and uses the scene layer for each surface's layer.
+    /// </summary>
+    /// <param name="shell">The layer shell to drive.</param>
+    /// <param name="layout">The layout whose outputs the surfaces cover.</param>
+    /// <param name="layers">The scene layers that hold the surfaces.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public LayerShellSceneDriver(LayerShell shell, OutputLayout layout, SceneLayers layers)
         : this(shell, layout, layer => TreeOf(layers, layer.Layer))
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayerShellSceneDriver"/> class and registers it as the <see cref="ILayerShellDriver"/>.
+    /// </summary>
+    /// <param name="services">The registry to register in.</param>
+    /// <param name="layout">The layout whose outputs the surfaces cover.</param>
+    /// <param name="treeFor">The function that chooses the scene tree for a surface.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public LayerShellSceneDriver(BasinServices services, OutputLayout layout, Func<LayerSurface, SceneTree> treeFor)
         : this(layout, treeFor)
     {
@@ -37,6 +61,13 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         services.Use<ILayerShellDriver>(this);
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayerShellSceneDriver"/> class, registers it as the <see cref="ILayerShellDriver"/> and uses the scene layer for each surface's layer.
+    /// </summary>
+    /// <param name="services">The registry to register in.</param>
+    /// <param name="layout">The layout whose outputs the surfaces cover.</param>
+    /// <param name="layers">The scene layers that hold the surfaces.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public LayerShellSceneDriver(BasinServices services, OutputLayout layout, SceneLayers layers)
         : this(services, layout, layer => TreeOf(layers, layer.Layer))
     {
@@ -51,26 +82,59 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         _popups = new PopupPlacer(layout);
     }
 
+    /// <summary>
+    /// Gets or sets a function that decides whether to accept a new surface. A surface that gets <see langword="false"/> is closed.
+    /// </summary>
     public Func<LayerSurface, bool>? Accept { get; set; }
 
+    /// <summary>
+    /// Gets or sets a function that chooses an output for a new surface that did not name one. Without an output, a surface goes on the first output.
+    /// </summary>
     public Func<LayerSurface, OutputGlobal?>? DefaultOutput { get; set; }
 
+    /// <summary>
+    /// Gets or sets a function that gives the box in layout coordinates for the popups of a surface. Without it, popups stay on the surface's output.
+    /// </summary>
     public Func<LayerSurface, Box>? PopupBounds { get; set; }
 
+    /// <summary>
+    /// Gets or sets a function that marks surfaces to arrange alone in a smaller area. A confined surface does not reduce the usable area.
+    /// </summary>
     public Func<LayerSurface, IOutput, bool>? Confine { get; set; }
 
+    /// <summary>
+    /// Gets or sets a function that gives the area for a confined surface from the output and its usable area. Without it, the area is the whole output box.
+    /// </summary>
     public Func<LayerSurface, IOutput, Box, Box>? ConfinedBox { get; set; }
 
+    /// <summary>
+    /// Gets the accepted surfaces in creation order. The scene surface is <see langword="null"/> until the surface maps.
+    /// </summary>
     public IReadOnlyList<(LayerSurface Layer, SceneSurface? Scene)> Surfaces => _surfaces;
 
+    /// <summary>
+    /// Occurs when a surface maps and gets its scene surface, after the arrangement.
+    /// </summary>
     public event Action<LayerSurface, SceneSurface>? SceneCreated;
 
+    /// <summary>
+    /// Occurs when a popup of a mapped surface gets its scene surface. The arguments are the root surface, the popup and its scene surface.
+    /// </summary>
     public event Action<LayerSurface, XdgPopupWindow, SceneSurface>? PopupSceneCreated;
 
+    /// <summary>
+    /// Occurs when a surface unmaps or is destroyed, after its scene surface is destroyed and before the new arrangement.
+    /// </summary>
     public event Action<LayerSurface>? Removed;
 
+    /// <summary>
+    /// Occurs for each output on each arrangement, with the area in layout coordinates that exclusive zones leave. It occurs also when the area did not change.
+    /// </summary>
     public event Action<IOutput, Box>? UsableAreaChanged;
 
+    /// <summary>
+    /// Occurs after an arrangement of all outputs is complete.
+    /// </summary>
     public event Action? Arranged;
 
     void ILayerShellDriver.Attach(LayerShell shell)
@@ -79,6 +143,13 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         AttachTo(shell);
     }
 
+    /// <summary>
+    /// Chooses the scene layer for a layer-shell layer.
+    /// </summary>
+    /// <param name="layers">The scene layers.</param>
+    /// <param name="kind">The layer-shell layer.</param>
+    /// <returns>The matching tree. An unknown layer gets the overlay tree.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="layers"/> is <see langword="null"/>.</exception>
     public static SceneTree TreeOf(SceneLayers layers, LayerKind kind)
     {
         ArgumentNullException.ThrowIfNull(layers);
@@ -91,6 +162,12 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         };
     }
 
+    /// <summary>
+    /// Follows the popup parents up to the layer surface at the root.
+    /// </summary>
+    /// <param name="popup">The popup to start at.</param>
+    /// <returns>The layer surface, or <see langword="null"/> when the chain ends at another kind of parent.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="popup"/> is <see langword="null"/>.</exception>
     public static LayerSurface? RootLayerOf(XdgPopupWindow popup)
     {
         ArgumentNullException.ThrowIfNull(popup);
@@ -110,6 +187,12 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         return root.LayerParent;
     }
 
+    /// <summary>
+    /// Places nested popups of layer surfaces too. Popups whose parent is a layer surface are placed without this call.
+    /// </summary>
+    /// <param name="shell">The xdg shell whose new popups to watch.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="shell"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The driver already tracks popups.</exception>
     public void TrackPopups(XdgShell shell)
     {
         ArgumentNullException.ThrowIfNull(shell);
@@ -122,6 +205,12 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         shell.NewPopup += OnNewPopup;
     }
 
+    /// <summary>
+    /// Finds the scene surface of an accepted surface.
+    /// </summary>
+    /// <param name="layer">The surface to look up.</param>
+    /// <returns>The scene surface, or <see langword="null"/> when the surface is unknown or not mapped.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="layer"/> is <see langword="null"/>.</exception>
     public SceneSurface? SceneOf(LayerSurface layer)
     {
         ArgumentNullException.ThrowIfNull(layer);
@@ -171,6 +260,9 @@ public sealed class LayerShellSceneDriver : ILayerShellDriver
         Rearrange();
     }
 
+    /// <summary>
+    /// Arranges every surface on every output and raises <see cref="UsableAreaChanged"/> and <see cref="Arranged"/>. A call from inside an arrangement runs one more pass.
+    /// </summary>
     public void Rearrange()
     {
         if (_arranging)

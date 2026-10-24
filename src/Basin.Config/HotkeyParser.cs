@@ -3,8 +3,21 @@ using Tomlyn.Model;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Parses key bindings from configuration files and formats them as text.
+/// </summary>
 public static class HotkeyParser
 {
+    /// <summary>
+    /// Parses a chord such as <c>Super+Shift+Return</c>. Modifier names are case-insensitive and the last token is the keysym name.
+    /// Each failure writes a warning to the log.
+    /// </summary>
+    /// <param name="chord">The chord text, with tokens separated by <c>+</c>.</param>
+    /// <param name="log">The logger for warnings.</param>
+    /// <param name="keysym">The keysym, or <see cref="Keysym.NoSymbol"/> on failure.</param>
+    /// <param name="modifiers">The modifiers. They can be partly set on failure.</param>
+    /// <returns><see langword="false"/> when the chord is empty, names an unknown modifier or names an unknown keysym.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="chord"/> is <see langword="null"/>.</exception>
     public static bool TryParseChord(string chord, BasinLogger log, out uint keysym, out Modifiers modifiers)
     {
         ArgumentNullException.ThrowIfNull(chord);
@@ -56,6 +69,12 @@ public static class HotkeyParser
         return true;
     }
 
+    /// <summary>
+    /// Formats a binding in the form that <see cref="TryParseChord"/> reads, for example <c>Ctrl+Alt+Delete</c>.
+    /// </summary>
+    /// <param name="keysym">The xkb keysym.</param>
+    /// <param name="modifiers">The modifiers. They come out in the order Ctrl, Alt, Shift, Super, Mod3, Mod5.</param>
+    /// <returns>The chord text.</returns>
     public static string Format(uint keysym, Modifiers modifiers)
     {
         var builder = new System.Text.StringBuilder();
@@ -68,6 +87,14 @@ public static class HotkeyParser
         return builder.Append(new Xkb.XkbKeysym(keysym).Name).ToString();
     }
 
+    /// <summary>
+    /// Parses one binding entry. The value can be <see langword="false"/> or <c>"none"</c> to unbind, an action name, a command string or array, or a table with <c>when</c>, <c>action</c> or <c>exec</c>.
+    /// </summary>
+    /// <param name="chord">The chord text from the key of the entry.</param>
+    /// <param name="value">The TOML value of the entry.</param>
+    /// <param name="log">The logger for warnings.</param>
+    /// <param name="isAction">Tells whether a string names an action. If <see langword="null"/>, every string is a command.</param>
+    /// <returns>The binding, or <see langword="null"/> when the chord does not parse or the value names nothing.</returns>
     public static Hotkey? Parse(string chord, object? value, BasinLogger log, Func<string, bool>? isAction = null)
     {
         if (!TryParseChord(chord, log, out var keysym, out var modifiers))

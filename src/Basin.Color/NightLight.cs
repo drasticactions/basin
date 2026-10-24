@@ -1,8 +1,18 @@
 using Basin.Capabilities;
 namespace Basin.Color;
 
+/// <summary>
+/// Computes the per-channel multipliers that shift the white point of sRGB content to a color
+/// temperature.
+/// </summary>
 public static class NightLight
 {
+    /// <summary>
+    /// Gets the channel multipliers for a color temperature, relative to 6500 K. The largest channel is
+    /// 1.
+    /// </summary>
+    /// <param name="kelvin">The color temperature, clamped to 1667 K through 25000 K.</param>
+    /// <returns>The red, green and blue multipliers from 0 to 1.</returns>
     public static (double R, double G, double B) Multipliers(double kelvin)
     {
         var rgb = LocusRgb(kelvin);
@@ -20,6 +30,14 @@ public static class NightLight
         return Colorimetry.Apply(Colorimetry.Invert(Colorimetry.RgbToXyz(Chromaticities.Srgb)), white);
     }
 
+    /// <summary>
+    /// Fills linear gamma ramps scaled by the multipliers for a color temperature. All three spans must
+    /// have the same length.
+    /// </summary>
+    /// <param name="kelvin">The color temperature in kelvin.</param>
+    /// <param name="red">The red ramp to fill.</param>
+    /// <param name="green">The green ramp to fill.</param>
+    /// <param name="blue">The blue ramp to fill.</param>
     public static void FillGammaRamps(double kelvin, Span<ushort> red, Span<ushort> green, Span<ushort> blue)
     {
         var (r, g, b) = Multipliers(kelvin);
@@ -33,12 +51,22 @@ public static class NightLight
         }
     }
 
+    /// <summary>
+    /// Builds a diagonal color matrix from the multipliers for a color temperature.
+    /// </summary>
+    /// <param name="kelvin">The color temperature in kelvin.</param>
+    /// <returns>A new row-major 3x3 matrix.</returns>
     public static double[] Ctm(double kelvin)
     {
         var (r, g, b) = Multipliers(kelvin);
         return [r, 0, 0, 0, g, 0, 0, 0, b];
     }
 
+    /// <summary>
+    /// Approximates the CIE 1931 xy point on the Planckian locus with the Kim et al. cubic spline.
+    /// </summary>
+    /// <param name="kelvin">The color temperature, valid from 1667 K to 25000 K.</param>
+    /// <returns>The chromaticity coordinates.</returns>
     public static (double X, double Y) PlanckianXy(double kelvin)
     {
         var t = kelvin;

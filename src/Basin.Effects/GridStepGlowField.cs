@@ -1,7 +1,14 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Evaluates <see cref="GridStepGlowShader"/> on the CPU in doubles. Tests hold the shader rows and the step map inverse to it.
+/// </summary>
 public sealed class GridStepGlowField : GridGlowTwin
 {
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GridStepGlowField"/> class.
+    /// </summary>
+    /// <param name="uniforms">The values that <see cref="GridStepGlowShader.Pack"/> wrote.</param>
     public GridStepGlowField(ReadOnlySpan<PixelShaderUniformValue> uniforms)
         : base(uniforms, GridStepGlowShader.UniformCount, 7, 17)
     {
@@ -36,6 +43,15 @@ public sealed class GridStepGlowField : GridGlowTwin
     private (double Center, double Depth) Bulge(int k) =>
         k == 1 ? (U(5).X, U(5).Y) : k == 2 ? (U(5).Z, U(5).W) : k == 3 ? (U(6).X, U(6).Y) : (U(6).Z, U(6).W);
 
+    /// <summary>
+    /// Maps an output pixel on the desktop plane or a shelf back to a canvas point, as the shader classifies it.
+    /// </summary>
+    /// <param name="px">The horizontal pixel position.</param>
+    /// <param name="py">The vertical pixel position.</param>
+    /// <param name="shelf"><see langword="true"/> when the pixel is on a shelf.</param>
+    /// <param name="canvasX">The horizontal canvas position, or <paramref name="px"/> on failure.</param>
+    /// <param name="canvasY">The vertical canvas position, or <paramref name="py"/> on failure.</param>
+    /// <returns><see langword="false"/> when the pixel is outside the outer box or on a wall.</returns>
     public bool TryToCanvas(double px, double py, out bool shelf, out double canvasX, out double canvasY)
     {
         shelf = false;
@@ -110,6 +126,7 @@ public sealed class GridStepGlowField : GridGlowTwin
         return Has(M4.Y, bit);
     }
 
+    /// <inheritdoc/>
     public override (double R, double G, double B) At(double px, double py)
     {
         var lines = Has(S(6).W, 1.0);

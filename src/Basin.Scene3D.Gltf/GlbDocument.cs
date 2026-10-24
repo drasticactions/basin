@@ -4,6 +4,9 @@ using System.Text.Json;
 
 namespace Basin.Scene3D.Gltf;
 
+/// <summary>
+/// A parsed binary glTF 2.0 file: the JSON root and the binary chunk. It reads accessors, images and node matrices on demand.
+/// </summary>
 public sealed class GlbDocument
 {
     private const uint Magic = 0x46546C67;
@@ -22,10 +25,24 @@ public sealed class GlbDocument
         _binaryLength = binaryLength;
     }
 
+    /// <summary>
+    /// Gets the JSON root of the file.
+    /// </summary>
     public GltfRoot Root { get; }
 
+    /// <summary>
+    /// Gets the nodes, or an empty array when the file has none.
+    /// </summary>
     public GltfNode[] Nodes => Root.Nodes ?? [];
 
+    /// <summary>
+    /// Reads the GLB header and chunks and deserializes the JSON. The document keeps <paramref name="data"/> and reads the binary chunk from it.
+    /// </summary>
+    /// <param name="data">The bytes of the GLB file.</param>
+    /// <returns>The parsed document.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="data"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidDataException">The data is not GLB, is not glTF 2.0, or has no JSON chunk.</exception>
+    /// <exception cref="NotSupportedException">The file requires an extension. The message names it.</exception>
     public static GlbDocument Parse(byte[] data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -75,10 +92,30 @@ public sealed class GlbDocument
         return new GlbDocument(root, data, binaryOffset, binaryLength);
     }
 
+    /// <summary>
+    /// Gives the number of components in each element of an accessor.
+    /// </summary>
+    /// <param name="accessor">The accessor index.</param>
+    /// <returns>1 for a scalar, 2 to 4 for a vector, or 16 for a matrix.</returns>
+    /// <exception cref="InvalidDataException">The accessor does not exist.</exception>
+    /// <exception cref="NotSupportedException">The accessor type is not read.</exception>
     public int ComponentsOf(int accessor) => Components(Accessor(accessor).Type);
 
+    /// <summary>
+    /// Gives the number of elements in an accessor.
+    /// </summary>
+    /// <param name="accessor">The accessor index.</param>
+    /// <returns>The element count.</returns>
+    /// <exception cref="InvalidDataException">The accessor does not exist.</exception>
     public int CountOf(int accessor) => Accessor(accessor).Count;
 
+    /// <summary>
+    /// Reads every component of an accessor as a float. Normalized integers map to [0, 1] or [-1, 1].
+    /// </summary>
+    /// <param name="accessor">The accessor index.</param>
+    /// <returns>A new array of the count times the components.</returns>
+    /// <exception cref="InvalidDataException">The accessor does not exist, or its buffer view is outside the binary chunk.</exception>
+    /// <exception cref="NotSupportedException">The accessor has no buffer view, or its type is not read.</exception>
     public float[] ReadFloats(int accessor)
     {
         var info = Accessor(accessor);
@@ -111,6 +148,13 @@ public sealed class GlbDocument
         return result;
     }
 
+    /// <summary>
+    /// Reads every component of an unsigned byte, short or int accessor.
+    /// </summary>
+    /// <param name="accessor">The accessor index.</param>
+    /// <returns>A new array of the count times the components.</returns>
+    /// <exception cref="InvalidDataException">The accessor does not exist, or its buffer view is outside the binary chunk.</exception>
+    /// <exception cref="NotSupportedException">The component type is not an unsigned integer, or the accessor has no buffer view.</exception>
     public uint[] ReadIntegers(int accessor)
     {
         var info = Accessor(accessor);
@@ -137,6 +181,12 @@ public sealed class GlbDocument
         return result;
     }
 
+    /// <summary>
+    /// Reads a MAT4 accessor and converts each column-major matrix to the row-vector form of <see cref="Matrix4x4"/>.
+    /// </summary>
+    /// <param name="accessor">The accessor index.</param>
+    /// <returns>A new array with one matrix for each element.</returns>
+    /// <exception cref="InvalidDataException">The accessor does not exist, or its buffer view is outside the binary chunk.</exception>
     public Matrix4x4[] ReadMatrices(int accessor)
     {
         var floats = ReadFloats(accessor);
@@ -149,6 +199,12 @@ public sealed class GlbDocument
         return result;
     }
 
+    /// <summary>
+    /// Gives the encoded bytes of an image that is stored in a buffer view.
+    /// </summary>
+    /// <param name="image">The image index.</param>
+    /// <returns>A span over the document's data. It does not copy.</returns>
+    /// <exception cref="InvalidDataException">The image does not exist, has no buffer view, or is outside the binary chunk.</exception>
     public ReadOnlySpan<byte> ReadImage(int image)
     {
         var images = Root.Images ?? [];
@@ -160,6 +216,11 @@ public sealed class GlbDocument
         return View(view);
     }
 
+    /// <summary>
+    /// Gives a node's matrix relative to its parent: its matrix when present, else its scale, rotation and translation.
+    /// </summary>
+    /// <param name="node">The node index.</param>
+    /// <returns>The local matrix in the row-vector form of <see cref="Matrix4x4"/>.</returns>
     public Matrix4x4 LocalMatrix(int node)
     {
         var info = Nodes[node];
@@ -174,6 +235,10 @@ public sealed class GlbDocument
         return Matrix4x4.CreateScale(scale) * Matrix4x4.CreateFromQuaternion(rotation) * Matrix4x4.CreateTranslation(translation);
     }
 
+    /// <summary>
+    /// Gives the parent of each node from the children lists.
+    /// </summary>
+    /// <returns>A new array with the parent index of each node, or -1 for a root.</returns>
     public int[] Parents()
     {
         var parents = new int[Nodes.Length];
@@ -189,6 +254,10 @@ public sealed class GlbDocument
         return parents;
     }
 
+    /// <summary>
+    /// Resolves every node's matrix relative to the file's world space.
+    /// </summary>
+    /// <returns>A new array with one matrix for each node.</returns>
     public Matrix4x4[] WorldMatrices()
     {
         var parents = Parents();
@@ -223,6 +292,10 @@ public sealed class GlbDocument
         }
     }
 
+    /// <summary>
+    /// Gives the root nodes of the default scene, or of scene 0 when no default is set.
+    /// </summary>
+    /// <returns>The scene's node list, or every node with no parent when the file has no scene.</returns>
     public int[] SceneRoots()
     {
         if (Root.Scenes is { Length: > 0 } scenes && scenes[Root.Scene ?? 0].Nodes is { } nodes)

@@ -2,6 +2,9 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Render.Vulkan;
 
+/// <summary>
+/// Owns a device-local image that mirrors a CPU-readable buffer. It copies only the damaged regions through the staging pool.
+/// </summary>
 public sealed unsafe class VulkanUploadImage : IDisposable
 {
     private readonly VulkanDevice _device;
@@ -32,6 +35,11 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         private CopyRegion _element0;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanUploadImage"/> class. It throws <see cref="InvalidOperationException"/> when the buffer is not CPU-readable, its format is not uploadable, or it is too large.
+    /// </summary>
+    /// <param name="device">The device that owns the image.</param>
+    /// <param name="buffer">The buffer to mirror. The whole buffer is marked dirty.</param>
     public VulkanUploadImage(VulkanDevice device, IBuffer buffer)
     {
         _device = device;
@@ -137,22 +145,52 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         MarkDirty();
     }
 
+    /// <summary>
+    /// Gets the device-local image.
+    /// </summary>
     public Image Image { get; }
 
+    /// <summary>
+    /// Gets the Vulkan format of <see cref="Image"/> and <see cref="View"/>.
+    /// </summary>
     public Format VkFormat { get; }
 
+    /// <summary>
+    /// Gets a view that returns the stored values without sRGB decoding.
+    /// </summary>
     public ImageView View { get; }
 
+    /// <summary>
+    /// Gets a view that decodes sRGB on sampling, or a null handle when the device cannot make one.
+    /// </summary>
     public ImageView SrgbView { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether a shader must decode sRGB itself, because <see cref="SrgbView"/> is absent.
+    /// </summary>
     public bool NeedsShaderDecode { get; }
 
+    /// <summary>
+    /// Gets the width of the image in pixels.
+    /// </summary>
     public int Width { get; }
 
+    /// <summary>
+    /// Gets the height of the image in pixels.
+    /// </summary>
     public int Height { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the format of the buffer has an alpha channel.
+    /// </summary>
     public bool HasAlpha { get; }
 
+    /// <summary>
+    /// Points the image at a new buffer of the same size and format, and marks its damage dirty.
+    /// </summary>
+    /// <param name="source">The buffer that replaces the current one.</param>
+    /// <param name="damage">The changed region in buffer pixels.</param>
+    /// <returns><see langword="false"/> when the size or format differs or the buffer is not CPU-readable.</returns>
     public bool TryAdopt(IBuffer source, in Box damage)
     {
         if (source.Width != Width || source.Height != Height)
@@ -177,6 +215,9 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Marks the whole image for upload.
+    /// </summary>
     public void MarkDirty()
     {
         _uploaded = false;
@@ -184,6 +225,10 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         _dirty.Add(0, 0, Width, Height);
     }
 
+    /// <summary>
+    /// Adds a region to the next upload. A region outside the image is ignored.
+    /// </summary>
+    /// <param name="damage">The changed region in buffer pixels.</param>
     public void MarkDirty(in Box damage)
     {
         var x0 = Math.Clamp(damage.X, 0, Width);
@@ -204,6 +249,9 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         _dirty.Add(x0, y0, x1 - x0, y1 - y0);
     }
 
+    /// <summary>
+    /// Gets the number of pixel bytes that the image copied into staging since it was created.
+    /// </summary>
     public ulong UploadedBytes { get; private set; }
 
     private ulong AlignRegion(ulong bytes)
@@ -212,6 +260,11 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         return (bytes + alignment - 1) / alignment * alignment;
     }
 
+    /// <summary>
+    /// Copies the dirty regions into a staging range and sets <see cref="NeedsGpuCopy"/>. It does nothing when the image is up to date.
+    /// </summary>
+    /// <param name="staging">The pool that supplies the staging range.</param>
+    /// <returns><see langword="false"/> when staging space or a CPU read of the buffer was not available.</returns>
     public bool PrepareUpload(VulkanStagingPool staging)
     {
         if (_uploaded)
@@ -294,8 +347,15 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="RecordGpuCopy"/> has staged data to copy.
+    /// </summary>
     public bool NeedsGpuCopy { get; private set; }
 
+    /// <summary>
+    /// Records the copy from staging into the image and leaves the image in the general layout for shader reads.
+    /// </summary>
+    /// <param name="commands">The command buffer to record into. It must execute before the image is sampled.</param>
     public void RecordGpuCopy(CommandBuffer commands)
     {
         var vk = _device.Api;
@@ -355,6 +415,9 @@ public sealed unsafe class VulkanUploadImage : IDisposable
         NeedsGpuCopy = false;
     }
 
+    /// <summary>
+    /// Destroys the views, the image and its memory. The GPU must be done with the image.
+    /// </summary>
     public void Dispose()
     {
         var vk = _device.Api;

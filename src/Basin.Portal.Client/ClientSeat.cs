@@ -2,6 +2,10 @@ using Wayland;
 
 namespace Basin.Portal.Client;
 
+/// <summary>
+/// Receives pointer and keyboard events for the surfaces of a portal client, for example its prompt windows.
+/// Each event carries the protocol id of the focused surface, and no event fires without a focus.
+/// </summary>
 public sealed class ClientSeat : IDisposable
 {
     private readonly ClientKeymap _keymap;
@@ -14,6 +18,12 @@ public sealed class ClientSeat : IDisposable
 
     private readonly WlSeat _seat;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ClientSeat"/> class and gets a pointer and a keyboard for the capabilities present now.
+    /// </summary>
+    /// <param name="seat">The bound seat.</param>
+    /// <param name="capabilities">The capabilities that the seat announced.</param>
+    /// <param name="keymap">The keymap that receives the keymap of the seat keyboard.</param>
     public ClientSeat(WlSeat seat, WlSeat.Capability capabilities, ClientKeymap keymap)
     {
         _keymap = keymap;
@@ -21,22 +31,50 @@ public sealed class ClientSeat : IDisposable
         OnCapabilities(_seat, capabilities);
     }
 
+    /// <summary>
+    /// Gets a pointer or a keyboard when a new capability appears. A capability that goes away keeps its device.
+    /// </summary>
+    /// <param name="capabilities">The new capabilities of the seat.</param>
     public void SetCapabilities(WlSeat.Capability capabilities) => OnCapabilities(_seat, capabilities);
 
+    /// <summary>
+    /// Occurs when the pointer enters a surface. The arguments are the surface id and the position in surface coordinates.
+    /// </summary>
     public event Action<uint, double, double>? PointerEntered;
 
+    /// <summary>
+    /// Occurs when the pointer leaves a surface. The argument is the surface id.
+    /// </summary>
     public event Action<uint>? PointerLeft;
 
+    /// <summary>
+    /// Occurs when the pointer moves over the focused surface. The arguments are the surface id and the position in surface coordinates.
+    /// </summary>
     public event Action<uint, double, double>? PointerMoved;
 
+    /// <summary>
+    /// Occurs on a button press or release. The arguments are the surface id, the evdev button code and <see langword="true"/> for a press.
+    /// </summary>
     public event Action<uint, uint, bool>? PointerButton;
 
+    /// <summary>
+    /// Occurs on a scroll. The arguments are the surface id and the horizontal and vertical scroll values. One of the two values is always 0.
+    /// </summary>
     public event Action<uint, double, double>? PointerAxis;
 
+    /// <summary>
+    /// Occurs on a key press or release. The arguments are the surface id, the evdev keycode and <see langword="true"/> for a press.
+    /// </summary>
     public event Action<uint, uint, bool>? Key;
 
+    /// <summary>
+    /// Occurs when the modifier state changes. The arguments are the surface id, the depressed, latched and locked masks, and the group.
+    /// </summary>
     public event Action<uint, uint, uint, uint, uint>? Modifiers;
 
+    /// <summary>
+    /// Destroys the pointer and the keyboard objects. It does not destroy the seat.
+    /// </summary>
     public void Dispose()
     {
         if (_pointer is { IsDestroyed: false } pointer)

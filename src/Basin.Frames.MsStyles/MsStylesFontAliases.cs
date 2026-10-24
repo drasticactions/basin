@@ -1,5 +1,8 @@
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// Metric-compatible substitutes for the Windows fonts that themes name.
+/// </summary>
 public static class MsStylesFontAliases
 {
     private static readonly (string Family, string[] Aliases)[] Table =
@@ -18,6 +21,11 @@ public static class MsStylesFontAliases
         ("Cambria", ["Caladea"]),
     ];
 
+    /// <summary>
+    /// Gets the substitutes for a font family, in order of preference. The family name is compared without case.
+    /// </summary>
+    /// <param name="family">The family name that the theme uses.</param>
+    /// <returns>The substitute family names, or an empty list when the table has no entry.</returns>
     public static IReadOnlyList<string> For(string family)
     {
         foreach (var (name, aliases) in Table)

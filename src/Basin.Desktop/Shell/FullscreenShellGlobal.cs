@@ -4,10 +4,19 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_fullscreen_shell_v1</c> global. It keeps one presented surface per output, and reports the most recent one.
+/// </summary>
 public sealed class FullscreenShellGlobal : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
+    /// <summary>
+    /// The surface role name that a presented surface holds.
+    /// </summary>
     public const string RoleName = "zwp_fullscreen_shell_v1";
 
     private readonly WlGlobal _global;
@@ -16,6 +25,13 @@ public sealed class FullscreenShellGlobal : IDisposable
     private readonly HashSet<WlClient> _bound = [];
     private readonly Dictionary<IOutput, Presentation> _presented = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FullscreenShellGlobal"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global that resolves surfaces.</param>
+    /// <param name="layout">The layout whose first output takes a request without an output.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public FullscreenShellGlobal(WlServerDisplay display, CompositorGlobal compositor, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -26,20 +42,41 @@ public sealed class FullscreenShellGlobal : IDisposable
         _global = display.CreateGlobal(ZwpFullscreenShellV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Gets the clients that bound the global and are still connected.
+    /// </summary>
     public IReadOnlyCollection<WlClient> BoundClients => _bound;
 
+    /// <summary>
+    /// Gets the most recently presented surface, or another presented surface after it is withdrawn. It is <see langword="null"/> when no surface is presented.
+    /// </summary>
     public Surface? PresentedSurface { get; private set; }
 
+    /// <summary>
+    /// Gets the output of <see cref="PresentedSurface"/>, or <see langword="null"/>.
+    /// </summary>
     public IOutput? PresentedOutput { get; private set; }
 
+    /// <summary>
+    /// Occurs when a surface is presented or withdrawn. The argument is the new <see cref="PresentedSurface"/>.
+    /// </summary>
     public event Action<Surface?>? PresentedSurfaceChanged;
 
+    /// <summary>
+    /// Finds the surface that is presented on one output.
+    /// </summary>
+    /// <param name="output">The output to look up.</param>
+    /// <returns>The surface, or <see langword="null"/> when the output shows none.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="output"/> is <see langword="null"/>.</exception>
     public Surface? PresentedOn(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
         return _presented.TryGetValue(output, out var presentation) ? presentation.Surface : null;
     }
 
+    /// <summary>
+    /// Forgets every presentation and bound client, and removes the global. <see cref="PresentedSurfaceChanged"/> does not occur.
+    /// </summary>
     public void Dispose()
     {
         _presented.Clear();

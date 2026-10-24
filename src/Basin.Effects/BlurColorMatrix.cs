@@ -1,9 +1,22 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Builds the color matrix that the last blur pass applies.
+/// </summary>
 public static class BlurColorMatrix
 {
+    /// <summary>
+    /// The number of floats in one matrix: three rows of three factors and a translation.
+    /// </summary>
     public const int Length = 12;
 
+    /// <summary>
+    /// Writes a saturation and contrast matrix as three rows of four floats. Saturation uses the Rec. 709 luma weights.
+    /// </summary>
+    /// <param name="saturation">The saturation factor. A value of 1 keeps the colors.</param>
+    /// <param name="contrast">The contrast factor about mid gray. A value of 1 keeps the contrast.</param>
+    /// <param name="into">The destination, at least <see cref="Length"/> floats long.</param>
+    /// <exception cref="ArgumentException"><paramref name="into"/> is shorter than <see cref="Length"/>.</exception>
     public static void Build(double saturation, double contrast, Span<float> into)
     {
         if (into.Length < Length)

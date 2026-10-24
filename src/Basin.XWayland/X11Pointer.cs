@@ -5,6 +5,9 @@ using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Reads the pointer position from an X server over its own xcb connection.
+/// </summary>
 public sealed unsafe class X11Pointer : IDisposable
 {
     private readonly xcb_connection_t* _conn;
@@ -24,6 +27,11 @@ public sealed unsafe class X11Pointer : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Connects to an X server.
+    /// </summary>
+    /// <param name="display">The X display name. <see langword="null"/> uses <c>DISPLAY</c>.</param>
+    /// <returns>The reader, or <see langword="null"/> when no X server answers. The caller owns the result.</returns>
     public static X11Pointer? TryConnect(string? display = null)
     {
         xcb_connection_t* conn;
@@ -51,6 +59,11 @@ public sealed unsafe class X11Pointer : IDisposable
         return new X11Pointer(conn, screen);
     }
 
+    /// <summary>
+    /// Queries the pointer position on the root window. The call blocks until the X server answers.
+    /// </summary>
+    /// <returns>The position in root window pixels, or <see langword="null"/> when the connection is lost or the query fails.</returns>
+    /// <exception cref="ObjectDisposedException">The reader is disposed.</exception>
     public (int X, int Y)? TryGetPosition()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -77,6 +90,9 @@ public sealed unsafe class X11Pointer : IDisposable
         return position;
     }
 
+    /// <summary>
+    /// Closes the X connection. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

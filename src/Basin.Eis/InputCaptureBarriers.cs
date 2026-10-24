@@ -1,5 +1,8 @@
 namespace Basin.Eis;
 
+/// <summary>
+/// Holds the geometry rules for input capture barriers.
+/// </summary>
 public static class InputCaptureBarriers
 {
     private enum Fit
@@ -9,9 +12,25 @@ public static class InputCaptureBarriers
         Valid,
     }
 
+    /// <summary>
+    /// Makes a barrier from the unsigned wire values. Each coordinate is reinterpreted as a signed integer, so a negative layout position survives.
+    /// </summary>
+    /// <param name="id">The client's barrier id.</param>
+    /// <param name="x1">The x of the first end, as sent.</param>
+    /// <param name="y1">The y of the first end, as sent.</param>
+    /// <param name="x2">The x of the second end, as sent.</param>
+    /// <param name="y2">The y of the second end, as sent.</param>
+    /// <returns>The barrier with signed coordinates.</returns>
     public static InputCaptureBarrier FromWire(uint id, uint x1, uint y1, uint x2, uint y2) =>
         new(id, unchecked((int)x1), unchecked((int)y1), unchecked((int)x2), unchecked((int)y2));
 
+    /// <summary>
+    /// Tells whether a barrier is a full edge of exactly one output. The barrier must be horizontal or vertical and cover the whole edge, and it must not touch part of another output's edge.
+    /// </summary>
+    /// <param name="barrier">The barrier to check.</param>
+    /// <param name="layout">The output layout whose outputs give the edges.</param>
+    /// <returns><see langword="true"/> when the barrier matches one full output edge and no partial edge.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="layout"/> is <see langword="null"/>.</exception>
     public static bool IsValid(in InputCaptureBarrier barrier, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
@@ -55,6 +74,15 @@ public static class InputCaptureBarriers
         return valid == 1 && partial == 0;
     }
 
+    /// <summary>
+    /// Tells whether a pointer motion segment intersects the barrier segment, ends included. Parallel segments never cross.
+    /// </summary>
+    /// <param name="barrier">The barrier to test.</param>
+    /// <param name="fromX">The layout x before the motion.</param>
+    /// <param name="fromY">The layout y before the motion.</param>
+    /// <param name="toX">The layout x after the motion.</param>
+    /// <param name="toY">The layout y after the motion.</param>
+    /// <returns><see langword="true"/> when the two segments intersect.</returns>
     public static bool Crosses(in InputCaptureBarrier barrier, double fromX, double fromY, double toX, double toY)
     {
         double s1X = barrier.X2 - barrier.X1;

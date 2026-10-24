@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// The mesh source for the background grid that makes the canvas warps visible. Each line is one logical pixel wide on screen.
+/// </summary>
 public sealed class CanvasGridSource : IMeshSource
 {
     private const int SegmentWidth = 8;
@@ -19,96 +22,168 @@ public sealed class CanvasGridSource : IMeshSource
     private bool _toned;
     private HaloPart? _glow;
 
+    /// <summary>
+    /// Gets or sets the warp of the left edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Left
     {
         get => _map.Left;
         set => _map.Left = value;
     }
 
+    /// <summary>
+    /// Gets or sets the warp of the right edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Right
     {
         get => _map.Right;
         set => _map.Right = value;
     }
 
+    /// <summary>
+    /// Gets or sets the warp of the top edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Top
     {
         get => _map.Top;
         set => _map.Top = value;
     }
 
+    /// <summary>
+    /// Gets or sets the warp of the bottom edge, or <see langword="null"/> for no zone.
+    /// </summary>
     public CanvasWarp? Bottom
     {
         get => _map.Bottom;
         set => _map.Bottom = value;
     }
 
+    /// <summary>
+    /// Gets or sets how round the corner rings are, from 0 to 1, as for <see cref="CanvasWarpTransform.CornerRadius"/>.
+    /// </summary>
     public double CornerRadius
     {
         get => _map.CornerRadius;
         set => _map.CornerRadius = value;
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the ring radius shrinks with depth, as for <see cref="CanvasWarpTransform.CornerTaper"/>.
+    /// </summary>
     public bool CornerTaper
     {
         get => _map.CornerTaper;
         set => _map.CornerTaper = value;
     }
 
+    /// <summary>
+    /// Gets or sets the grid cell in canvas pixels. The setter keeps it at 2 or above.
+    /// </summary>
     public int CellSize
     {
         get => _cellSize;
         set => _cellSize = Math.Max(2, value);
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the map is one curve for each axis, as for <see cref="CanvasWarpTransform.Separable"/>.
+    /// </summary>
     public bool Separable
     {
         get => _map.Separable;
         set => _map.Separable = value;
     }
 
+    /// <summary>
+    /// Gets or sets the least local screen spacing between drawn lines in a zone. A denser zone draws only every n-th line, with n a power of two. Zero draws every line.
+    /// </summary>
     public double MinLineSpacing
     {
         get => _minSpacing;
         set => _minSpacing = Math.Max(0.0, value);
     }
 
+    /// <summary>
+    /// Gets or sets the uniform zoom after the warp. The setter reads a value that is not positive and finite as 1.
+    /// </summary>
     public double ViewScale
     {
         get => _viewScale;
         set => _viewScale = value > 0 && double.IsFinite(value) ? value : 1.0;
     }
 
+    /// <summary>
+    /// Gets or sets the X coordinate of the zoom center on screen.
+    /// </summary>
     public double ViewCenterX { get; set; }
 
+    /// <summary>
+    /// Gets or sets the Y coordinate of the zoom center on screen.
+    /// </summary>
     public double ViewCenterY { get; set; }
 
+    /// <summary>
+    /// Gets or sets the line color, before <see cref="Alpha"/>.
+    /// </summary>
     public RenderColor Color { get; set; } = new(0.16f, 0.21f, 0.75f, 1f);
 
+    /// <summary>
+    /// Gets or sets a value indicating whether lines draw in the flat area between the seams. A line exactly on a seam always draws.
+    /// </summary>
     public bool DesktopLines { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a line along each active side seam closes the rows. It does nothing while <see cref="DesktopLines"/> is set.
+    /// </summary>
     public bool SeamLines { get; set; }
 
+    /// <summary>
+    /// Gets or sets the fade of every vertex color, from 0 to 1. The setter clamps the value.
+    /// </summary>
     public float Alpha
     {
         get => _alpha;
         set => _alpha = Math.Clamp(value, 0f, 1f);
     }
 
+    /// <summary>
+    /// Gets or sets the reveal animation. A progress of 1 writes the same vertices as no reveal.
+    /// </summary>
     public GridReveal Reveal
     {
         get => _reveal;
         set => _reveal = value;
     }
 
+    /// <summary>
+    /// Gets or sets the highlight sources near windows and the pointer.
+    /// </summary>
     public GridLights Lights { get; set; } = new();
 
+    /// <summary>
+    /// Gets or sets the density dimming and the glow. The default is no effect.
+    /// </summary>
     public GridEffects Effects { get; set; } = GridEffects.None;
 
+    /// <summary>
+    /// Maps a canvas X coordinate to the screen through the left or right warp alone, without the zoom.
+    /// </summary>
+    /// <param name="canvasX">The canvas X coordinate.</param>
+    /// <returns>The screen X coordinate in the unzoomed frame.</returns>
     public double ToScreen(double canvasX) => _map.ToScreen(canvasX);
 
+    /// <summary>
+    /// Maps a screen X coordinate in the unzoomed frame back to the canvas through the left or right warp alone.
+    /// </summary>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <returns>The canvas X coordinate.</returns>
     public double ToCanvas(double screenX) => _map.ToCanvas(screenX);
 
+    /// <summary>
+    /// Maps a canvas Y coordinate to the screen through the top or bottom warp alone, without the zoom.
+    /// </summary>
+    /// <param name="canvasY">The canvas Y coordinate.</param>
+    /// <returns>The screen Y coordinate in the unzoomed frame.</returns>
     public double ToScreenY(double canvasY)
     {
         if (Top is { } top && top.ContainsCanvas(canvasY))
@@ -124,6 +199,11 @@ public sealed class CanvasGridSource : IMeshSource
         return canvasY;
     }
 
+    /// <summary>
+    /// Maps a screen Y coordinate in the unzoomed frame back to the canvas through the top or bottom warp alone.
+    /// </summary>
+    /// <param name="screenY">The screen Y coordinate.</param>
+    /// <returns>The canvas Y coordinate.</returns>
     public double ToCanvasY(double screenY)
     {
         if (Top is { } top && top.ContainsScreen(screenY))
@@ -139,6 +219,10 @@ public sealed class CanvasGridSource : IMeshSource
         return screenY;
     }
 
+    /// <summary>
+    /// Returns the number of vertical lines that the source draws in a mesh box, after the line thinning.
+    /// </summary><param name="bounds">The mesh bounds on screen. The source removes the view zoom first.</param>
+    /// <returns>The line count, or 0 for an empty box.</returns>
     public int VerticalLines(in Box bounds) => VerticalLinesWarped(WarpBounds(bounds));
 
     private int VerticalLinesWarped(in Box bounds)
@@ -167,6 +251,10 @@ public sealed class CanvasGridSource : IMeshSource
         return count;
     }
 
+    /// <summary>
+    /// Returns the number of horizontal lines that the source draws in a mesh box, after the line thinning.
+    /// </summary><param name="bounds">The mesh bounds on screen. The source removes the view zoom first.</param>
+    /// <returns>The line count, or 0 for an empty box.</returns>
     public int HorizontalLines(in Box bounds) => HorizontalLinesWarped(WarpBounds(bounds));
 
     private int HorizontalLinesWarped(in Box bounds)
@@ -195,6 +283,10 @@ public sealed class CanvasGridSource : IMeshSource
         return count;
     }
 
+    /// <summary>
+    /// Returns the number of segments in each vertical line: the main segment and the pieces through the top and bottom corners.
+    /// </summary><param name="bounds">The mesh bounds on screen. The source removes the view zoom first.</param>
+    /// <returns>The segment count, or 0 for an empty box.</returns>
     public int ColumnSegments(in Box bounds) => ColumnSegmentsWarped(WarpBounds(bounds));
 
     private int ColumnSegmentsWarped(in Box bounds)
@@ -207,6 +299,10 @@ public sealed class CanvasGridSource : IMeshSource
         return 1 + CornerSegments(Top) + CornerSegments(Bottom);
     }
 
+    /// <summary>
+    /// Returns the number of segments in each horizontal line between the top and bottom zones: the flat segment, the side zone pieces and the shelf segments.
+    /// </summary><param name="bounds">The mesh bounds on screen. The source removes the view zoom first.</param>
+    /// <returns>The segment count, or 0 for an empty box.</returns>
     public int RowSegments(in Box bounds) => RowSegmentsWarped(WarpBounds(bounds));
 
     private int RowSegmentsWarped(in Box bounds)
@@ -220,6 +316,10 @@ public sealed class CanvasGridSource : IMeshSource
             + ShelfSegment(Left, bounds) + ShelfSegment(Right, bounds);
     }
 
+    /// <summary>
+    /// Returns the number of segments in each horizontal line inside a top or bottom zone: the main segment and the pieces through the left and right corners.
+    /// </summary><param name="bounds">The mesh bounds on screen. The source removes the view zoom first.</param>
+    /// <returns>The segment count, or 0 for an empty box.</returns>
     public int ZoneRowSegments(in Box bounds) => ZoneRowSegmentsWarped(WarpBounds(bounds));
 
     private int ZoneRowSegmentsWarped(in Box bounds)
@@ -232,8 +332,12 @@ public sealed class CanvasGridSource : IMeshSource
         return 1 + CornerSegments(Left) + CornerSegments(Right);
     }
 
+    /// <summary>
+    /// Gets the second mesh source that writes the glow halo beside each line. It writes nothing unless <see cref="Effects"/> asks for the mesh halo. Draw it with additive blending.
+    /// </summary>
     public IMeshSource Glow => _glow ??= new HaloPart(this);
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds)
     {
         Prepare();
@@ -340,6 +444,7 @@ public sealed class CanvasGridSource : IMeshSource
         return (count * 6) + (lines * extra);
     }
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into)
     {
         Prepare();

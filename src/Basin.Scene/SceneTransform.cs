@@ -1,16 +1,26 @@
 namespace Basin.Scene;
 
+/// <summary>
+/// A tree that applies a matrix, and optionally a mesh deformation, to its subtree. With a deformation, the subtree renders to a texture first.
+/// </summary>
 public sealed class SceneTransform : SceneTree
 {
     private RenderTransform _matrix = RenderTransform.Identity;
     private RenderTransform _inverse = RenderTransform.Identity;
     private bool _invertible = true;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SceneTransform"/> class with the identity matrix and no deformation.
+    /// </summary>
+    /// <param name="parent">The tree to add the node to.</param>
     public SceneTransform(SceneTree parent)
         : base(parent)
     {
     }
 
+    /// <summary>
+    /// Gets or sets the matrix that maps the subtree's local coordinates to the node's position. A matrix that cannot be inverted makes the subtree miss every hit test.
+    /// </summary>
     public RenderTransform Matrix
     {
         get => _matrix;
@@ -30,6 +40,9 @@ public sealed class SceneTransform : SceneTree
 
     private IMeshTransform? _deformer;
 
+    /// <summary>
+    /// Gets or sets the mesh deformation. An <see cref="IInvertibleMeshTransform"/> lets hit tests reach the content.
+    /// </summary>
     public IMeshTransform? Deformer
     {
         get => _deformer;
@@ -52,6 +65,9 @@ public sealed class SceneTransform : SceneTree
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the node changes nothing now: the matrix is identity, the alpha is 1 and no deformation is set.
+    /// </summary>
     public bool IsInertNow => _matrix.IsIdentity && Alpha >= 1f && _deformer is null;
 
     private MemoryBuffer? _capture;
@@ -63,8 +79,14 @@ public sealed class SceneTransform : SceneTree
 
     internal void InvalidateCapture() => _captureValid = false;
 
+    /// <summary>
+    /// Damages the subtree after the deformation changes its vertices without a new <see cref="Deformer"/> object.
+    /// </summary>
     public void NotifyDeformed() => DamageSubtree();
 
+    /// <summary>
+    /// Gets the bounds of the enabled children before the matrix and the deformation apply, in local logical pixels.
+    /// </summary>
     public Box ContentBounds => ChildBounds();
 
     internal Box ChildBounds() => base.SubtreeBounds();
@@ -203,6 +225,9 @@ public sealed class SceneTransform : SceneTree
         _captureValid = false;
     }
 
+    /// <summary>
+    /// Releases the captured texture, then destroys every child.
+    /// </summary>
     protected override void OnDestroy()
     {
         DropCapture();

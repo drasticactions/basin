@@ -2,10 +2,18 @@ using Hexa.NET.ImGui;
 
 namespace Basin.UI.ImGui;
 
+/// <summary>
+/// Maps evdev key codes onto ImGui keys.
+/// </summary>
 public static class EvdevImGuiKeys
 {
     private static readonly ImGuiKey[] Table = Build();
 
+    /// <summary>
+    /// Finds the ImGui key for an evdev key code.
+    /// </summary>
+    /// <param name="key">The evdev key code.</param>
+    /// <returns>The ImGui key, or <see cref="ImGuiKey.None"/> when ImGui has no key for the code.</returns>
     public static ImGuiKey KeyOf(uint key) => key < (uint)Table.Length ? Table[key] : ImGuiKey.None;
 
     private static ImGuiKey[] Build()

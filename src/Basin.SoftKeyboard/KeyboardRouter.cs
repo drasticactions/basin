@@ -3,20 +3,63 @@ using Xkb;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// Delivers typed soft keys by one of three routes: the active backend, the text input of the focused client, or synthesized keys.
+/// It also turns a fast second Space into a period and a space.
+/// </summary>
 public sealed class KeyboardRouter
 {
+    /// <summary>
+    /// The evdev code of Backspace.
+    /// </summary>
     public const uint BackspaceCode = 14;
+    /// <summary>
+    /// The evdev code of Tab.
+    /// </summary>
     public const uint TabCode = 15;
+    /// <summary>
+    /// The evdev code of Return.
+    /// </summary>
     public const uint ReturnCode = 28;
+    /// <summary>
+    /// The evdev code of the Left arrow.
+    /// </summary>
     public const uint LeftCode = 105;
+    /// <summary>
+    /// The evdev code of the Right arrow.
+    /// </summary>
     public const uint RightCode = 106;
+    /// <summary>
+    /// The evdev code of Escape.
+    /// </summary>
     public const uint EscapeCode = 1;
+    /// <summary>
+    /// The evdev code of the Up arrow.
+    /// </summary>
     public const uint UpCode = 103;
+    /// <summary>
+    /// The evdev code of the Down arrow.
+    /// </summary>
     public const uint DownCode = 108;
+    /// <summary>
+    /// The evdev code of Home.
+    /// </summary>
     public const uint HomeCode = 102;
+    /// <summary>
+    /// The evdev code of End.
+    /// </summary>
     public const uint EndCode = 107;
+    /// <summary>
+    /// The evdev code of Page Up.
+    /// </summary>
     public const uint PageUpCode = 104;
+    /// <summary>
+    /// The evdev code of Page Down.
+    /// </summary>
     public const uint PageDownCode = 109;
+    /// <summary>
+    /// The evdev code of Delete.
+    /// </summary>
     public const uint DeleteCode = 111;
 
     private const uint XkbOffset = 8;
@@ -33,6 +76,13 @@ public sealed class KeyboardRouter
     private long _lastSpace;
     private char _lastKey = 'a';
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="KeyboardRouter"/> class. A field change resets the double-space state.
+    /// </summary>
+    /// <param name="textInput">The text-input fallback that gives the field and takes text commits.</param>
+    /// <param name="output">The key output for the keys route.</param>
+    /// <param name="timing">The timing constants, or <see langword="null"/> for <see cref="KeyTiming.Default"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="textInput"/> or <paramref name="output"/> is <see langword="null"/>.</exception>
     public KeyboardRouter(SoftKeyboardTextInput textInput, ISoftKeyOutput output, KeyTiming? timing = null)
     {
         ArgumentNullException.ThrowIfNull(textInput);
@@ -43,18 +93,39 @@ public sealed class KeyboardRouter
         textInput.FieldChanged += _ => ResetShortcuts();
     }
 
+    /// <summary>
+    /// Gets or sets the backend that takes every key while it is active, or <see langword="null"/> for none.
+    /// </summary>
     public IKeyboardBackend? Backend { get; set; }
 
+    /// <summary>
+    /// Gets or sets the direct commit that <see cref="CommitWord"/> tries first, or <see langword="null"/> for none.
+    /// </summary>
     public Basin.Capabilities.ITextInputCommit? Commit { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a second Space within <see cref="KeyTiming.DoubleSpaceMs"/> types a period. It applies only in a text field or with no field.
+    /// </summary>
     public bool SpacesToPeriod { get; set; } = true;
 
+    /// <summary>
+    /// Gets the route that a key takes now: the backend when it is active, then the text input when a field is active, then keys.
+    /// </summary>
     public KeyRoute Route => Backend is { IsActive: true }
         ? KeyRoute.Backend
         : _textInput.IsActive ? KeyRoute.TextInput : KeyRoute.Keys;
 
+    /// <summary>
+    /// Occurs after <see cref="Send"/> delivers a key, with the key and the route it took.
+    /// </summary>
     public event Action<TypedKey, KeyRoute>? Sent;
 
+    /// <summary>
+    /// Connects an engine: each typed key goes out through <see cref="Send"/>, and each field change sets auto-cap and the number lock and clears the symbol lock.
+    /// </summary>
+    /// <param name="engine">The engine to follow.</param>
+    /// <param name="clock">The clock in milliseconds for the sent keys, or <see langword="null"/> for <see cref="Environment.TickCount64"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="engine"/> is <see langword="null"/>.</exception>
     public void Attach(SoftKeyboardEngine engine, Func<long>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(engine);
@@ -68,6 +139,11 @@ public sealed class KeyboardRouter
         };
     }
 
+    /// <summary>
+    /// Delivers one typed key by the current route. A key with modifiers goes as a chord, never as text.
+    /// </summary>
+    /// <param name="key">The typed key.</param>
+    /// <param name="now">The time in milliseconds.</param>
     public void Send(in TypedKey key, long now)
     {
         var route = Route;
@@ -92,6 +168,13 @@ public sealed class KeyboardRouter
         Sent?.Invoke(key, route);
     }
 
+    /// <summary>
+    /// Commits a whole word, for example from the trace decoder. It tries <see cref="Commit"/> first, then the text input, then keys. It never uses the backend.
+    /// </summary>
+    /// <param name="word">The word to commit.</param>
+    /// <param name="now">The time in milliseconds.</param>
+    /// <returns>The route that took the word.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="word"/> is <see langword="null"/>.</exception>
     public KeyRoute CommitWord(string word, long now)
     {
         ArgumentNullException.ThrowIfNull(word);
@@ -106,6 +189,12 @@ public sealed class KeyboardRouter
         return route;
     }
 
+    /// <summary>
+    /// Takes back a word that <see cref="CommitWord"/> committed: a surrounding-text delete of its UTF-8 length on the text input, otherwise one Backspace for each character.
+    /// </summary>
+    /// <param name="committed">The committed word. An empty string does nothing.</param>
+    /// <param name="now">The time in milliseconds.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="committed"/> is <see langword="null"/>.</exception>
     public void DeleteCommitted(string committed, long now)
     {
         ArgumentNullException.ThrowIfNull(committed);
@@ -178,6 +267,12 @@ public sealed class KeyboardRouter
         }
     }
 
+    /// <summary>
+    /// Gives the evdev code and the keysym of a cap that goes out as a key.
+    /// </summary>
+    /// <param name="cap">The cap.</param>
+    /// <returns>The code and the keysym, or two zeros for a cap that has no key.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="cap"/> is <see langword="null"/>.</exception>
     public static (uint Code, uint Keysym) Keystroke(KeyCap cap)
     {
         ArgumentNullException.ThrowIfNull(cap);

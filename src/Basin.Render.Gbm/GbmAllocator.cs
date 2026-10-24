@@ -3,11 +3,20 @@ using Mesa.Gbm;
 
 namespace Basin.Render.Gbm;
 
+/// <summary>
+/// Allocates dmabufs through a GBM device. Every buffer supports rendering, and linear NV12 is made as one R8 buffer with two planes.
+/// </summary>
 public sealed class GbmAllocator : IAllocator
 {
     private readonly GbmDevice _gbm;
     private readonly FdLedger? _ledger;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GbmAllocator"/> class. The allocator does not own the GBM device.
+    /// </summary>
+    /// <param name="gbm">The GBM device to allocate on. It must outlive the allocator.</param>
+    /// <param name="renderableFormats">The formats and modifiers to advertise. The allocator does not check requests against them.</param>
+    /// <param name="ledger">The ledger that records the fds of each buffer, or <see langword="null"/>.</param>
     public GbmAllocator(GbmDevice gbm, DrmFormatSet renderableFormats, FdLedger? ledger = null)
     {
         _gbm = gbm;
@@ -15,8 +24,10 @@ public sealed class GbmAllocator : IAllocator
         Formats = renderableFormats;
     }
 
+    /// <inheritdoc/>
     public DrmFormatSet Formats { get; }
 
+    /// <inheritdoc/>
     public IBuffer? Allocate(int width, int height, DrmFormat format, ReadOnlySpan<ulong> modifiers, BufferUse use)
     {
         var usage = GbmBufferFlags.Rendering;
@@ -108,6 +119,9 @@ public sealed class GbmAllocator : IAllocator
         }
     }
 
+    /// <summary>
+    /// Does nothing. The GBM device belongs to the caller, and allocated buffers stay valid.
+    /// </summary>
     public void Dispose()
     {
     }

@@ -2,8 +2,18 @@ using Xkb;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Parses and formats key triggers in the uppercase <c>LOGO+SHIFT+key</c> form.
+/// </summary>
 public static class TriggerSyntax
 {
+    /// <summary>
+    /// Parses a trigger. Modifier names are SHIFT, CTRL, CONTROL, ALT, LOGO, SUPER and META, in any case. The last token is the keysym name.
+    /// </summary>
+    /// <param name="trigger">The trigger text, with tokens separated by <c>+</c>.</param>
+    /// <param name="keysym">The keysym, or <see cref="Keysym.NoSymbol"/> on failure.</param>
+    /// <param name="modifiers">The modifiers, or <see cref="Modifiers.None"/> on failure.</param>
+    /// <returns><see langword="false"/> when the text is blank, names an unknown modifier or names an unknown keysym.</returns>
     public static bool TryParse(string trigger, out uint keysym, out Modifiers modifiers)
     {
         keysym = Keysym.NoSymbol;
@@ -52,6 +62,12 @@ public static class TriggerSyntax
         return true;
     }
 
+    /// <summary>
+    /// Formats a trigger that <see cref="TryParse"/> reads, for example <c>CTRL+ALT+Delete</c>. Only Ctrl, Alt, Shift and Super are written.
+    /// </summary>
+    /// <param name="keysym">The xkb keysym.</param>
+    /// <param name="modifiers">The modifiers.</param>
+    /// <returns>The trigger text, or an empty string when the keysym has no name.</returns>
     public static string Format(uint keysym, Modifiers modifiers)
     {
         var name = new XkbKeysym(keysym).ToString();
@@ -85,6 +101,12 @@ public static class TriggerSyntax
         return string.Join('+', parts);
     }
 
+    /// <summary>
+    /// Formats a trigger for display, for example <c>Ctrl+Alt+Delete</c>. Only Ctrl, Alt, Shift and Super are written.
+    /// </summary>
+    /// <param name="keysym">The xkb keysym.</param>
+    /// <param name="modifiers">The modifiers.</param>
+    /// <returns>The display text, or an empty string when the keysym has no name.</returns>
     public static string Describe(uint keysym, Modifiers modifiers)
     {
         var name = new XkbKeysym(keysym).ToString();

@@ -4,17 +4,38 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>wp_content_type_manager_v1</c> global. It tracks the content type that each surface commits.
+/// </summary>
 public sealed class ContentTypeManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorAlreadyConstructed = 0;
 
+    /// <summary>
+    /// Lists the content types of the protocol, with the protocol's values.
+    /// </summary>
     public enum ContentType : uint
     {
+        /// <summary>
+        /// No type is known.
+        /// </summary>
         None = 0,
+        /// <summary>
+        /// Still images.
+        /// </summary>
         Photo = 1,
+        /// <summary>
+        /// Moving images such as films and clips.
+        /// </summary>
         Video = 2,
+        /// <summary>
+        /// Interactive content where latency matters.
+        /// </summary>
         Game = 3,
     }
 
@@ -25,6 +46,12 @@ public sealed class ContentTypeManager : IDisposable
 
     private readonly Basin.Capabilities.Defaults.SurfaceHints? _store;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ContentTypeManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces get a type.</param>
+    /// <param name="hints">The surface hints that receive each type, or <see langword="null"/>.</param>
     public ContentTypeManager(
         WlServerDisplay display, CompositorGlobal compositor, Basin.Capabilities.Defaults.SurfaceHints? hints = null)
     {
@@ -33,10 +60,21 @@ public sealed class ContentTypeManager : IDisposable
         _global = display.CreateGlobal(WpContentTypeManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Occurs when a commit applies a different type, and with <see cref="ContentType.None"/> when the client destroys the type object.
+    /// </summary>
     public event Action<Surface, ContentType>? TypeChanged;
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
+    /// <summary>
+    /// Gets the type that the surface's last applied commit set.
+    /// </summary>
+    /// <param name="surface">The surface to look up, or <see langword="null"/>.</param>
+    /// <returns>The type, or <see cref="ContentType.None"/> for a <see langword="null"/> surface or a surface without a type.</returns>
     public ContentType TypeOf(Surface? surface) =>
         surface is null ? ContentType.None : _types.GetValueOrDefault(surface, ContentType.None);
 

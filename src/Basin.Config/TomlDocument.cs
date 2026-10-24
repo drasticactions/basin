@@ -4,6 +4,9 @@ using Tomlyn.Syntax;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Edits the text of a TOML file in place, so that comments, order and columns survive. Each edit must parse, or it throws and the text does not change.
+/// </summary>
 public sealed class TomlDocument
 {
     private static readonly UTF8Encoding Utf8 = new(encoderShouldEmitUTF8Identifier: false);
@@ -17,26 +20,63 @@ public sealed class TomlDocument
         _syntax = syntax;
     }
 
+    /// <summary>
+    /// Makes a document from TOML text.
+    /// </summary>
+    /// <param name="text">The TOML text.</param>
+    /// <returns>The document.</returns>
+    /// <exception cref="FormatException">The text does not parse.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="text"/> is <see langword="null"/>.</exception>
     public static TomlDocument Parse(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
         return new TomlDocument(text, ParseOrThrow(text));
     }
 
+    /// <summary>
+    /// Reads a TOML file into a document.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    /// <returns>The document.</returns>
+    /// <exception cref="FormatException">The file does not parse.</exception>
+    /// <exception cref="IOException">The file cannot be read.</exception>
     public static TomlDocument Load(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
         return Parse(File.ReadAllText(path));
     }
 
+    /// <summary>
+    /// Gives the current text of the document.
+    /// </summary>
+    /// <returns>The TOML text with all edits.</returns>
     public override string ToString() => _text;
 
+    /// <summary>
+    /// Tells whether a <c>[table]</c> has a key. An empty table name means the root table.
+    /// </summary>
+    /// <param name="table">The dotted table name.</param>
+    /// <param name="key">The key. Dotted keys are not found.</param>
+    /// <returns><see langword="true"/> when the table exists and has the key.</returns>
     public bool Contains(string table, string key) =>
         Scope(table) is { } scope && Find(scope.Items, key) is not null;
 
+    /// <summary>
+    /// Gets the literal text of a value in a <c>[table]</c>. An empty table name means the root table.
+    /// </summary>
+    /// <param name="table">The dotted table name.</param>
+    /// <param name="key">The key.</param>
+    /// <returns>The literal text as written in the file, or <see langword="null"/> when the table or key is missing.</returns>
     public string? RawValue(string table, string key) =>
         Scope(table) is { } scope && Find(scope.Items, key) is { } entry ? Slice(entry.Value!) : null;
 
+    /// <summary>
+    /// Sets a key in a <c>[table]</c>. An existing value is replaced in place. A new key goes after the last key of the table. A missing table is appended at the end.
+    /// </summary>
+    /// <param name="table">The dotted table name. An empty name means the root table.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The new value.</param>
+    /// <exception cref="InvalidOperationException">The edited text does not parse, or it defines a key twice.</exception>
     public void Set(string table, string key, TomlValue value)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -50,12 +90,23 @@ public sealed class TomlDocument
         SetIn(scope, key, value);
     }
 
+    /// <summary>
+    /// Removes a key and its line from a <c>[table]</c>.
+    /// </summary>
+    /// <param name="table">The dotted table name. An empty name means the root table.</param>
+    /// <param name="key">The key.</param>
+    /// <returns><see langword="true"/> when the key was present and is removed.</returns>
     public bool Remove(string table, string key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return Scope(table) is { } scope && RemoveIn(scope, key);
     }
 
+    /// <summary>
+    /// Lists the plain keys of a <c>[table]</c> in file order. Dotted keys are left out.
+    /// </summary>
+    /// <param name="table">The dotted table name. An empty name means the root table.</param>
+    /// <returns>The keys, or an empty list when the table is missing.</returns>
     public IReadOnlyList<string> Keys(string table)
     {
         var keys = new List<string>();
@@ -75,6 +126,10 @@ public sealed class TomlDocument
         return keys;
     }
 
+    /// <summary>
+    /// Lists the names of the <c>[table]</c> headers in file order. Arrays of tables are left out.
+    /// </summary>
+    /// <returns>Each name as its unquoted segments.</returns>
     public IReadOnlyList<IReadOnlyList<string>> TableNames()
     {
         var names = new List<IReadOnlyList<string>>();
@@ -89,6 +144,11 @@ public sealed class TomlDocument
         return names;
     }
 
+    /// <summary>
+    /// Counts the <c>[[name]]</c> rows of an array of tables.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <returns>The number of rows.</returns>
     public int TableCount(string name)
     {
         var segments = Segments(name);
@@ -104,12 +164,37 @@ public sealed class TomlDocument
         return count;
     }
 
+    /// <summary>
+    /// Tells whether a row of an array of tables has a key.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <param name="index">The zero-based row index.</param>
+    /// <param name="key">The key.</param>
+    /// <returns><see langword="true"/> when the row has the key.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">There is no row at <paramref name="index"/>.</exception>
     public bool ContainsInTable(string name, int index, string key) =>
         Find(ArrayScope(name, index).Items, key) is not null;
 
+    /// <summary>
+    /// Gets the literal text of a value in a row of an array of tables.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <param name="index">The zero-based row index.</param>
+    /// <param name="key">The key.</param>
+    /// <returns>The literal text as written in the file, or <see langword="null"/> when the key is missing.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">There is no row at <paramref name="index"/>.</exception>
     public string? RawValueInTable(string name, int index, string key) =>
         Find(ArrayScope(name, index).Items, key) is { } entry ? Slice(entry.Value!) : null;
 
+    /// <summary>
+    /// Sets a key in a row of an array of tables. An existing value is replaced in place.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <param name="index">The zero-based row index.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="value">The new value.</param>
+    /// <exception cref="ArgumentOutOfRangeException">There is no row at <paramref name="index"/>.</exception>
+    /// <exception cref="InvalidOperationException">The edited text does not parse, or it defines a key twice.</exception>
     public void SetInTable(string name, int index, string key, TomlValue value)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -117,12 +202,25 @@ public sealed class TomlDocument
         SetIn(ArrayScope(name, index), key, value);
     }
 
+    /// <summary>
+    /// Removes a key and its line from a row of an array of tables.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <param name="index">The zero-based row index.</param>
+    /// <param name="key">The key.</param>
+    /// <returns><see langword="true"/> when the key was present and is removed.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">There is no row at <paramref name="index"/>.</exception>
     public bool RemoveInTable(string name, int index, string key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return RemoveIn(ArrayScope(name, index), key);
     }
 
+    /// <summary>
+    /// Appends an empty <c>[[name]]</c> row at the end of the file.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <returns>The zero-based index of the new row.</returns>
     public int AppendTable(string name)
     {
         var index = TableCount(name);
@@ -130,12 +228,25 @@ public sealed class TomlDocument
         return index;
     }
 
+    /// <summary>
+    /// Removes a row of an array of tables with its keys and one blank line after it.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <param name="index">The zero-based row index.</param>
+    /// <exception cref="ArgumentOutOfRangeException">There is no row at <paramref name="index"/>.</exception>
     public void RemoveTable(string name, int index)
     {
         var (start, end) = Block(ArrayTable(name, index));
         Replace(start, end, string.Empty);
     }
 
+    /// <summary>
+    /// Moves a row of an array of tables so that it has the index <paramref name="to"/> afterward.
+    /// </summary>
+    /// <param name="name">The dotted name of the array.</param>
+    /// <param name="from">The current zero-based row index.</param>
+    /// <param name="to">The new zero-based row index.</param>
+    /// <exception cref="ArgumentOutOfRangeException"><paramref name="from"/> or <paramref name="to"/> is not a row index.</exception>
     public void MoveTable(string name, int from, int to)
     {
         var count = TableCount(name);
@@ -191,6 +302,11 @@ public sealed class TomlDocument
         Commit(moved);
     }
 
+    /// <summary>
+    /// Writes the text to a file atomically through a temporary file and a rename. A symbolic link is followed and the file mode is kept.
+    /// </summary>
+    /// <param name="path">The path of the file. Missing directories are created.</param>
+    /// <exception cref="IOException">The file cannot be written.</exception>
     public void Save(string path)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -223,6 +339,12 @@ public sealed class TomlDocument
         File.Move(temporary, target, overwrite: true);
     }
 
+    /// <summary>
+    /// Splits a dotted TOML key or table name into its segments and removes quotes and escapes.
+    /// </summary>
+    /// <param name="name">The dotted name, for example <c>input."my device"</c>.</param>
+    /// <returns>The segments. An empty name gives an empty list.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public static IReadOnlyList<string> Segments(string name)
     {
         ArgumentNullException.ThrowIfNull(name);

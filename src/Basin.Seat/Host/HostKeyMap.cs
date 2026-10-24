@@ -1,5 +1,8 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Maps host key positions to Linux evdev key codes and back.
+/// </summary>
 public static class HostKeyMap
 {
     private static readonly (HostKeyCode Code, uint Evdev)[] Table =
@@ -165,8 +168,17 @@ public static class HostKeyMap
 
     private static readonly uint[] ByCode = BuildForward();
 
+    /// <summary>
+    /// Gets each key position that has an evdev code, with that code.
+    /// </summary>
     public static IReadOnlyList<(HostKeyCode Code, uint Evdev)> Entries => Table;
 
+    /// <summary>
+    /// Gets the evdev key code for a key position. The lookup is a table index.
+    /// </summary>
+    /// <param name="code">The key position.</param>
+    /// <param name="evdev">The evdev code without the XKB offset of 8, or zero.</param>
+    /// <returns><see langword="false"/> for <see cref="HostKeyCode.None"/> and for a position with no evdev code.</returns>
     public static bool TryToEvdev(HostKeyCode code, out uint evdev)
     {
         var index = (int)code;
@@ -180,6 +192,12 @@ public static class HostKeyMap
         return false;
     }
 
+    /// <summary>
+    /// Gets the key position for an evdev key code. The lookup is a linear search.
+    /// </summary>
+    /// <param name="evdev">The evdev code without the XKB offset of 8.</param>
+    /// <param name="code">The key position, or <see cref="HostKeyCode.None"/>.</param>
+    /// <returns><see langword="false"/> when no position has this code.</returns>
     public static bool TryFromEvdev(uint evdev, out HostKeyCode code)
     {
         foreach (var (candidate, value) in Table)

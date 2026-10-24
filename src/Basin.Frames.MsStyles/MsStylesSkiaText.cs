@@ -4,6 +4,9 @@ using SkiaSharp;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// Draws and measures frame titles and glows through SkiaSharp. It caches up to 32 fonts with shaped text, and clears them all when it reaches that count.
+/// </summary>
 public sealed class MsStylesSkiaText : IMsStylesTextMetrics, IDisposable
 {
     private const int MaxFaces = 32;
@@ -14,6 +17,10 @@ public sealed class MsStylesSkiaText : IMsStylesTextMetrics, IDisposable
     private float _glowSigma;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MsStylesSkiaText"/> class.
+    /// </summary>
+    /// <param name="fonts">The font matcher. This instance does not own it.</param>
     public MsStylesSkiaText(MsStylesFonts fonts)
     {
         ArgumentNullException.ThrowIfNull(fonts);
@@ -21,8 +28,17 @@ public sealed class MsStylesSkiaText : IMsStylesTextMetrics, IDisposable
         _paint = SkiaCensus.Track(new SKPaint { IsAntialias = true });
     }
 
+    /// <summary>
+    /// Gets the font matcher that resolves the theme's font names to typefaces.
+    /// </summary>
     public MsStylesFonts Fonts { get; }
 
+    /// <summary>
+    /// Draws a text or glow operation. A text is cut with an ellipsis to fit its destination. Any other kind draws nothing.
+    /// </summary>
+    /// <param name="canvas">The canvas, one unit to one device pixel.</param>
+    /// <param name="op">The operation to draw.</param>
+    /// <exception cref="ObjectDisposedException">The instance is disposed.</exception>
     public void Draw(SKCanvas canvas, in MsStylesDrawOp op)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -81,6 +97,11 @@ public sealed class MsStylesSkiaText : IMsStylesTextMetrics, IDisposable
         canvas.Restore();
     }
 
+    /// <summary>
+    /// Measures the full width of the text of an operation, with no ellipsis.
+    /// </summary>
+    /// <param name="op">The operation that gives the text, font and size.</param>
+    /// <returns>The width in pixels, or 0 for an empty text.</returns>
     public float Measure(in MsStylesDrawOp op)
     {
         if (op.Text is not { Length: > 0 } text)
@@ -92,6 +113,13 @@ public sealed class MsStylesSkiaText : IMsStylesTextMetrics, IDisposable
         return cache.TryGetBlob(text, font, out _, out var width) ? width : 0;
     }
 
+    /// <summary>
+    /// Measures the width of a text in one line, with no ellipsis.
+    /// </summary>
+    /// <param name="text">The text to measure.</param>
+    /// <param name="font">The theme font.</param>
+    /// <param name="pixels">The font size in pixels.</param>
+    /// <returns>The width in pixels, or 0 for an empty text.</returns>
     public float Measure(string text, in Basin.Themes.MsStyles.MsStylesFont font, float pixels)
     {
         var op = new MsStylesDrawOp { Text = text, Font = font, FontPixels = pixels };
@@ -134,6 +162,9 @@ public sealed class MsStylesSkiaText : IMsStylesTextMetrics, IDisposable
         _faces.Clear();
     }
 
+    /// <summary>
+    /// Releases the cached fonts and paints. It does not dispose <see cref="Fonts"/>.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

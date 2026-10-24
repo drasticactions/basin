@@ -2,6 +2,9 @@ using Seatd;
 
 namespace Basin.Session;
 
+/// <summary>
+/// An <see cref="ISession"/> through libseat, which uses seatd or logind. Seat events dispatch on the compositor loop when the session has one.
+/// </summary>
 public sealed class SeatdSession : ISession
 {
     private readonly Seat _seat;
@@ -21,6 +24,12 @@ public sealed class SeatdSession : ISession
         }
     }
 
+    /// <summary>
+    /// Opens the seat and waits up to five seconds for it to become active.
+    /// </summary>
+    /// <param name="loop">The loop that dispatches seat events, or <see langword="null"/>. Without a loop, <see cref="Enabled"/> and <see cref="Disabled"/> do not occur after this call returns.</param>
+    /// <returns>The open session, which the caller owns. It can still be inactive when the wait expired.</returns>
+    /// <exception cref="InvalidOperationException">No seat manager is available.</exception>
     public static SeatdSession Open(ICompositorEventLoop? loop = null)
     {
         SeatdSession session = null!;
@@ -44,14 +53,28 @@ public sealed class SeatdSession : ISession
         return session;
     }
 
+    /// <inheritdoc/>
     public string SeatName => _seat.Name;
 
+    /// <inheritdoc/>
     public bool IsActive => _active;
 
+    /// <summary>
+    /// Occurs when the session changes from inactive to active. It occurs on the thread that dispatches the seat, normally the loop thread.
+    /// </summary>
     public event Action? Enabled;
 
+    /// <summary>
+    /// Occurs when the seat manager disables the session. It occurs on the thread that dispatches the seat, normally the loop thread.
+    /// </summary>
     public event Action? Disabled;
 
+    /// <summary>
+    /// Opens a device node through the seat manager. The caller owns the result.
+    /// </summary>
+    /// <param name="path">The absolute path of the device node.</param>
+    /// <returns>The open device. Disposal closes it through the seat manager.</returns>
+    /// <exception cref="ObjectDisposedException">The session is disposed.</exception>
     public ISessionDevice OpenDevice(string path)
     {
         lock (_lock)
@@ -61,6 +84,12 @@ public sealed class SeatdSession : ISession
         }
     }
 
+    /// <summary>
+    /// Opens a device node on a thread-pool thread, then posts a seat dispatch to the loop for events that arrived while the seat was locked.
+    /// </summary>
+    /// <param name="path">The absolute path of the device node.</param>
+    /// <returns>A task that completes with the open device.</returns>
+    /// <exception cref="ObjectDisposedException">The session is disposed.</exception>
     public Task<ISessionDevice> OpenDeviceAsync(string path)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -77,12 +106,18 @@ public sealed class SeatdSession : ISession
         });
     }
 
+    /// <summary>
+    /// Disposes a device on a thread-pool thread.
+    /// </summary>
+    /// <param name="device">The device to close.</param>
+    /// <returns>A task that completes when the device is closed.</returns>
     public Task CloseDeviceAsync(ISessionDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
         return Task.Run(device.Dispose);
     }
 
+    /// <inheritdoc/>
     public void SwitchSession(int session)
     {
         lock (_lock)
@@ -91,6 +126,9 @@ public sealed class SeatdSession : ISession
         }
     }
 
+    /// <summary>
+    /// Removes the loop watch and closes the seat. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         lock (_lock)

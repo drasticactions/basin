@@ -2,8 +2,19 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Builds the 3x3 matrices that convert linear RGB between sets of primaries. Every matrix is
+/// row-major in a nine-element array.
+/// </summary>
 public static class Colorimetry
 {
+    /// <summary>
+    /// Builds the matrix that converts linear RGB in one set of primaries into another.
+    /// </summary>
+    /// <param name="source">The primaries of the input.</param>
+    /// <param name="dest">The primaries of the output.</param>
+    /// <param name="adaptWhite">Whether a Bradford adaptation maps the source white onto the destination white.</param>
+    /// <returns>A new matrix that the caller owns.</returns>
     public static double[] GamutMatrix(in Chromaticities source, in Chromaticities dest, bool adaptWhite = true)
     {
         var toXyz = RgbToXyz(source);
@@ -18,12 +29,22 @@ public static class Colorimetry
         return Multiply(fromXyz, Multiply(adapt, toXyz));
     }
 
+    /// <summary>
+    /// Builds the matrix from linear RGB to XYZ, adapted to the D50 white of ICC profiles.
+    /// </summary>
+    /// <param name="c">The primaries of the input.</param>
+    /// <returns>A new matrix that the caller owns.</returns>
     public static double[] RgbToXyzD50(in Chromaticities c)
     {
         var adapt = BradfordAdaptation(WhiteXyz(c.Wx, c.Wy), [0.9642, 1.0, 0.8249]);
         return Multiply(adapt, RgbToXyz(c));
     }
 
+    /// <summary>
+    /// Builds the matrix from linear RGB to XYZ at the primaries' own white point.
+    /// </summary>
+    /// <param name="c">The primaries of the input.</param>
+    /// <returns>A new matrix that the caller owns.</returns>
     public static double[] RgbToXyz(in Chromaticities c)
     {
         double[] primaries =
@@ -64,6 +85,12 @@ public static class Colorimetry
         return Multiply(inverse, Multiply(scale, bradford));
     }
 
+    /// <summary>
+    /// Tells whether a gamut matrix can make a negative channel from a valid input, which means the
+    /// source gamut is larger than the destination.
+    /// </summary>
+    /// <param name="matrix">A matrix from <see cref="GamutMatrix"/>.</param>
+    /// <returns><see langword="true"/> when any element is below -1e-6.</returns>
     public static bool LeavesGamut(double[] matrix)
     {
         ArgumentNullException.ThrowIfNull(matrix);
@@ -78,6 +105,12 @@ public static class Colorimetry
         return false;
     }
 
+    /// <summary>
+    /// Multiplies two 3x3 matrices.
+    /// </summary>
+    /// <param name="a">The left matrix.</param>
+    /// <param name="b">The right matrix, which applies first.</param>
+    /// <returns>A new matrix that the caller owns.</returns>
     public static double[] Multiply(double[] a, double[] b)
     {
         var result = new double[9];
@@ -93,6 +126,12 @@ public static class Colorimetry
         return result;
     }
 
+    /// <summary>
+    /// Multiplies a 3x3 matrix by a column vector.
+    /// </summary>
+    /// <param name="m">The matrix.</param>
+    /// <param name="v">The three-element vector.</param>
+    /// <returns>A new three-element vector.</returns>
     public static double[] Apply(double[] m, double[] v) =>
         [
             m[0] * v[0] + m[1] * v[1] + m[2] * v[2],
@@ -100,6 +139,12 @@ public static class Colorimetry
             m[6] * v[0] + m[7] * v[1] + m[8] * v[2],
         ];
 
+    /// <summary>
+    /// Inverts a 3x3 matrix. It throws <see cref="InvalidOperationException"/> when the matrix is
+    /// singular.
+    /// </summary>
+    /// <param name="m">The matrix to invert.</param>
+    /// <returns>A new matrix that the caller owns.</returns>
     public static double[] Invert(double[] m)
     {
         var det =

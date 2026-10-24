@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_primary_selection_device_manager_v1</c> global. Only the client with keyboard focus gets the primary selection and can set it.
+/// </summary>
 public sealed class PrimarySelectionManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -13,6 +19,13 @@ public sealed class PrimarySelectionManager : IDisposable
     private readonly Seat.Seat? _seat;
     private readonly List<ZwpPrimarySelectionDeviceV1Resource> _devices = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PrimarySelectionManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="store">The selection store, or <see langword="null"/> to offer no selection.</param>
+    /// <param name="seat">The seat whose keyboard focus decides who gets the selection, or <see langword="null"/>. Without a seat, no client is ever offered the selection or can set it.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public PrimarySelectionManager(WlServerDisplay display, ISelectionStore? store, Seat.Seat? seat)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -30,6 +43,9 @@ public sealed class PrimarySelectionManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops following the store and the keyboard focus, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_store is { } live)

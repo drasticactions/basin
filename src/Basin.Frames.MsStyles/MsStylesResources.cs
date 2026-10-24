@@ -4,6 +4,9 @@ using SkiaSharp;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// The Skia objects that <see cref="MsStylesSkiaPainter"/> draws with: images made from the image cache, frame subsets, gradient shaders, icons and pooled paints. Many windows can share one instance.
+/// </summary>
 public sealed class MsStylesResources : IDisposable
 {
     private readonly List<SKImage?> _images = [];
@@ -12,6 +15,10 @@ public sealed class MsStylesResources : IDisposable
     private readonly Dictionary<Basin.IBuffer, SKImage?> _pixelIcons = [];
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MsStylesResources"/> class.
+    /// </summary>
+    /// <param name="images">The image cache that the draw lists refer to. This instance does not own it.</param>
     public MsStylesResources(MsStylesImageCache images)
     {
         ArgumentNullException.ThrowIfNull(images);
@@ -21,6 +28,9 @@ public sealed class MsStylesResources : IDisposable
         StrokePaint = SkiaCensus.Track(new SKPaint { IsAntialias = true, Style = SKPaintStyle.Stroke });
     }
 
+    /// <summary>
+    /// Gets the image cache that the draw lists refer to.
+    /// </summary>
     public MsStylesImageCache Images { get; }
 
     internal SKPaint ImagePaint { get; }
@@ -29,10 +39,24 @@ public sealed class MsStylesResources : IDisposable
 
     internal SKPaint StrokePaint { get; }
 
+    /// <summary>
+    /// Gets or sets the text engine for text and glow operations. Without one, the painter draws no text. <see cref="Dispose"/> disposes it.
+    /// </summary>
     public MsStylesSkiaText? Text { get; set; }
 
+    /// <summary>
+    /// Gets or sets the lookup for named icons. It takes an icon name and a scale in multiples of 16 pixels, and returns
+    /// <see langword="null"/> when no icon matches. The caller keeps ownership of each returned image.
+    /// </summary>
     public Func<string, int, SKImage?>? Icons { get; set; }
 
+    /// <summary>
+    /// Gets the image for a window icon. Client pixels come first, then the icon name, then the application ID through <see cref="Icons"/>.
+    /// </summary>
+    /// <param name="icon">The window icon.</param>
+    /// <param name="appId">The application ID to look up when the icon has no name.</param>
+    /// <param name="pixels">The icon size in device pixels.</param>
+    /// <returns>The image, or <see langword="null"/> when nothing matches.</returns>
     public SKImage? IconFor(in Basin.Capabilities.FrameIcon icon, string? appId, int pixels)
     {
         if (icon.Pixels is { } buffer && ImageFor(buffer) is { } client)
@@ -44,6 +68,11 @@ public sealed class MsStylesResources : IDisposable
         return name is { Length: > 0 } ? Icons?.Invoke(name, Math.Max(1, (pixels + 15) / 16)) : null;
     }
 
+    /// <summary>
+    /// Copies an icon buffer into a Skia image once. The copy stays cached until the buffer is destroyed.
+    /// </summary>
+    /// <param name="buffer">An ARGB8888 buffer that allows read access.</param>
+    /// <returns>The image, owned by this instance, or <see langword="null"/> when the buffer cannot be read.</returns>
     public SKImage? ImageFor(Basin.IBuffer buffer)
     {
         ArgumentNullException.ThrowIfNull(buffer);
@@ -77,6 +106,12 @@ public sealed class MsStylesResources : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the Skia image for a bitmap in the image cache, and makes it on the first request.
+    /// </summary>
+    /// <param name="handle">The <see cref="MsStylesBitmap.Handle"/>.</param>
+    /// <returns>The image, owned by this instance, or <see langword="null"/> when Skia cannot make it.</returns>
+    /// <exception cref="ObjectDisposedException">The instance is disposed.</exception>
     public SKImage? Image(int handle)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -111,6 +146,12 @@ public sealed class MsStylesResources : IDisposable
         return image;
     }
 
+    /// <summary>
+    /// Gets a cached subset image for one cell of a bitmap, so linear sampling at a cell edge cannot read the next cell.
+    /// </summary>
+    /// <param name="handle">The <see cref="MsStylesBitmap.Handle"/>.</param>
+    /// <param name="frame">The cell in texels. A cell that covers the whole bitmap gives the whole image.</param>
+    /// <returns>The image, owned by this instance, or <see langword="null"/> when Skia cannot make it.</returns>
     public SKImage? Frame(int handle, System.Drawing.Rectangle frame)
     {
         if (Image(handle) is not { } image)
@@ -166,6 +207,9 @@ public sealed class MsStylesResources : IDisposable
         return shader;
     }
 
+    /// <summary>
+    /// Releases every Skia object that this instance made, and disposes <see cref="Text"/>. It does not release the images that <see cref="Icons"/> returned.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_data_control_manager_v1</c> global. Clipboard managers read and set the clipboard and primary selection through <see cref="ISelectionStore"/>, without focus.
+/// </summary>
 public sealed class DataControlManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 2;
 
     private readonly WlGlobal _global;
@@ -17,6 +23,12 @@ public sealed class DataControlManager : IDisposable
         public required ZwlrDataControlDeviceV1Resource Resource;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DataControlManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="store">The selection store, or <see langword="null"/> to offer no selection and ignore every set.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public DataControlManager(WlServerDisplay display, ISelectionStore? store)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -28,6 +40,9 @@ public sealed class DataControlManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops following the store and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_store is { } live)

@@ -8,10 +8,20 @@ using static Basin.Avalonia.ViewLog;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// The composition visual handler that creates a <see cref="BasinCompositorHost"/>, pumps it and composites its view output.
+/// It processes <see cref="WakeMessage"/>, <see cref="StartMessage"/>, an <see cref="Action"/> and a <see cref="BasinShutdownMessage"/>.
+/// </summary>
 public sealed class BasinOutputVisual : CompositionCustomVisualHandler
 {
+    /// <summary>
+    /// The message that dispatches the compositor once. Before the host exists it requests a render, which creates the host.
+    /// </summary>
     public static readonly object WakeMessage = new();
 
+    /// <summary>
+    /// The message that creates the host and starts dispatch without a render.
+    /// </summary>
     public static readonly object StartMessage = new();
 
     private readonly Func<BasinCompositorHost> _createHost;
@@ -25,6 +35,13 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
     private bool _reportedNoLease;
     private bool _probedEgl;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasinOutputVisual"/> class.
+    /// </summary>
+    /// <param name="createHost">Makes the compositor host on the composition thread. The handler disposes the host at shutdown.</param>
+    /// <param name="hostReady">Called on the composition thread after the host is created.</param>
+    /// <param name="createOwnView"><see langword="true"/> to create a view output that fills the visual.</param>
+    /// <param name="hostFailed">Called on the composition thread when <paramref name="createHost"/> throws.</param>
     public BasinOutputVisual(
         Func<BasinCompositorHost> createHost,
         Action<BasinCompositorHost>? hostReady = null,
@@ -38,6 +55,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         _createOwnView = createOwnView;
     }
 
+    /// <inheritdoc/>
     public override void OnRender(ImmediateDrawingContext context)
     {
         if (_shutdown || _failed)
@@ -110,6 +128,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
     }
 
+    /// <inheritdoc/>
     public override void OnMessage(object message)
     {
         if (ReferenceEquals(message, StartMessage))
@@ -183,6 +202,7 @@ public sealed class BasinOutputVisual : CompositionCustomVisualHandler
         }
     }
 
+    /// <inheritdoc/>
     public override void OnAnimationFrameUpdate()
     {
         if (_shutdown || _host is null)

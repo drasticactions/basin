@@ -5,14 +5,25 @@ using Wayland.Server;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// The <c>xdg_toplevel_drag_manager_v1</c> global. It reports which toplevel rides the drag in flight. Moving the window and removing it from the drop-target hit test are the consumer's work.
+/// </summary>
 public sealed class XdgToplevelDragManager : IDisposable
 {
+    /// <summary>
+    /// The version of <c>xdg_toplevel_drag_manager_v1</c> that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly IDragTracker? _drags;
     private readonly Dictionary<WlDataSourceResource, ToplevelDrag> _bySource = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XdgToplevelDragManager"/> class. It creates the global on <paramref name="display"/> at once.
+    /// </summary>
+    /// <param name="display">The display that advertises the global.</param>
+    /// <param name="drags">The drag tracker of the seat. With <see langword="null"/>, no toplevel is ever attached.</param>
     public XdgToplevelDragManager(WlServerDisplay display, IDragTracker? drags)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -24,10 +35,19 @@ public sealed class XdgToplevelDragManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the toplevel that rides the drag in flight, or <see langword="null"/> when no drag runs or no toplevel is attached to it.
+    /// </summary>
     public ToplevelDragAttachment? Attachment { get; private set; }
 
+    /// <summary>
+    /// Occurs when <see cref="Attachment"/> changes. Unmapping or destroying the attached toplevel detaches it.
+    /// </summary>
     public event Action<ToplevelDragAttachment?>? AttachmentChanged;
 
+    /// <summary>
+    /// Stops watching the drag tracker and destroys the global.
+    /// </summary>
     public void Dispose()
     {
         if (_drags is { } tracker)

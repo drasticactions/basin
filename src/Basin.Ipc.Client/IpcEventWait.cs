@@ -1,11 +1,32 @@
 namespace Basin.Ipc;
 
+/// <summary>
+/// Waits for an event that an action causes, with no race between the action and the subscription.
+/// </summary>
 public static class IpcEventWait
 {
+    /// <summary>
+    /// The wait time when the caller gives none: 10 seconds.
+    /// </summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(10);
 
+    /// <summary>
+    /// The number of matches after which a collect window ends early, when the caller gives no limit.
+    /// </summary>
     public const int DefaultMaxCollected = 64;
 
+    /// <summary>
+    /// Subscribes on a connection of its own, waits for the subscription to be in place, runs the action and then waits for a matching event.
+    /// </summary>
+    /// <param name="socketPath">The control socket path.</param>
+    /// <param name="events">The event names to subscribe to.</param>
+    /// <param name="match">A predicate that accepts an event, or <see langword="null"/> to accept every event.</param>
+    /// <param name="then">The action to run after the subscription. It returns <see langword="false"/> to stop the wait.</param>
+    /// <param name="timeout">The longest wait for the first match. The default is <see cref="DefaultTimeout"/>.</param>
+    /// <param name="collect">How long to keep matches after the first one. Zero ends the wait at the first match.</param>
+    /// <param name="maxCollected">The number of matches that ends a collect window early. It must be at least 1.</param>
+    /// <param name="cancellationToken">A token that cancels the wait and the action.</param>
+    /// <returns>The matches, which are empty after a timeout.</returns>
     public static async Task<IpcEventWaitResult> RunAsync(
         string socketPath,
         IReadOnlyList<string> events,

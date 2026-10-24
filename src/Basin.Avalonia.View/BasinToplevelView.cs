@@ -9,6 +9,10 @@ using Basin.Hosted;
 
 namespace Basin.Avalonia;
 
+/// <summary>
+/// An Avalonia control that shows one view output of a shared <see cref="BasinCompositorHost"/> and forwards host input to it.
+/// The compositor work runs on the Avalonia composition thread.
+/// </summary>
 public sealed class BasinToplevelView : Control, ICaptureTarget
 {
     private readonly BasinCompositorHost _host;
@@ -21,6 +25,11 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
     private Action<BasinViewInput>? _sink;
     private bool _handlersAttached;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="BasinToplevelView"/> class. The control is focusable.
+    /// </summary>
+    /// <param name="host">The compositor host that the view output belongs to.</param>
+    /// <param name="createView">Makes the view output on the composition thread, on the first frame or wake.</param>
     public BasinToplevelView(BasinCompositorHost host, Func<BasinCompositorHost, BasinViewOutput> createView)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -30,6 +39,10 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         Focusable = true;
     }
 
+    /// <summary>
+    /// Gets or sets the receiver of the input that this control collects.
+    /// Setting a non-null value attaches the pointer and key handlers once. Input is delivered on the composition thread before each dispatch.
+    /// </summary>
     public Action<BasinViewInput>? InputSink
     {
         get => _sink;
@@ -44,14 +57,25 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         }
     }
 
+    /// <inheritdoc/>
     public Func<uint, bool, bool>? KeyFilter { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the last <see cref="CaptureInput"/> call asked for capture.
+    /// </summary>
     public bool InputCaptured { get; private set; }
 
+    /// <summary>
+    /// Occurs on the composition thread after <see cref="CaptureInput"/> has applied the pointer constraint. The argument is the new capture state.
+    /// </summary>
     public event Action<bool>? CaptureChanged;
 
+    /// <summary>
+    /// Gets the view output. It is <see langword="null"/> before the first frame or wake and after shutdown.
+    /// </summary>
     public BasinViewOutput? Output => _handler?.View;
 
+    /// <inheritdoc/>
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnAttachedToVisualTree(e);
@@ -71,6 +95,7 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         _visual.Size = new(Bounds.Width, Bounds.Height);
     }
 
+    /// <inheritdoc/>
     protected override void ArrangeCore(Rect finalRect)
     {
         base.ArrangeCore(finalRect);
@@ -80,6 +105,7 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         }
     }
 
+    /// <inheritdoc/>
     public override void Render(DrawingContext context)
     {
         base.Render(context);
@@ -89,6 +115,10 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         }
     }
 
+    /// <summary>
+    /// Runs an action on the composition thread, then dispatches and flushes the compositor. It does nothing before the control has a visual.
+    /// </summary>
+    /// <param name="action">The work to run with the compositor's thread affinity.</param>
     public void Post(Action action)
     {
         ArgumentNullException.ThrowIfNull(action);
@@ -98,6 +128,9 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         }
     }
 
+    /// <summary>
+    /// Asks the composition thread to dispatch the compositor and invalidate the views that are dirty.
+    /// </summary>
     public void RequestFrame()
     {
         if (_visual is { } visual)
@@ -106,6 +139,9 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         }
     }
 
+    /// <summary>
+    /// Asks the composition thread to render this view on the next composition frame.
+    /// </summary>
     public void RequestRender()
     {
         if (_visual is { } visual)
@@ -114,6 +150,10 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         }
     }
 
+    /// <summary>
+    /// Asks the composition thread to dispose the view output and stop all work of the handler.
+    /// </summary>
+    /// <returns>A task that completes when the handler is down. It is already complete when the control never got a visual.</returns>
     public Task ShutdownAsync()
     {
         if (_visual is not { } visual)
@@ -126,6 +166,10 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         return message.Completed;
     }
 
+    /// <summary>
+    /// Sends a focus change to the input sink. On deactivation it first releases every key that is still pressed.
+    /// </summary>
+    /// <param name="active"><see langword="true"/> when the host window became active.</param>
     public void NotifyActivated(bool active)
     {
         if (!active)
@@ -136,6 +180,7 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         Send(active ? BasinViewInputKind.FocusIn : BasinViewInputKind.FocusOut);
     }
 
+    /// <inheritdoc/>
     public void InjectKey(uint code, bool pressed)
     {
         if (code == 0)
@@ -151,6 +196,11 @@ public sealed class BasinToplevelView : Control, ICaptureTarget
         Send(BasinViewInputKind.Key, code: code, pressed: pressed);
     }
 
+    /// <summary>
+    /// Records the capture state, then activates or deactivates the pointer constraint of the focused surface on the composition thread.
+    /// It raises <see cref="CaptureChanged"/> after that.
+    /// </summary>
+    /// <param name="captured"><see langword="true"/> to lock or confine the pointer, <see langword="false"/> to release it.</param>
     public void CaptureInput(bool captured)
     {
         InputCaptured = captured;

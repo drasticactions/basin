@@ -4,25 +4,51 @@ using Basin.Diagnostics;
 
 namespace Basin.Color;
 
+/// <summary>
+/// The panel table: the entries of <c>panels.toml</c>, shared by every compositor on the machine.
+/// </summary>
 public sealed class PanelTable
 {
     private readonly List<PanelEntry> _entries;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="PanelTable"/> class.
+    /// </summary>
+    /// <param name="entries">The entries. The table copies them.</param>
     public PanelTable(IEnumerable<PanelEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
         _entries = [.. entries];
     }
 
+    /// <summary>
+    /// Gets a table with no entries.
+    /// </summary>
     public static PanelTable Empty { get; } = new([]);
 
+    /// <summary>
+    /// Gets the entries in file order.
+    /// </summary>
     public IReadOnlyList<PanelEntry> Entries => _entries;
 
+    /// <summary>
+    /// Gets the file that <see cref="Load"/> read, or <see langword="null"/> for a table built in code.
+    /// </summary>
     public string? Path { get; private init; }
 
+    /// <summary>
+    /// Gets the shared table file, <c>basin/panels.toml</c> under the XDG config home.
+    /// </summary>
     public static string DefaultPath =>
         System.IO.Path.Combine(Basin.Freedesktop.XdgDirectories.ConfigHome, "basin", "panels.toml");
 
+    /// <summary>
+    /// Reads the panel table from a TOML file. A missing or bad file gives an empty table, and every
+    /// bad key logs a warning.
+    /// </summary>
+    /// <param name="log">The logger for warnings.</param>
+    /// <param name="path">The file, or <see langword="null"/> for <see cref="DefaultPath"/>.</param>
+    /// <returns>The table, with <see cref="Path"/> set.</returns>
     public static PanelTable Load(BasinLogger log, string? path = null)
     {
         path ??= DefaultPath;
@@ -37,6 +63,12 @@ public sealed class PanelTable
         return new PanelTable(parsed._entries) { Path = path };
     }
 
+    /// <summary>
+    /// Reads <c>[[panel]]</c> sections from TOML. An entry without a vendor is skipped, and a bad value
+    /// drops only its key.
+    /// </summary>
+    /// <param name="reader">The reader over the TOML table.</param>
+    /// <returns>A new table.</returns>
     public static PanelTable Parse(TomlReader reader)
     {
         ArgumentNullException.ThrowIfNull(reader);
@@ -100,6 +132,12 @@ public sealed class PanelTable
         return new PanelTable(entries);
     }
 
+    /// <summary>
+    /// Finds the most specific entry that matches a panel. Of entries with the same specificity, the
+    /// first one wins.
+    /// </summary>
+    /// <param name="panel">The identity of the panel.</param>
+    /// <returns>The entry, or <see langword="null"/> when none matches.</returns>
     public PanelEntry? Match(in PanelIdentity panel)
     {
         PanelEntry? best = null;
@@ -114,6 +152,11 @@ public sealed class PanelTable
         return best;
     }
 
+    /// <summary>
+    /// Finds the most specific entry for an output, from its EDID and serial.
+    /// </summary>
+    /// <param name="output">The output.</param>
+    /// <returns>The entry, or <see langword="null"/> when none matches.</returns>
     public PanelEntry? Match(IOutput output) => Match(PanelIdentity.Of(output));
 
     private static double? Optional(TomlReader panel, string key) => panel.Raw(key) switch

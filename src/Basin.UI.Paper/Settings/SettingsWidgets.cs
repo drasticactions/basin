@@ -8,11 +8,26 @@ using Prowl.Vector;
 
 namespace Basin.UI.Paper;
 
+/// <summary>
+/// Immediate-mode settings widgets for Prowl.Paper. Call them inside a frame build. Each row edits one <see cref="ISettingValue{T}"/>.
+/// </summary>
 public static class SettingsWidgets
 {
     private const float ScrollStep = 40f;
     private const float ScrollBarWidth = 6f;
 
+    /// <summary>
+    /// Opens a settings row with a dirty dot, a label and an optional badge. Build the control inside the returned scope.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="dirty"><see langword="true"/> to show the accent dot.</param>
+    /// <param name="badge">The text of a warning pill, or <see langword="null"/>.</param>
+    /// <param name="error">An error text to show below the row, or <see langword="null"/>.</param>
+    /// <param name="hint">A warning text to show below the row when there is no error, or <see langword="null"/>.</param>
+    /// <returns>The scope of the row. The caller must dispose it.</returns>
     public static RowScope Row(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, bool dirty = false,
         string? badge = null, string? error = null, string? hint = null)
@@ -38,6 +53,14 @@ public static class SettingsWidgets
         return new RowScope(paper, outer, line, theme, message, error is not null ? theme.Error : theme.Warning);
     }
 
+    /// <summary>
+    /// Draws a small wrapped text, aligned with the controls column.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="text">The text.</param>
+    /// <param name="color">The text color.</param>
     public static void Message(Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string text, Color32 color)
     {
         ArgumentNullException.ThrowIfNull(paper);
@@ -52,6 +75,13 @@ public static class SettingsWidgets
         }
     }
 
+    /// <summary>
+    /// Draws a section heading, 1.15 times the body font size.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="text">The heading text.</param>
     public static void Heading(Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string text)
     {
         ArgumentNullException.ThrowIfNull(paper);
@@ -62,6 +92,14 @@ public static class SettingsWidgets
             .Alignment(TextAlignment.BottomLeft).PaddingBottom(4).IsNotInteractable();
     }
 
+    /// <summary>
+    /// Draws a small wrapped note across the full width.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="text">The note text.</param>
+    /// <param name="color">The text color, or <see langword="null"/> for <see cref="SettingsTheme.Dim"/>.</param>
     public static void Note(Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string text, Color32? color = null)
     {
         ArgumentNullException.ThrowIfNull(paper);
@@ -72,9 +110,27 @@ public static class SettingsWidgets
             .Wrap(TextWrapMode.Wrap).Alignment(TextAlignment.Left).IsNotInteractable();
     }
 
+    /// <summary>
+    /// Draws a small pill in the <see cref="SettingsTheme.Warning"/> color.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="text">The pill text.</param>
     public static void Badge(Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string text) =>
         Pill(paper, theme, id, text, theme.Warning);
 
+    /// <summary>
+    /// Draws a push button.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="text">The button text.</param>
+    /// <param name="onClick">Called when the user clicks an enabled button.</param>
+    /// <param name="enabled"><see langword="false"/> to draw the button dim and ignore clicks.</param>
+    /// <param name="primary"><see langword="true"/> to fill the button with the accent color.</param>
+    /// <returns><see langword="true"/> when the button is enabled.</returns>
     public static bool Button(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string text, Action onClick,
         bool enabled = true, bool primary = false)
@@ -100,6 +156,14 @@ public static class SettingsWidgets
         return true;
     }
 
+    /// <summary>
+    /// Draws a row with a switch for a boolean setting.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting.</param>
     public static void ToggleRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<bool> value)
     {
@@ -108,6 +172,13 @@ public static class SettingsWidgets
         Toggle(paper, theme, "switch", value);
     }
 
+    /// <summary>
+    /// Draws a switch that inverts the setting on each click.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="value">The setting.</param>
     public static void Toggle(Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, ISettingValue<bool> value)
     {
         ArgumentNullException.ThrowIfNull(paper);
@@ -130,6 +201,15 @@ public static class SettingsWidgets
         }
     }
 
+    /// <summary>
+    /// Draws a row with a drop-down list. A click on a choice sets the value and closes the list.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting. Its value is shown as the current choice.</param>
+    /// <param name="choices">The choices, in display order.</param>
     public static void EnumRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<string> value,
         IReadOnlyList<string> choices)
@@ -204,6 +284,18 @@ public static class SettingsWidgets
         }
     }
 
+    /// <summary>
+    /// Draws a row with a slider and a number field for a value in a range.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting.</param>
+    /// <param name="min">The lowest value.</param>
+    /// <param name="max">The highest value.</param>
+    /// <param name="step">The step that the slider snaps to, or 0 for no snap.</param>
+    /// <param name="format">The .NET number format of the field, read with the invariant culture.</param>
     public static void SliderRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<double> value,
         double min, double max, double step, string format = "0.###")
@@ -236,6 +328,17 @@ public static class SettingsWidgets
         NumberField(paper, theme, "exact", numberWidth, value, format, min, max);
     }
 
+    /// <summary>
+    /// Draws a row with a number field. The value changes on Enter or when the field loses focus, and only for a number in the range.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting.</param>
+    /// <param name="format">The .NET number format of the field, read with the invariant culture.</param>
+    /// <param name="min">The lowest value that the field accepts.</param>
+    /// <param name="max">The highest value that the field accepts.</param>
     public static void NumberRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<double> value,
         string format = "0.###", double min = double.NegativeInfinity, double max = double.PositiveInfinity)
@@ -245,6 +348,15 @@ public static class SettingsWidgets
         NumberField(paper, theme, "number", theme.ControlWidth, value, format, min, max);
     }
 
+    /// <summary>
+    /// Draws a row with a text field. The value changes on Enter or when the field loses focus.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting.</param>
+    /// <param name="placeholder">The text that an empty field shows.</param>
     public static void TextRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<string> value,
         string placeholder = "")
@@ -258,6 +370,15 @@ public static class SettingsWidgets
         });
     }
 
+    /// <summary>
+    /// Draws a row with a swatch and a hex field. A click on the swatch opens a picker with presets.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting, as <c>#rrggbb</c>, or <c>#aarrggbb</c> when <paramref name="alpha"/> is set.</param>
+    /// <param name="alpha"><see langword="true"/> to accept and keep an alpha channel.</param>
     public static void ColorRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<string> value, bool alpha = false)
     {
@@ -291,9 +412,19 @@ public static class SettingsWidgets
     private static string KeepAlpha(string? current, string hex) =>
         current is { Length: 9 } && current[0] == '#' ? string.Concat("#", current.AsSpan(1, 2), hex.AsSpan(1)) : hex;
 
+    /// <summary>
+    /// Formats a color as <c>#rrggbb</c> in lower case. The alpha channel is dropped.
+    /// </summary>
+    /// <param name="color">The color.</param>
+    /// <returns>The hex text.</returns>
     public static string Hex(Color32 color) =>
         string.Create(CultureInfo.InvariantCulture, $"#{color.R:x2}{color.G:x2}{color.B:x2}");
 
+    /// <summary>
+    /// Converts a color to hue, saturation and value. The alpha channel is ignored.
+    /// </summary>
+    /// <param name="color">The color.</param>
+    /// <returns>The three components, each from 0 to 1. A hue of 1 is a full turn.</returns>
     public static (float Hue, float Saturation, float Value) ToHsv(Color32 color)
     {
         var r = color.R / 255f;
@@ -316,6 +447,13 @@ public static class SettingsWidgets
         return (hue, max <= 0 ? 0 : delta / max, max);
     }
 
+    /// <summary>
+    /// Converts hue, saturation and value to an opaque color.
+    /// </summary>
+    /// <param name="hue">The hue in turns. Values outside 0 to 1 wrap.</param>
+    /// <param name="saturation">The saturation from 0 to 1. Values outside are clamped.</param>
+    /// <param name="value">The value from 0 to 1. Values outside are clamped.</param>
+    /// <returns>The color with full alpha.</returns>
     public static Color32 FromHsv(float hue, float saturation, float value)
     {
         hue = (hue - MathF.Floor(hue)) * 6f;
@@ -404,6 +542,15 @@ public static class SettingsWidgets
 
     private static byte Channel(float value) => (byte)Math.Clamp((int)MathF.Round(value * 255f), 0, 255);
 
+    /// <summary>
+    /// Draws a row with a chord button for a key binding setting.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="value">The setting, as chord text.</param>
+    /// <param name="capture">The capture that the button starts and cancels.</param>
     public static void ChordRow(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, ISettingValue<string> value,
         ChordCapture capture)
@@ -413,6 +560,15 @@ public static class SettingsWidgets
         ChordButton(paper, theme, "chord", theme.ControlWidth, value, capture);
     }
 
+    /// <summary>
+    /// Draws a button that shows a chord. A click starts a capture for the setting, and a second click cancels it.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="width">The button width in logical pixels.</param>
+    /// <param name="value">The setting, as chord text.</param>
+    /// <param name="capture">The capture that the button starts and cancels.</param>
     public static void ChordButton(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, float width, ISettingValue<string> value,
         ChordCapture capture)
@@ -442,6 +598,22 @@ public static class SettingsWidgets
             });
     }
 
+    /// <summary>
+    /// Draws a row with an editable list. Each item has Up, Down and Remove buttons, and the row has an Add button when <paramref name="create"/> is set.
+    /// </summary>
+    /// <typeparam name="T">The type of the items.</typeparam>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="label">The text at the left of the row.</param>
+    /// <param name="items">The list that the buttons change in place.</param>
+    /// <param name="buildItem">Builds the body of the item at an index.</param>
+    /// <param name="create">Makes a new item for the Add button, or <see langword="null"/> for no Add button.</param>
+    /// <param name="changed">Called after each change to <paramref name="items"/>.</param>
+    /// <param name="dirty"><see langword="true"/> to show the accent dot.</param>
+    /// <param name="badge">The text of a warning pill, or <see langword="null"/>.</param>
+    /// <param name="error">An error text to show below the row, or <see langword="null"/>.</param>
+    /// <param name="hint">A warning text to show below the row when there is no error, or <see langword="null"/>.</param>
     public static void ListRow<T>(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, string label, IList<T> items,
         Action<Prowl.PaperUI.Paper, int> buildItem, Func<T>? create, Action changed, bool dirty = false,
@@ -495,6 +667,16 @@ public static class SettingsWidgets
         }
     }
 
+    /// <summary>
+    /// Draws a vertical list of section names. A dirty section gets a dot after its name.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <param name="sections">The section names.</param>
+    /// <param name="selected">The index of the selected section.</param>
+    /// <param name="select">Called with the index of a section that the user clicks.</param>
+    /// <param name="dirty">One flag per section, or <see langword="null"/> for no dots.</param>
     public static void SectionNav(
         Prowl.PaperUI.Paper paper, SettingsTheme theme, string id, IReadOnlyList<string> sections, int selected,
         Action<int> select, IReadOnlyList<bool>? dirty = null)
@@ -522,6 +704,13 @@ public static class SettingsWidgets
         }
     }
 
+    /// <summary>
+    /// Opens a clipped area that scrolls its content with the wheel and shows a scroll bar when the content is taller.
+    /// </summary>
+    /// <param name="paper">The Paper instance that builds the frame.</param>
+    /// <param name="theme">The font, colors and sizes.</param>
+    /// <param name="id">The element id. It must be unique among its siblings.</param>
+    /// <returns>The scope of the content. The caller must dispose it.</returns>
     public static ScrollScope Scroll(Prowl.PaperUI.Paper paper, SettingsTheme theme, string id)
     {
         ArgumentNullException.ThrowIfNull(paper);
@@ -557,8 +746,21 @@ public static class SettingsWidgets
         return new ScrollScope(paper, theme, handle, outerScope, content.Enter(), scrolled);
     }
 
+    /// <summary>
+    /// Parses a <c>#rrggbb</c> color. Spaces around the text are ignored.
+    /// </summary>
+    /// <param name="text">The text to parse.</param>
+    /// <param name="color">The opaque color, or the default value on failure.</param>
+    /// <returns><see langword="true"/> when the text is a valid color.</returns>
     public static bool TryParseColor(string? text, out Color32 color) => TryParseColor(text, false, out color);
 
+    /// <summary>
+    /// Parses a <c>#rrggbb</c> color, or also a <c>#aarrggbb</c> color when <paramref name="alpha"/> is set. Spaces around the text are ignored.
+    /// </summary>
+    /// <param name="text">The text to parse.</param>
+    /// <param name="alpha"><see langword="true"/> to accept the eight-digit form.</param>
+    /// <param name="color">The color, or the default value on failure.</param>
+    /// <returns><see langword="true"/> when the text is a valid color.</returns>
     public static bool TryParseColor(string? text, bool alpha, out Color32 color)
     {
         color = default;
@@ -658,6 +860,9 @@ public static class SettingsWidgets
         changed();
     }
 
+    /// <summary>
+    /// The open scope of a settings row from <see cref="Row"/>. Dispose it to close the row.
+    /// </summary>
     public readonly struct RowScope : IDisposable
     {
         private readonly Prowl.PaperUI.Paper _paper;
@@ -673,10 +878,19 @@ public static class SettingsWidgets
             Outer = paper.CurrentParent.GetParentHandle();
         }
 
+        /// <summary>
+        /// Gets the element that holds the whole row. Widgets keep their state in its element storage.
+        /// </summary>
         public ElementHandle Outer { get; }
 
+        /// <summary>
+        /// Closes the control line and draws the error or hint below it. Content after this call goes below the line. A second call does nothing.
+        /// </summary>
         public void EndLine() => _line.Close();
 
+        /// <summary>
+        /// Closes the control line if it is open, then closes the row and pops its id.
+        /// </summary>
         public void Dispose()
         {
             _line.Close();
@@ -685,6 +899,9 @@ public static class SettingsWidgets
         }
     }
 
+    /// <summary>
+    /// The open scope of a scroll area from <see cref="Scroll"/>. Dispose it to close the area and draw the scroll bar.
+    /// </summary>
     public readonly struct ScrollScope : IDisposable
     {
         private readonly Prowl.PaperUI.Paper _paper;
@@ -705,6 +922,9 @@ public static class SettingsWidgets
             _offset = offset;
         }
 
+        /// <summary>
+        /// Closes the content, draws the scroll bar when the content is taller than the area, and closes the area.
+        /// </summary>
         public void Dispose()
         {
             _content.Dispose();

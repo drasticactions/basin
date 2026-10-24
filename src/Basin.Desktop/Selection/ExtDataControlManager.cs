@@ -4,14 +4,26 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_data_control_manager_v1</c> global. Clipboard managers read and set the clipboard and primary selection through <see cref="ISelectionStore"/>, without focus.
+/// </summary>
 public sealed class ExtDataControlManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly ISelectionStore? _store;
     private readonly List<ExtDataControlDeviceV1Resource> _devices = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExtDataControlManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="store">The selection store, or <see langword="null"/> to offer no selection and ignore every set.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public ExtDataControlManager(WlServerDisplay display, ISelectionStore? store)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -23,6 +35,9 @@ public sealed class ExtDataControlManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops following the store and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_store is { } live)

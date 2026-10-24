@@ -1,13 +1,28 @@
 namespace Basin.Effects;
 
+/// <summary>
+/// Generates the procedural step textures. Each one is opaque grayscale, tiles with no seam, and is the same on every machine.
+/// </summary>
 public static class CanvasTextures
 {
+    /// <summary>
+    /// The side of every generated texture in pixels.
+    /// </summary>
     public const int Size = 256;
 
+    /// <summary>
+    /// Gets the configuration names of the presets, in the order of <see cref="CanvasTexturePreset"/>.
+    /// </summary>
     public static ReadOnlySpan<string> Names => NameList;
 
     private static readonly string[] NameList = ["stone", "brick", "wood", "noise"];
 
+    /// <summary>
+    /// Finds the preset for a configuration name. The match is ordinal and case-sensitive.
+    /// </summary>
+    /// <param name="name">The name, for example <c>stone</c>.</param>
+    /// <param name="preset">The preset, or the default value when the name is unknown.</param>
+    /// <returns><see langword="true"/> when the name is in <see cref="Names"/>.</returns>
     public static bool TryParse(string name, out CanvasTexturePreset preset)
     {
         for (var i = 0; i < NameList.Length; i++)
@@ -23,8 +38,18 @@ public static class CanvasTextures
         return false;
     }
 
+    /// <summary>
+    /// Returns the configuration name of a preset.
+    /// </summary>
+    /// <param name="preset">A defined preset.</param>
+    /// <returns>The name from <see cref="Names"/>.</returns>
     public static string NameOf(CanvasTexturePreset preset) => NameList[(int)preset];
 
+    /// <summary>
+    /// Generates a preset texture. The work is not on the frame path, so call it at load time.
+    /// </summary>
+    /// <param name="preset">The preset. An undefined value gives the noise texture.</param>
+    /// <returns>A new ARGB8888 buffer of <see cref="Size"/> pixels square, which the caller owns.</returns>
     public static MemoryBuffer Generate(CanvasTexturePreset preset)
     {
         var luminance = new float[Size * Size];

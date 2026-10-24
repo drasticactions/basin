@@ -1,7 +1,13 @@
 namespace Basin.Seat;
 
+/// <summary>
+/// Recognizes fingers that hold still and then drag, as a member of the touch gesture chain.
+/// </summary>
 public sealed class HoldDragGesture : ITouchGestures
 {
+    /// <summary>
+    /// The largest value that <see cref="Fingers"/> accepts.
+    /// </summary>
     public const int MaxFingers = 5;
 
     private readonly Contact[] _contacts = new Contact[MaxFingers];
@@ -18,22 +24,41 @@ public sealed class HoldDragGesture : ITouchGestures
     private bool _pending;
     private double _pendingTurned;
 
+    /// <summary>
+    /// Gets or sets the number of fingers that the gesture needs. The value is clamped to the range 1 to <see cref="MaxFingers"/>.
+    /// </summary>
     public int Fingers
     {
         get;
         set => field = Math.Clamp(value, 1, MaxFingers);
     } = 2;
 
+    /// <summary>
+    /// Gets or sets the time in milliseconds that the fingers must hold before a drag can start.
+    /// </summary>
     public uint HoldMillis { get; set; } = 300;
 
+    /// <summary>
+    /// Gets or sets how far one finger can move during the hold before the gesture stops watching.
+    /// </summary>
     public double StillSlop { get; set; } = 12;
 
+    /// <summary>
+    /// Gets or sets how far the center of the fingers must move after the hold to claim the drag.
+    /// </summary>
     public double MoveSlop { get; set; } = 8;
 
+    /// <summary>
+    /// Gets or sets the handler that accepts fingers and receives the drag. With no handler, no finger is accepted.
+    /// </summary>
     public IHoldDragHandler? Handler { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the gesture holds the contacts as a drag. It is true from the claim, before the handler accepts.
+    /// </summary>
     public bool IsClaimed => _phase == Phase.Claimed;
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Down(int id, uint timeMs, double x, double y)
     {
         _count++;
@@ -66,6 +91,7 @@ public sealed class HoldDragGesture : ITouchGestures
         return TouchGestureVerdict.Pass;
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Motion(int id, uint timeMs, double x, double y)
     {
         var index = IndexOf(id);
@@ -134,6 +160,7 @@ public sealed class HoldDragGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public TouchGestureVerdict Up(int id, uint timeMs)
     {
         _count = Math.Max(0, _count - 1);
@@ -169,6 +196,7 @@ public sealed class HoldDragGesture : ITouchGestures
         }
     }
 
+    /// <inheritdoc/>
     public void Cancel()
     {
         if (_phase == Phase.Claimed && _begun)
@@ -181,6 +209,11 @@ public sealed class HoldDragGesture : ITouchGestures
         _filled = 0;
     }
 
+    /// <summary>
+    /// Returns zero. This gesture never withholds events.
+    /// </summary>
+    /// <param name="into">The buffer, which is not written.</param>
+    /// <returns>Always zero.</returns>
     public int TakeWithheld(Span<EdgeSwipeSample> into) => 0;
 
     private int IndexOf(int id)

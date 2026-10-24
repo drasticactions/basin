@@ -8,6 +8,10 @@ using static Basin.Rashader.Vulkan.RashaderVulkanLog;
 
 namespace Basin.Rashader.Vulkan;
 
+/// <summary>
+/// One librashader filter chain that runs on the Vulkan renderer. It records its passes into the
+/// renderer's command buffer.
+/// </summary>
 public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
 {
     private static nint _loader;
@@ -33,6 +37,15 @@ public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Compiles a preset into a Vulkan filter chain. Every failure returns <see langword="null"/> with
+    /// a reason, so a bad preset never ends the session.
+    /// </summary>
+    /// <param name="device">The Vulkan device whose instance, device and queue the chain uses.</param>
+    /// <param name="presetPath">The path of the <c>.slangp</c> preset.</param>
+    /// <param name="settings">The settings that the filter reads once at creation.</param>
+    /// <param name="whyNot">The reason creation failed, or <see langword="null"/> on success.</param>
+    /// <returns>The filter, which the caller owns and must dispose, or <see langword="null"/> when librashader, the loader or the preset fails.</returns>
     public static RashaderFilter? TryCreate(
         VulkanDevice device, string presetPath, in RashaderFilterSettings settings, out string? whyNot)
     {
@@ -89,14 +102,28 @@ public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
         return new RashaderFilter(device, chain, parameters, settings.ContinuousRepaint);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the chain is still live. It becomes <see langword="false"/>
+    /// after a failed frame drops the chain, and after disposal.
+    /// </summary>
     public bool IsSupported => _chain != 0;
 
+    /// <summary>
+    /// Gets a value indicating whether the filter needs the whole frame. It is always <see
+    /// langword="true"/>, because a preset can read history and feedback.
+    /// </summary>
     public bool NeedsFullFrame => true;
 
+    /// <summary>
+    /// Gets a value indicating whether the filter asks for a repaint every frame. It is the <see
+    /// cref="RashaderFilterSettings.ContinuousRepaint"/> value from creation.
+    /// </summary>
     public bool NeedsContinuousRepaint { get; }
 
+    /// <inheritdoc/>
     public IReadOnlyList<RashaderParameter> Parameters => _parameters;
 
+    /// <inheritdoc/>
     public bool TrySetParameter(string name, float value)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -118,6 +145,12 @@ public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
         return true;
     }
 
+    /// <summary>
+    /// Runs the chain from the context's source into its target. A librashader error logs the message
+    /// and drops the chain for good.
+    /// </summary>
+    /// <param name="context">The source, the target, the viewport and the frame options.</param>
+    /// <returns><see langword="true"/> when the chain wrote the target.</returns>
     public bool Record(in VulkanFilterContext context)
     {
         if (_chain == 0)
@@ -177,6 +210,10 @@ public sealed unsafe class RashaderFilter : IVulkanFilter, IRashaderFilter
         return true;
     }
 
+    /// <summary>
+    /// Frees the chain. It waits for the device to idle first, because the chain owns images that the
+    /// GPU can still read. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

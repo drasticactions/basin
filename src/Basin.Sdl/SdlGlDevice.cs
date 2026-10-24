@@ -5,6 +5,10 @@ using static Basin.Sdl.SdlLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// The render device for the <see cref="SdlRenderDevices.Gl"/> name. One GL context and one Skia context serve every window.
+/// The device holds the SDL GL library for its whole life.
+/// </summary>
 public sealed class SdlGlDevice : ISdlRenderDevice
 {
     private readonly GRGlGetProcedureAddressDelegate _getProc;
@@ -13,6 +17,11 @@ public sealed class SdlGlDevice : ISdlRenderDevice
     private nint _glContext;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlGlDevice"/> class. It loads the GL library and sets the context attributes.
+    /// On Linux it forces EGL. The constructor must run before the first GL window is created.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">SDL cannot load the GL library.</exception>
     public SdlGlDevice()
     {
         _getProc = name => SDL.GLGetProcAddress(name);
@@ -41,18 +50,36 @@ public sealed class SdlGlDevice : ISdlRenderDevice
         }
     }
 
+    /// <inheritdoc/>
     public string Name => SdlRenderDevices.Gl;
 
+    /// <inheritdoc/>
     public SDL.WindowFlags WindowFlags => SDL.WindowFlags.OpenGL;
 
+    /// <inheritdoc/>
     public GRContext? Context => _context;
 
+    /// <summary>
+    /// Gets the SDL GL context handle. It is 0 before the first lease.
+    /// </summary>
     public nint GlContext => _glContext;
 
+    /// <summary>
+    /// Gets the EGL display of the GL context. It is 0 before the first lease and outside Linux.
+    /// </summary>
     public nint EglDisplay { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the EGL display offers <c>EGL_EXT_buffer_age</c>. Without it, every frame has age 0.
+    /// </summary>
     public bool HasBufferAge { get; private set; }
 
+    /// <summary>
+    /// Creates a GL lease for a window. The first call creates the GL context and the Skia context on that window.
+    /// </summary>
+    /// <param name="window">A window that was created with <see cref="WindowFlags"/>.</param>
+    /// <returns>A new lease that the caller owns and must dispose before the window.</returns>
+    /// <exception cref="InvalidOperationException">SDL or Skia cannot create the context.</exception>
     public ISdlRenderLease CreateLease(SdlWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -126,6 +153,9 @@ public sealed class SdlGlDevice : ISdlRenderDevice
         EglDisplay = 0;
     }
 
+    /// <summary>
+    /// Destroys the contexts and releases the GL library. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

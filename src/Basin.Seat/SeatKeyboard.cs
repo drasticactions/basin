@@ -6,6 +6,9 @@ using Xkb;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// The seat's keyboard. It tracks the xkb state, delivers enter, leave, key, modifier and keymap events to the focused client, and runs keyboard grabs.
+/// </summary>
 public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKeymapLookup, Capabilities.IKeyText, Capabilities.IKeymapOverride, IKeySink, IDisposable
 {
     private readonly Seat _seat;
@@ -36,39 +39,89 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         _active = _default;
     }
 
+    /// <summary>
+    /// Gets the surface that has keyboard focus, or <see langword="null"/>.
+    /// </summary>
     public Surface? Focus { get; private set; }
 
+    /// <summary>
+    /// Gets the compiled keymap of the active device. It is null when no keymap is set or the source produced text only.
+    /// </summary>
     public XkbKeymap? Keymap => _active.Compiled;
 
+    /// <summary>
+    /// Gets the xkb state of the active device, or <see langword="null"/> when it has no compiled keymap.
+    /// </summary>
     public XkbState? State => _active.State;
 
+    /// <inheritdoc/>
     public (int Fd, uint Size)? KeymapBuffer => _active.File is { } file ? (file.Fd, file.Size) : null;
 
+    /// <summary>
+    /// Gets the keymap of the active device as a descriptor for one client to map.
+    /// </summary>
+    /// <param name="client">The client, or <see langword="null"/>.</param>
+    /// <returns>The descriptor and the size in bytes, or <see langword="null"/> when no keymap is set.</returns>
     public (int Fd, uint Size)? KeymapFor(Wayland.Server.WlClient? client) =>
         _active.File is { } file ? (file.FdFor(client), file.Size) : null;
 
+    /// <summary>
+    /// Gets the modifier masks and the effective layout that clients received last.
+    /// </summary>
     public (uint Depressed, uint Latched, uint Locked, uint Group) ModifierState => _modifiers;
 
+    /// <summary>
+    /// Gets the repeat rate in keys per second and the delay in milliseconds that clients received last. A device can replace the seat values.
+    /// </summary>
     public (int Rate, int Delay) RepeatInfo => _sentRepeat;
 
+    /// <summary>
+    /// Gets the seat repeat rate in keys per second and the delay in milliseconds that <see cref="SetRepeatInfo"/> set.
+    /// </summary>
     public (int Rate, int Delay) SeatRepeatInfo => (_repeatRate, _repeatDelay);
 
+    /// <summary>
+    /// Gets the evdev keycodes held now, including keys that a binding consumed.
+    /// </summary>
     public IReadOnlyList<uint> PressedKeys => _pressedKeys;
 
+    /// <summary>
+    /// Gets the grab that receives the notify calls: the newest started grab, or the default grab that delivers to the focus.
+    /// </summary>
     public IKeyboardGrab Grab => _grabs.Count > 0 ? _grabs[^1] : _defaultGrab;
 
+    /// <summary>
+    /// Gets a value indicating whether a grab other than the default one is active.
+    /// </summary>
     public bool HasGrab => _grabs.Count > 0;
 
+    /// <summary>
+    /// Occurs after the modifier state or the effective layout changes. Read <see cref="ModifierState"/> in the handler.
+    /// </summary>
     public event Action? ModifiersChanged;
 
+    /// <summary>
+    /// Gets the LEDs that the active xkb state lights.
+    /// </summary>
     public KeyboardLeds Leds { get; private set; }
 
+    /// <summary>
+    /// Occurs after <see cref="Leds"/> changes.
+    /// </summary>
     public event Action? LedsChanged;
 
+    /// <summary>
+    /// Occurs after the keyboard focus changes, with the new focus or <see langword="null"/>.
+    /// </summary>
     public event Action<Surface?>? FocusChanged;
 
+    /// <inheritdoc/>
     public event Action? KeymapChanged;
 
+    /// <summary>
+    /// Gets or sets the source that compiles the seat keymap. A set compiles nothing. Call <see cref="SetKeymap"/> or another set method after it.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public IKeymapSource KeymapSource
     {
         get => _externalSource ?? _keymapSource;
@@ -79,6 +132,10 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <summary>
+    /// Compiles the seat keymap from XKB rule names and sends it to clients. A failed compile keeps the old keymap.
+    /// </summary>
+    /// <param name="names">The rule names. The default value uses the xkb defaults.</param>
     public void SetKeymap(in KeymapNames names = default)
     {
         if (KeymapSource.TryCompile(names, out var keymap))
@@ -87,6 +144,9 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <summary>
+    /// Compiles the seat keymap from the host when <see cref="KeymapSource"/> is a <see cref="HostKeymapSource"/>, and sends it to clients. Otherwise it does nothing.
+    /// </summary>
     public void SetKeymapFromHost()
     {
         if (KeymapSource is HostKeymapSource host && host.TryCompile(out var keymap))
@@ -102,6 +162,10 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         _ => null,
     };
 
+    /// <summary>
+    /// Compiles the seat keymap from XKB text and sends it to clients. A failed compile keeps the old keymap.
+    /// </summary>
+    /// <param name="keymapText">The keymap text in UTF-8.</param>
     public void SetKeymapFromBuffer(ReadOnlySpan<byte> keymapText)
     {
         if (KeymapSource.TryCompile(System.Text.Encoding.UTF8.GetString(keymapText), out var keymap))
@@ -110,6 +174,10 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <summary>
+    /// Creates a virtual keyboard device that can carry its own keymap and repeat rate.
+    /// </summary>
+    /// <returns>The device. Dispose it to remove it.</returns>
     public KeyboardDevice CreateDevice()
     {
         var device = new KeyboardDevice(this, isDefault: false);
@@ -117,6 +185,10 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return device;
     }
 
+    /// <summary>
+    /// Makes a device the source of the next key events. Clients receive its keymap and modifiers when they differ from the current ones.
+    /// </summary>
+    /// <param name="keyboard">A device of this keyboard, or <see langword="null"/> for the seat keymap. A device with no keymap uses the seat keymap.</param>
     public void Activate(Capabilities.IInjectedKeyboard? keyboard)
     {
         var device = keyboard as KeyboardDevice;
@@ -275,6 +347,11 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         device.Teardown();
     }
 
+    /// <summary>
+    /// Sets the seat repeat rate and sends it to clients at version 4 and later, unless the active device has its own rate.
+    /// </summary>
+    /// <param name="rate">The repeat rate in keys per second. Zero turns repeat off.</param>
+    /// <param name="delay">The delay in milliseconds before repeat starts.</param>
     public void SetRepeatInfo(int rate, int delay)
     {
         _repeatRate = rate;
@@ -292,10 +369,23 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <summary>
+    /// Passes a focus change to the active grab, with the held keys that the client can see.
+    /// </summary>
+    /// <param name="surface">The new focus, or <see langword="null"/>.</param>
     public void NotifyEnter(Surface? surface) => Grab.Enter(surface, CollectPressed());
 
+    /// <summary>
+    /// Passes a focus clear to the active grab.
+    /// </summary>
     public void NotifyClearFocus() => Grab.Enter(null, default);
 
+    /// <summary>
+    /// Delivers a key through the active grab and updates the xkb state. The release of a consumed key updates the state only.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
     public void NotifyKey(uint timeMs, uint key, bool pressed) =>
         NotifyKey(timeMs, key, pressed ? WlKeyboard.KeyState.Pressed : WlKeyboard.KeyState.Released);
 
@@ -303,6 +393,13 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
 
     private const int NotifyScopeWarmup = 10;
 
+    /// <summary>
+    /// Delivers a key through the active grab and updates the xkb state, and tells whether the key went to the grab.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
+    /// <returns><see langword="false"/> when the key is the release of a consumed press, which updates the state only.</returns>
     public bool TryNotifyKey(uint timeMs, uint key, bool pressed)
     {
         if (pressed)
@@ -320,6 +417,11 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return true;
     }
 
+    /// <summary>
+    /// Checks whether the held press of a key was consumed by a binding, so that a consumer can run a binding on the release.
+    /// </summary>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <returns><see langword="true"/> while the consumed press is held.</returns>
     public bool WasConsumed(uint key)
     {
         for (var i = 0; i < _consumedCount; i++)
@@ -361,6 +463,12 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return false;
     }
 
+    /// <summary>
+    /// Delivers a key through the active grab and updates the xkb state. The release of a consumed key updates the state only.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <param name="state">The key state.</param>
     public void NotifyKey(uint timeMs, uint key, WlKeyboard.KeyState state) =>
         _ = TryNotifyKey(timeMs, key, state == WlKeyboard.KeyState.Pressed);
 
@@ -388,9 +496,19 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <summary>
+    /// Tracks a key that a compositor binding took and updates the modifiers, with no delivery. The release of a press that the client saw is delivered.
+    /// </summary>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> for a press.</param>
     public void NotifyKeyConsumed(uint key, bool pressed) =>
         NotifyKeyConsumed(key, pressed ? WlKeyboard.KeyState.Pressed : WlKeyboard.KeyState.Released);
 
+    /// <summary>
+    /// Tracks a key that a compositor binding took and updates the modifiers, with no delivery. At most 16 consumed presses are remembered.
+    /// </summary>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <param name="state">The key state. A release of a press that the client saw is delivered.</param>
     public void NotifyKeyConsumed(uint key, WlKeyboard.KeyState state)
     {
         if (state == WlKeyboard.KeyState.Pressed)
@@ -412,6 +530,13 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         UpdateKeyState(key, state);
     }
 
+    /// <summary>
+    /// Sets the modifier state of the active device from an outside source, for example a nested parent, and delivers it when it changed.
+    /// </summary>
+    /// <param name="depressed">The depressed modifier mask.</param>
+    /// <param name="latched">The latched modifier mask.</param>
+    /// <param name="locked">The locked modifier mask.</param>
+    /// <param name="group">The effective layout index.</param>
     public void NotifyModifiers(uint depressed, uint latched, uint locked, uint group)
     {
         _active.State?.UpdateMask(depressed, latched, locked, 0, 0, group);
@@ -419,10 +544,21 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         DeliverModifiers(_active.Modifiers);
     }
 
+    /// <summary>
+    /// Gets the keysym that a key produces in the current state, with the modifiers applied.
+    /// </summary>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <returns>The keysym, or the default value when there is no compiled keymap or the key produces more than one keysym.</returns>
     public XkbKeysym KeysymFor(uint key) => State?.GetKeyOneSym(key + 8) ?? default;
 
+    /// <inheritdoc/>
     public uint KeysymForKeycode(uint keycode) => KeysymFor(keycode).Value;
 
+    /// <summary>
+    /// Gets the keysym of a key at level 1 in the effective layout, as if no modifier were held.
+    /// </summary>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <returns>The keysym, or the default value when there is no compiled keymap or the key has no keysym.</returns>
     public XkbKeysym RawKeysymFor(uint key)
     {
         if (Keymap is not { } keymap || State is not { } state)
@@ -435,6 +571,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return syms.Length > 0 ? syms[0] : default;
     }
 
+    /// <inheritdoc/>
     public bool TryKeycodeForKeysym(uint keysym, out uint keycode, out uint modifiers)
     {
         keycode = 0;
@@ -472,10 +609,19 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return false;
     }
 
+    /// <summary>
+    /// Gets or sets the callback that commits text that the keymap cannot type, for example through an input method.
+    /// </summary>
     public Func<string, bool>? CommitText { get; set; }
 
+    /// <summary>
+    /// Commits text through <see cref="CommitText"/>.
+    /// </summary>
+    /// <param name="text">The text to commit.</param>
+    /// <returns><see langword="false"/> when no callback is set or the callback refuses the text.</returns>
     public bool TryCommitText(ReadOnlySpan<char> text) => CommitText is { } commit && commit(text.ToString());
 
+    /// <inheritdoc/>
     public IDisposable? OverrideKeysyms(ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
     {
         if (Keymap is not { } current || keys.Length == 0)
@@ -501,6 +647,12 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return new KeymapOverrideScope(this, saved, savedModifiers);
     }
 
+    /// <summary>
+    /// Replaces the seat keymap with a <c>pc+us</c> keymap in which one key produces a keysym. Clients receive the new keymap.
+    /// </summary>
+    /// <param name="keycode">The Linux evdev keycode to change.</param>
+    /// <param name="keysym">The keysym that the key produces.</param>
+    /// <returns>A scope that restores the previous keymap and modifiers when disposed, or <see langword="null"/> when nothing changed.</returns>
     public IDisposable? OverrideKeymapForKeysym(uint keycode, uint keysym)
     {
         if (Keymap is not { } current)
@@ -543,12 +695,20 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return new KeymapOverrideScope(this, saved, savedModifiers);
     }
 
+    /// <summary>
+    /// Pushes a grab and enters it on the current focus. It receives every notify call until it ends or a newer grab starts.
+    /// </summary>
+    /// <param name="grab">The grab.</param>
     public void StartGrab(IKeyboardGrab grab)
     {
         _grabs.Add(grab);
         grab.Enter(Focus, CollectPressed());
     }
 
+    /// <summary>
+    /// Removes a grab. When it was the active grab, its <see cref="IKeyboardGrab.Cancel"/> runs. The focus is not entered again.
+    /// </summary>
+    /// <param name="grab">The grab. A grab that is not started is ignored.</param>
     public void EndGrab(IKeyboardGrab grab)
     {
         var wasActive = HasGrab && Grab == grab;
@@ -559,6 +719,11 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <summary>
+    /// Sends leave to the old focus, then enter and modifiers to the new one, and raises <see cref="FocusChanged"/>. The same focus again does nothing. It bypasses grabs.
+    /// </summary>
+    /// <param name="surface">The new focus, or <see langword="null"/>.</param>
+    /// <param name="pressedKeys">The evdev keycodes to list in <c>wl_keyboard.enter</c>.</param>
     public void SendEnter(Surface? surface, ReadOnlySpan<uint> pressedKeys)
     {
         if (Focus == surface)
@@ -597,6 +762,13 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         FocusChanged?.Invoke(surface);
     }
 
+    /// <summary>
+    /// Sends a key event to the focused client with a new serial. It bypasses grabs and does not update the xkb state.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The Linux evdev keycode.</param>
+    /// <param name="state">The key state.</param>
+    /// <returns>The serial, issued also when no client has focus.</returns>
     public uint SendKey(uint timeMs, uint key, WlKeyboard.KeyState state)
     {
         var serial = _seat.NextSerial(state == WlKeyboard.KeyState.Pressed ? SerialKind.KeyPress : SerialKind.KeyRelease);
@@ -611,6 +783,9 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return serial;
     }
 
+    /// <summary>
+    /// Sends the current <see cref="ModifierState"/> to the focused client. It bypasses grabs.
+    /// </summary>
     public void SendModifiers()
     {
         if (_seat.ClientOf(Focus) is { } client)
@@ -619,6 +794,7 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         }
     }
 
+    /// <inheritdoc/>
     public int TextFor(uint key, Span<char> into)
     {
         if (State is not { } state ||
@@ -659,6 +835,9 @@ public sealed class SeatKeyboard : Capabilities.IActiveKeymap, Capabilities.IKey
         return Encode(state.GetKeyUtf32(key + 8), into);
     }
 
+    /// <summary>
+    /// Frees every device keymap and state, the default keymap source and the compose state. The seat calls it on dispose.
+    /// </summary>
     public void Dispose()
     {
         foreach (var device in _devices)

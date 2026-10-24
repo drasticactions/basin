@@ -5,6 +5,10 @@ using Basin.Seat;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// The login flow of a greeter with no UI. It reads the users and the sessions, drives a <see cref="GreetdLogin"/>, applies the keyboard layouts and writes the memory.
+/// It reports each transition through <see cref="Stepped"/> and <see cref="Changed"/>. Every call must come from the loop thread.
+/// </summary>
 public sealed class GreeterFlow : IDisposable
 {
     private readonly GreetdClient _client;
@@ -29,6 +33,15 @@ public sealed class GreeterFlow : IDisposable
     private bool _disposed;
     private string _command = "";
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GreeterFlow"/> class. It reads nothing and reports nothing until <see cref="Start"/>.
+    /// </summary>
+    /// <param name="loop">The loop that receives the result of the systemd-homed read.</param>
+    /// <param name="client">The greetd connection. The flow does not own it.</param>
+    /// <param name="settings">The shared greeter settings.</param>
+    /// <param name="memory">The memory to read and to write after a session starts.</param>
+    /// <param name="keyboard">The seat keyboard that a layout choice sets, or <see langword="null"/>. With no keyboard, each layout fails.</param>
+    /// <param name="options">The texts, the root prefix and the extra environment, or <see langword="null"/> for the defaults.</param>
     public GreeterFlow(ICompositorEventLoop loop, GreetdClient client, GreeterSettings settings,
                        GreeterMemory memory, SeatKeyboard? keyboard, GreeterFlowOptions? options = null)
     {
@@ -47,40 +60,95 @@ public sealed class GreeterFlow : IDisposable
         _login.Changed += OnLoginChanged;
     }
 
+    /// <summary>
+    /// Gets the settings in use. <see cref="Reload"/> replaces them.
+    /// </summary>
     public GreeterSettings Settings => _settings;
 
+    /// <summary>
+    /// Gets the memory that the flow reads and writes.
+    /// </summary>
     public GreeterMemory Memory => _memory;
 
+    /// <summary>
+    /// Gets the listed users. It is empty before <see cref="Start"/>.
+    /// </summary>
     public IReadOnlyList<LoginUser> Users => _users;
 
+    /// <summary>
+    /// Gets the sessions to offer. It is empty before <see cref="Start"/>.
+    /// </summary>
     public IReadOnlyList<GreetdSession> Sessions => _sessions;
 
+    /// <summary>
+    /// Gets the screen that the program must show.
+    /// </summary>
     public GreeterPhase Phase { get; private set; } = GreeterPhase.Users;
 
+    /// <summary>
+    /// Gets the state of the greetd conversation under the flow.
+    /// </summary>
     public GreetdLoginState LoginState => _login.State;
 
+    /// <summary>
+    /// Gets the remembered user when that user is listed, or <see langword="null"/>. It is set when the user list shows.
+    /// </summary>
     public string? SuggestedUser { get; private set; }
 
+    /// <summary>
+    /// Gets the login name of the conversation, or <see langword="null"/> when no user is chosen.
+    /// </summary>
     public string? CurrentUser { get; private set; }
 
+    /// <summary>
+    /// Gets the name to show for <see cref="CurrentUser"/>, or <see langword="null"/>.
+    /// </summary>
     public string? CurrentDisplayName { get; private set; }
 
+    /// <summary>
+    /// Gets the text of the open prompt, local or from greetd, or <see langword="null"/> when no prompt is open.
+    /// </summary>
     public string? PromptText { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the open prompt wants a hidden answer.
+    /// </summary>
     public bool PromptSecret { get; private set; }
 
+    /// <summary>
+    /// Gets the info and error lines of the current conversation. The flow acknowledges each one.
+    /// </summary>
     public IReadOnlyList<string> Messages => _messages;
 
+    /// <summary>
+    /// Gets the error to show, or <see langword="null"/>.
+    /// </summary>
     public string? Error { get; private set; }
 
+    /// <summary>
+    /// Gets a value indicating whether <see cref="Error"/> stays until <see cref="Dismiss"/>. An authentication failure does not need a dismiss.
+    /// </summary>
     public bool ErrorNeedsDismiss { get; private set; }
 
+    /// <summary>
+    /// Gets the id of the selected session, or <see langword="null"/> when no session exists.
+    /// </summary>
     public string? SelectedSession { get; private set; }
 
+    /// <summary>
+    /// Gets the id of the keyboard layout in use, or <see langword="null"/> when the settings offer no layout.
+    /// </summary>
     public string? SelectedLayout { get; private set; }
 
+    /// <summary>
+    /// Gets the session that greetd accepted, or <see langword="null"/> before <see cref="GreeterPhase.Started"/>.
+    /// </summary>
     public GreetdSession? StartedSession => Phase == GreeterPhase.Started ? _chosen : null;
 
+    /// <summary>
+    /// Gets or sets the typed command. When <see cref="GreeterSettings.AllowCommand"/> is true and it is not blank, it runs instead of the selected session. A change raises <see cref="Changed"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public string Command
     {
         get => _command;
@@ -95,12 +163,24 @@ public sealed class GreeterFlow : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs after each step and after each change that the view shows.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Occurs for each transition, before <see cref="Changed"/>.
+    /// </summary>
     public event Action<GreeterStep>? Stepped;
 
+    /// <summary>
+    /// Occurs when the greetd connection closes before a session starts. The argument is the reason.
+    /// </summary>
     public event Action<string>? Closed;
 
+    /// <summary>
+    /// Reads the users and the sessions, applies the first layout, and starts the systemd-homed read when <see cref="GreeterFlowOptions.Homed"/> is true. Call it after the program subscribes.
+    /// </summary>
     public void Start()
     {
         ReadUsers();
@@ -113,6 +193,9 @@ public sealed class GreeterFlow : IDisposable
         ResetLayouts();
     }
 
+    /// <summary>
+    /// Shows the user list with the remembered user as the suggestion, and selects that user's session and layout. When the settings do not list users, it asks for a name.
+    /// </summary>
     public void ShowUsers()
     {
         if (!_settings.ListUsers)
@@ -138,6 +221,11 @@ public sealed class GreeterFlow : IDisposable
         }
     }
 
+    /// <summary>
+    /// Begins the login of a listed user at the local secret prompt. A conversation in progress is cancelled first. Nothing reaches greetd until <see cref="Answer"/>.
+    /// </summary>
+    /// <param name="user">The login name.</param>
+    /// <returns><see langword="false"/> when the user is not listed or the settings do not list users.</returns>
     public bool Choose(string user)
     {
         ArgumentNullException.ThrowIfNull(user);
@@ -150,12 +238,19 @@ public sealed class GreeterFlow : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Cancels a conversation in progress and asks for a user name.
+    /// </summary>
     public void ChooseOther()
     {
         EndConversation();
         AskName();
     }
 
+    /// <summary>
+    /// Begins the login of a typed user name at the local secret prompt. A blank name does nothing.
+    /// </summary>
+    /// <param name="name">The user name. Leading and trailing white space is removed.</param>
     public void EnterName(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -165,6 +260,11 @@ public sealed class GreeterFlow : IDisposable
         }
     }
 
+    /// <summary>
+    /// Answers the open prompt. At the local prompt it holds the text and opens the greetd conversation, then gives the text to greetd's first secret prompt.
+    /// </summary>
+    /// <param name="text">The answer. The flow clears its encoded copy after the send.</param>
+    /// <returns><see langword="false"/> when no prompt is open.</returns>
     public bool Answer(ReadOnlySpan<char> text)
     {
         if (_local)
@@ -211,6 +311,9 @@ public sealed class GreeterFlow : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Cancels the conversation, clears the error and shows the user list.
+    /// </summary>
     public void Cancel()
     {
         EndConversation();
@@ -219,6 +322,9 @@ public sealed class GreeterFlow : IDisposable
         ShowUsers();
     }
 
+    /// <summary>
+    /// Clears the error and shows the user list. It does not cancel a conversation.
+    /// </summary>
     public void Dismiss()
     {
         Error = null;
@@ -226,6 +332,12 @@ public sealed class GreeterFlow : IDisposable
         ShowUsers();
     }
 
+    /// <summary>
+    /// Selects a session. A choice by the user is kept over a remembered session. A choice not by the user falls back to the default, then to the first Wayland session.
+    /// </summary>
+    /// <param name="id">The session id, or <see langword="null"/> for the default when <paramref name="byUser"/> is false.</param>
+    /// <param name="byUser">Whether the person picked the session.</param>
+    /// <returns><see langword="false"/> when <paramref name="byUser"/> is true and no session has the id. Otherwise <see langword="true"/>.</returns>
     public bool SelectSession(string? id, bool byUser)
     {
         if (!byUser)
@@ -245,6 +357,12 @@ public sealed class GreeterFlow : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Compiles a keyboard layout and sets it on the seat keyboard. A choice by the user is kept over a remembered layout.
+    /// </summary>
+    /// <param name="id">The layout id, for example <c>us(intl)</c>. It does not have to be in <see cref="GreeterSettings.Layouts"/>.</param>
+    /// <param name="byUser">Whether the person picked the layout.</param>
+    /// <returns><see langword="false"/> when the layout does not compile or no keyboard is attached.</returns>
     public bool SelectLayout(string id, bool byUser)
     {
         ArgumentNullException.ThrowIfNull(id);
@@ -256,6 +374,10 @@ public sealed class GreeterFlow : IDisposable
         return ApplyLayout(id);
     }
 
+    /// <summary>
+    /// Replaces the settings and reads the users, the sessions and the layouts again. The user list shows again unless a conversation is in progress.
+    /// </summary>
+    /// <param name="settings">The new settings.</param>
     public void Reload(GreeterSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -269,9 +391,16 @@ public sealed class GreeterFlow : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gives the <c>XKB_DEFAULT_LAYOUT</c> and <c>XKB_DEFAULT_VARIANT</c> lines for the selected layout.
+    /// </summary>
+    /// <returns>The <c>NAME=value</c> lines, or none when no layout is selected.</returns>
     public IEnumerable<string> LayoutEnvironment() =>
         SelectedLayout is { } id ? KeymapNames.Parse(id).EnvironmentLines() : [];
 
+    /// <summary>
+    /// Clears a held answer, unsubscribes from the client and disposes the login. It does not dispose the client. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

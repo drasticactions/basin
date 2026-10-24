@@ -3,11 +3,20 @@ using Basin.Themes.MsStyles;
 
 namespace Basin.Frames.MsStyles;
 
+/// <summary>
+/// Replays an <see cref="MsStylesDrawList"/> on a Skia canvas.
+/// </summary>
 public static class MsStylesSkiaPainter
 {
     private static readonly SKSamplingOptions Nearest = new(SKFilterMode.Nearest);
     private static readonly SKSamplingOptions Linear = new(SKFilterMode.Linear);
 
+    /// <summary>
+    /// Draws every operation of a draw list. The canvas must map one unit to one device pixel.
+    /// </summary>
+    /// <param name="canvas">The canvas to draw on.</param>
+    /// <param name="list">The operations to draw.</param>
+    /// <param name="resources">The Skia objects for the images, shaders, icons and text.</param>
     public static void Paint(SKCanvas canvas, MsStylesDrawList list, MsStylesResources resources)
     {
         ArgumentNullException.ThrowIfNull(canvas);

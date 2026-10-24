@@ -4,8 +4,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the gamescope limiter global. It tells each client whether one of its surfaces has a frame-rate cap.
+/// </summary>
 public sealed class GamescopeLimiterManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
@@ -14,6 +20,13 @@ public sealed class GamescopeLimiterManager : IDisposable
     private readonly List<GamescopeLimiterResource> _resources = [];
     private readonly Dictionary<GamescopeLimiterResource, uint> _sent = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GamescopeLimiterManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="compositor">The compositor global whose surfaces it scans.</param>
+    /// <param name="limits">The caps to report.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public GamescopeLimiterManager(WlServerDisplay display, CompositorGlobal compositor, IFrameLimits limits)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -26,6 +39,9 @@ public sealed class GamescopeLimiterManager : IDisposable
         _global = display.CreateGlobal(GamescopeLimiter.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Stops following the caps and surfaces, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         _limits.Changed -= OnChanged;

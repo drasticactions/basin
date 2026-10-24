@@ -3,14 +3,25 @@ using static Basin.Greetd.GreetdLog;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// Asks systemd-homed for the UIDs of its users over the system bus.
+/// </summary>
 public static class HomedUsers
 {
+    /// <summary>The bus name of systemd-homed.</summary>
     public const string ServiceName = "org.freedesktop.home1";
 
+    /// <summary>The object path of the homed manager.</summary>
     public const string ManagerPath = "/org/freedesktop/home1";
 
+    /// <summary>The interface that has the <c>ListHomes</c> method.</summary>
     public const string ManagerInterface = "org.freedesktop.home1.Manager";
 
+    /// <summary>
+    /// Calls <c>ListHomes</c> on a new connection and closes it again. A failure does not throw. It gives an empty set and a reason.
+    /// </summary>
+    /// <param name="systemBusAddress">The system bus address, or <see langword="null"/> to use <c>DBUS_SYSTEM_BUS_ADDRESS</c> or the default system bus.</param>
+    /// <returns>The UIDs, or an empty set and the reason when homed is not reachable.</returns>
     public static async Task<HomedUids> ListAsync(string? systemBusAddress = null)
     {
         var address = systemBusAddress

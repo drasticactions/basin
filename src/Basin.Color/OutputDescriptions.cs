@@ -2,8 +2,16 @@ using Basin.Capabilities;
 
 namespace Basin.Color;
 
+/// <summary>
+/// Builds the image descriptions and HDR metadata of an output from its colorimetry.
+/// </summary>
 public static class OutputDescriptions
 {
+    /// <summary>
+    /// Builds an SDR description with a 2.2 gamma and the given primaries.
+    /// </summary>
+    /// <param name="chromaticities">The CIE 1931 xy coordinates of the primaries and white point, or <see langword="null"/> for the sRGB default.</param>
+    /// <returns>The description. It is <see cref="ImageDescription.SdrDefault"/> when no primaries are given.</returns>
     public static ImageDescription Sdr(
         (double Rx, double Ry, double Gx, double Gy, double Bx, double By, double Wx, double Wy)? chromaticities)
     {
@@ -23,6 +31,12 @@ public static class OutputDescriptions
         };
     }
 
+    /// <summary>
+    /// Builds a BT.2020 PQ description with the given luminances and a 203 nit reference white.
+    /// </summary>
+    /// <param name="maxLuminance">The peak in nits. 0 or less means 1000.</param>
+    /// <param name="minLuminance">The black level in nits. 0 or less means 0.</param>
+    /// <returns>A new description.</returns>
     public static ImageDescription Hdr10(double maxLuminance, double minLuminance)
     {
         var max = maxLuminance > 0 ? (uint)maxLuminance : 1000u;
@@ -35,6 +49,12 @@ public static class OutputDescriptions
         };
     }
 
+    /// <summary>
+    /// Builds the PQ static metadata infoframe for an HDR output description.
+    /// </summary>
+    /// <param name="description">The HDR description. Its luminances, MaxCLL and MaxFALL fill the light levels.</param>
+    /// <param name="displayChromaticities">The CIE 1931 xy coordinates of the primaries and white point of the display, or <see langword="null"/> for BT.2020.</param>
+    /// <returns>The metadata in infoframe units.</returns>
     public static HdrStaticMetadata HdrMetadataFor(
         ImageDescription description,
         (double Rx, double Ry, double Gx, double Gy, double Bx, double By, double Wx, double Wy)? displayChromaticities)

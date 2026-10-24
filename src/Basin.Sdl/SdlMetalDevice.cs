@@ -5,6 +5,10 @@ using static Basin.Sdl.SdlLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// The render device for the <see cref="SdlRenderDevices.Metal"/> name. It uses the system default Metal device and one command queue.
+/// It can create leases on macOS only.
+/// </summary>
 public sealed class SdlMetalDevice : ISdlRenderDevice
 {
     private nint _device;
@@ -13,18 +17,29 @@ public sealed class SdlMetalDevice : ISdlRenderDevice
     private GRContext? _context;
     private bool _disposed;
 
+    /// <inheritdoc/>
     public string Name => SdlRenderDevices.Metal;
 
+    /// <inheritdoc/>
     public SDL.WindowFlags WindowFlags => SDL.WindowFlags.Metal;
 
+    /// <inheritdoc/>
     public GRContext? Context => _context;
 
+    /// <inheritdoc/>
     public nint EglDisplay => 0;
 
     internal nint Device => _device;
 
     internal nint Queue => _queue;
 
+    /// <summary>
+    /// Creates a Metal lease for a window. The first call creates the Metal device, the queue and the Skia context.
+    /// </summary>
+    /// <param name="window">A window that was created with <see cref="WindowFlags"/>.</param>
+    /// <returns>A new lease that the caller owns and must dispose before the window.</returns>
+    /// <exception cref="PlatformNotSupportedException">The operating system is not macOS.</exception>
+    /// <exception cref="InvalidOperationException">Metal or Skia cannot create the device or the context.</exception>
     public ISdlRenderLease CreateLease(SdlWindow window)
     {
         ArgumentNullException.ThrowIfNull(window);
@@ -58,6 +73,7 @@ public sealed class SdlMetalDevice : ISdlRenderDevice
         Log.Info($"Metal lease on the system default device");
     }
 
+    /// <inheritdoc/>
     public bool TryRecover()
     {
         if (_disposed || _context is not { IsAbandoned: true })
@@ -94,6 +110,9 @@ public sealed class SdlMetalDevice : ISdlRenderDevice
         }
     }
 
+    /// <summary>
+    /// Releases the Skia context, the queue and the Metal device. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -5,8 +5,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwp_text_input_manager_v3</c> global and connects the enabled text input of the focused client to an <see cref="ITextInputMethod"/>. The consumer moves the focus through <see cref="NotifyFocus"/>.
+/// </summary>
 public sealed class TextInputManager : IDisposable, ITextInputFocus
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int TextInputVersion = 1;
 
     private readonly WlGlobal _textInputGlobal;
@@ -15,6 +21,12 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
     private readonly List<TextInput> _textInputs = [];
     private Surface? _focus;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TextInputManager"/> class and creates the global. With a seat, it forwards modifier changes to the input method and claims the keyboard text commit hook when it is free.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="seat">The seat to follow, or <see langword="null"/>.</param>
+    /// <param name="method">The input method that serves text input. When it is <see langword="null"/>, text inputs get only text from <see cref="TryCommitString"/>.</param>
     public TextInputManager(WlServerDisplay display, Seat.Seat? seat, ITextInputMethod? method)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -37,12 +49,24 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
         }
     }
 
+    /// <summary>
+    /// Occurs when the focused client enables its text input, or when the input method becomes available while it is enabled.
+    /// </summary>
     public event Action<Surface>? TextInputActivated;
 
+    /// <summary>
+    /// Occurs when the active text input state ends, because the client disabled it or the input method became unavailable.
+    /// </summary>
     public event Action? TextInputDeactivated;
 
+    /// <summary>
+    /// Occurs when the input method commits text while no text input is active, so that the consumer can deliver it in a different way.
+    /// </summary>
     public event Action<string>? CommitStringUnclaimed;
 
+    /// <summary>
+    /// Stops following the seat and the input method, releases the keyboard text commit hook when it holds it, and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_seat is { } withSeat)
@@ -66,10 +90,15 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
         _textInputGlobal.Dispose();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the input method grabs the keyboard, so that key events go to <see cref="ForwardKey"/>.
+    /// </summary>
     public bool HasKeyboardGrab => _method?.HasKeyboardGrab ?? false;
 
+    /// <inheritdoc/>
     public bool HasActiveTextInput => ActiveTextInput() is not null;
 
+    /// <inheritdoc/>
     public bool TryCommitString(string text)
     {
         ArgumentNullException.ThrowIfNull(text);
@@ -83,6 +112,12 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
         return true;
     }
 
+    /// <summary>
+    /// Sends a key event to the keyboard grab of the input method. It does nothing without an input method or a grab.
+    /// </summary>
+    /// <param name="timeMs">The event time in milliseconds.</param>
+    /// <param name="key">The evdev keycode.</param>
+    /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
     public void ForwardKey(uint timeMs, uint key, bool pressed)
     {
         _method?.ForwardKey(timeMs, key, pressed);
@@ -117,6 +152,7 @@ public sealed class TextInputManager : IDisposable, ITextInputFocus
 
     private void OnMethodDone() => ActiveTextInput()?.ApplyDone();
 
+    /// <inheritdoc/>
     public void NotifyFocus(Surface? surface)
     {
         if (_focus == surface)

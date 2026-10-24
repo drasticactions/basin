@@ -2,6 +2,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Freedesktop;
 
+/// <summary>
+/// One icon theme, read from its <c>index.theme</c>. A theme in several data directories is one theme over all of them.
+/// </summary>
 public sealed class IconTheme
 {
     private static readonly BasinLogger Log = BasinLog.For("freedesktop");
@@ -15,16 +18,39 @@ public sealed class IconTheme
         Directories = directories;
     }
 
+    /// <summary>
+    /// Gets the theme directory name, for example <c>hicolor</c>.
+    /// </summary>
     public string Name { get; }
 
+    /// <summary>
+    /// Gets each existing <c>icons/NAME</c> directory, in the order of the data directories. It is never empty.
+    /// </summary>
     public IReadOnlyList<string> BaseDirectories { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether an <c>index.theme</c> with an <c>[Icon Theme]</c> group was read. Without one, lookup walks the fixed layout.
+    /// </summary>
     public bool HasIndex { get; }
 
+    /// <summary>
+    /// Gets the theme names in <c>Inherits</c>, in order. It is empty when the theme has no index.
+    /// </summary>
     public IReadOnlyList<string> Inherits { get; }
 
+    /// <summary>
+    /// Gets the directories from <c>Directories</c> and <c>ScaledDirectories</c> that exist in at least one base directory and have a valid size.
+    /// </summary>
     public IReadOnlyList<IconThemeDirectory> Directories { get; }
 
+    /// <summary>
+    /// Reads a theme from the <c>icons</c> directory of each data directory. The first <c>index.theme</c> found is the one that is read.
+    /// </summary>
+    /// <param name="name">The theme directory name.</param>
+    /// <param name="dataDirectories">The data directories in order of importance.</param>
+    /// <returns>The theme, or <see langword="null"/> when no data directory has the theme.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is null or empty.</exception>
+    /// <exception cref="ArgumentNullException"><paramref name="dataDirectories"/> is <see langword="null"/>.</exception>
     public static IconTheme? Load(string name, IReadOnlyList<string> dataDirectories)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);

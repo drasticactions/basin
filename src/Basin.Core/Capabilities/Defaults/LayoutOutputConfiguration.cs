@@ -1,5 +1,8 @@
 namespace Basin.Capabilities.Defaults;
 
+/// <summary>
+/// Applies output configurations through output commits and the output layout. A disabled output leaves the layout and returns to its last position when it is enabled again.
+/// </summary>
 public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposable
 {
     private const OutputConfigurationFeatures DrivableMask =
@@ -22,14 +25,22 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
 
     private sealed record Parked(Point Position, Action OnDestroyed);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="LayoutOutputConfiguration"/> class.
+    /// </summary>
+    /// <param name="layout">The layout that holds the enabled outputs.</param>
     public LayoutOutputConfiguration(OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(layout);
         _layout = layout;
     }
 
+    /// <inheritdoc/>
     public event Action<IReadOnlyList<OutputConfigurationEntry>>? Applied;
 
+    /// <summary>
+    /// Gets or sets the orientation sensor that drives auto-rotation of internal panels, or <see langword="null"/> for none. Setting it applies the rotation policy again.
+    /// </summary>
     public IOrientationSource? Orientation
     {
         get => _orientation;
@@ -55,6 +66,9 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         }
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the device is in tablet mode. Outputs with the <see cref="OutputAutoRotatePolicy.InTabletMode"/> policy rotate only in tablet mode.
+    /// </summary>
     public bool TabletMode
     {
         get => _tabletMode;
@@ -68,6 +82,9 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         }
     }
 
+    /// <summary>
+    /// Detaches from the orientation sensor.
+    /// </summary>
     public void Dispose()
     {
         if (_orientation is { } sensor)
@@ -77,6 +94,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         }
     }
 
+    /// <inheritdoc/>
     public bool Test(IReadOnlyList<OutputConfigurationEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -93,6 +111,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         return true;
     }
 
+    /// <inheritdoc/>
     public bool Apply(IReadOnlyList<OutputConfigurationEntry> entries)
     {
         ArgumentNullException.ThrowIfNull(entries);
@@ -127,6 +146,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         return true;
     }
 
+    /// <inheritdoc/>
     public OutputConfigurationFeatures Supported(IOutput output)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -139,6 +159,7 @@ public sealed class LayoutOutputConfiguration : IOutputConfiguration, IDisposabl
         return features;
     }
 
+    /// <inheritdoc/>
     public bool TryRead(IOutput output, out OutputConfigurationEntry state)
     {
         ArgumentNullException.ThrowIfNull(output);

@@ -9,8 +9,15 @@ using static Basin.Sdl.SdlLog;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Bridges the guest <see cref="ISelectionStore"/> and the SDL clipboard in both directions. The primary selection goes both ways as text only.
+/// A guest selection is read ahead on worker threads, because the SDL data callback is synchronous.
+/// </summary>
 public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
 {
+    /// <summary>
+    /// The largest number of bytes that a read of one guest MIME type keeps.
+    /// </summary>
     public const int PrefetchLimit = 4 * 1024 * 1024;
 
     private static readonly string[] TextMimes = ["text/plain;charset=utf-8", "text/plain", "UTF8_STRING", "TEXT", "STRING"];
@@ -50,6 +57,12 @@ public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
         }
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SdlClipboard"/> class and adds it to the loop as an event sink.
+    /// </summary>
+    /// <param name="host">The host whose selection store the bridge follows.</param>
+    /// <param name="loop">The SDL loop that delivers the clipboard events and runs the posted results.</param>
+    /// <exception cref="InvalidOperationException">The host has no <see cref="ISelectionStore"/>.</exception>
     public SdlClipboard(BasinCompositorHost host, SdlLoop loop)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -64,12 +77,27 @@ public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
         loop.AddSink(this);
     }
 
+    /// <summary>
+    /// Gets or sets the longest time that a read of one guest MIME type can take. The default is 4 seconds.
+    /// </summary>
     public TimeSpan PrefetchTimeout { get; set; } = TimeSpan.FromSeconds(4);
 
+    /// <summary>
+    /// Gets or sets the longest time that the SDL data callback waits for a read. It then answers with no data. The default is 500 ms.
+    /// </summary>
     public TimeSpan CallbackWait { get; set; } = TimeSpan.FromMilliseconds(500);
 
+    /// <summary>
+    /// Gets a value indicating whether the host clipboard holds a guest selection that the bridge offered.
+    /// </summary>
     public bool OwnsHostClipboard => _offer is not null;
 
+    /// <summary>
+    /// Pulls the host clipboard into the guest on a clipboard update that the bridge did not cause.
+    /// Reads the host primary selection again on a focus gain and a middle button press.
+    /// </summary>
+    /// <param name="e">The SDL event.</param>
+    /// <returns><see langword="true"/> for a clipboard update, else <see langword="false"/>.</returns>
     public bool Handle(in SDL.Event e)
     {
         switch ((SDL.EventType)e.Type)
@@ -328,6 +356,9 @@ public sealed unsafe class SdlClipboard : ISdlEventSink, IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Stops following the store, leaves the loop, and clears the host clipboard when the bridge owns it. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

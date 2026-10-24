@@ -7,6 +7,9 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// The clipboard of one portal session. It sets and reads the compositor clipboard through <see cref="ISelectionStore"/>, and moves data through file descriptors.
+/// </summary>
 public sealed class PortalClipboard
 {
     private readonly PortalSession _session;
@@ -17,10 +20,19 @@ public sealed class PortalClipboard
 
     internal PortalClipboard(PortalSession session) => _session = session;
 
+    /// <summary>
+    /// Gets a value indicating whether the application called <c>RequestClipboard</c> before the session started.
+    /// </summary>
     public bool Requested { get; internal set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the start granted the clipboard. The session receives owner changes and transfers only when it is set.
+    /// </summary>
     public bool Enabled { get; internal set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the last selection that this session set is still the compositor clipboard.
+    /// </summary>
     public bool IsOwner => _store is { } store && _source is { } source && ReferenceEquals(store.Current(SelectionKind.Clipboard), source);
 
     internal void Attach(ISelectionStore store)
@@ -58,6 +70,11 @@ public sealed class PortalClipboard
         _store = null;
     }
 
+    /// <summary>
+    /// Makes this session the owner of the compositor clipboard. A paste from another client raises <c>SelectionTransfer</c> on the bus.
+    /// </summary>
+    /// <param name="mimeTypes">The MIME types that the session offers. The list is copied.</param>
+    /// <returns><see langword="false"/> when the clipboard is not attached or the store refuses the selection.</returns>
     public bool SetSelection(IReadOnlyList<string> mimeTypes)
     {
         if (_store is not { } store)
@@ -78,6 +95,12 @@ public sealed class PortalClipboard
         return true;
     }
 
+    /// <summary>
+    /// Gives the session the file descriptor of a pending transfer, so that it can write the data.
+    /// </summary>
+    /// <param name="serial">The serial from the <c>SelectionTransfer</c> signal.</param>
+    /// <returns>A duplicate of the reader's descriptor that the caller owns.</returns>
+    /// <exception cref="Tmds.DBus.Protocol.DBusErrorReplyException">The serial names no pending transfer, or the descriptor cannot be duplicated.</exception>
     public SafeHandle SelectionWrite(uint serial)
     {
         if (!_parked.TryGetValue(serial, out var fd))
@@ -94,6 +117,11 @@ public sealed class PortalClipboard
         return new SafeFileHandle(duplicate, ownsHandle: true);
     }
 
+    /// <summary>
+    /// Closes the descriptor of a pending transfer. An unknown serial is ignored.
+    /// </summary>
+    /// <param name="serial">The serial from the <c>SelectionTransfer</c> signal.</param>
+    /// <param name="success">The result that the session reports. The compositor does not use it.</param>
     public void SelectionWriteDone(uint serial, bool success)
     {
         _ = success;
@@ -103,6 +131,12 @@ public sealed class PortalClipboard
         }
     }
 
+    /// <summary>
+    /// Opens a pipe and asks the clipboard owner to write one MIME type into it. With no owner, the pipe reaches end of file at once.
+    /// </summary>
+    /// <param name="mimeType">The MIME type to read.</param>
+    /// <returns>The read end of the pipe, which the caller owns.</returns>
+    /// <exception cref="Tmds.DBus.Protocol.DBusErrorReplyException">The pipe cannot be created.</exception>
     public SafeHandle SelectionRead(string mimeType)
     {
         int readEnd, writeEnd;

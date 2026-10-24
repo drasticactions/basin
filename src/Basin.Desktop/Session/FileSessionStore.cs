@@ -4,11 +4,19 @@ using Basin.Capabilities;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Keeps toplevel session state in a <c>sessions.tsv</c> file in the application directory under <c>XDG_STATE_HOME</c>. Each change rewrites the whole file at once.
+/// </summary>
 public sealed class FileSessionStore : ISessionStore
 {
     private readonly string _path;
     private readonly Dictionary<string, Dictionary<string, ToplevelSessionState>> _sessions = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="FileSessionStore"/> class. It creates the directory and loads the file when it exists.
+    /// </summary>
+    /// <param name="appName">The directory name under the state directory. Without <c>XDG_STATE_HOME</c>, the state directory is <c>~/.local/state</c>.</param>
+    /// <exception cref="ArgumentException"><paramref name="appName"/> is <see langword="null"/> or empty.</exception>
     public FileSessionStore(string appName)
     {
         ArgumentException.ThrowIfNullOrEmpty(appName);
@@ -24,6 +32,10 @@ public sealed class FileSessionStore : ISessionStore
         Load();
     }
 
+    /// <summary>
+    /// Creates a random session id, records it with no toplevels and saves the file.
+    /// </summary>
+    /// <returns>A new id of 32 hex digits. It is never <see langword="null"/>.</returns>
     public string? CreateSessionId()
     {
         var id = Guid.NewGuid().ToString("n");
@@ -32,8 +44,10 @@ public sealed class FileSessionStore : ISessionStore
         return id;
     }
 
+    /// <inheritdoc/>
     public bool IsValidSessionId(string sessionId) => _sessions.ContainsKey(sessionId);
 
+    /// <inheritdoc/>
     public bool TryRestore(
         string sessionId, string toplevelName, SessionRestoreReason reason, out ToplevelSessionState state)
     {
@@ -48,6 +62,12 @@ public sealed class FileSessionStore : ISessionStore
         return true;
     }
 
+    /// <summary>
+    /// Saves the state of one toplevel and rewrites the file. An unknown session id becomes a new session.
+    /// </summary>
+    /// <param name="sessionId">The session id.</param>
+    /// <param name="toplevelName">The name that the client gave the toplevel.</param>
+    /// <param name="state">The state to save.</param>
     public void Save(string sessionId, string toplevelName, in ToplevelSessionState state)
     {
         if (!_sessions.TryGetValue(sessionId, out var toplevels))
@@ -59,6 +79,7 @@ public sealed class FileSessionStore : ISessionStore
         Save();
     }
 
+    /// <inheritdoc/>
     public void ForgetToplevel(string sessionId, string toplevelName)
     {
         if (_sessions.TryGetValue(sessionId, out var toplevels) && toplevels.Remove(toplevelName))
@@ -67,6 +88,7 @@ public sealed class FileSessionStore : ISessionStore
         }
     }
 
+    /// <inheritdoc/>
     public void Forget(string sessionId)
     {
         if (_sessions.Remove(sessionId))

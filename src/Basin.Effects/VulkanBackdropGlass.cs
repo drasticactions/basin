@@ -5,6 +5,9 @@ using Silk.NET.Vulkan;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Implements the glass effect on the Vulkan renderer. It blurs through an owned <see cref="VulkanBackdropBlur"/> and draws the refraction in a composite or a fused pass.
+/// </summary>
 public sealed unsafe class VulkanBackdropGlass : IVulkanBackdropEffect, IBackdropGlass
 {
     private const int PushSize = 128;
@@ -39,6 +42,10 @@ public sealed unsafe class VulkanBackdropGlass : IVulkanBackdropEffect, IBackdro
     private GlassOptions _options = new();
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VulkanBackdropGlass"/> class. It creates the pipelines and an inner blur on the device.
+    /// </summary>
+    /// <param name="device">The device of the renderer that draws the glass. The caller keeps ownership.</param>
     public VulkanBackdropGlass(VulkanDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
@@ -125,6 +132,9 @@ public sealed unsafe class VulkanBackdropGlass : IVulkanBackdropEffect, IBackdro
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets or sets the glass options. Setting them gives the inner blur the strength and the kernel, with no saturation, contrast or noise.
+    /// </summary>
     public GlassOptions Options
     {
         get => _options;
@@ -142,20 +152,26 @@ public sealed unsafe class VulkanBackdropGlass : IVulkanBackdropEffect, IBackdro
         }
     }
 
+    /// <summary>
+    /// Gets the reach of the inner blur, in pixels.
+    /// </summary>
     public int ExpandSize => _blur.ExpandSize;
 
+    /// <inheritdoc/>
     public void SetShape(object key, in FrameBackdropShape shape)
     {
         ArgumentNullException.ThrowIfNull(key);
         _shapes[key] = shape;
     }
 
+    /// <inheritdoc/>
     public bool ForgetSurface(object key)
     {
         ArgumentNullException.ThrowIfNull(key);
         return _shapes.Remove(key);
     }
 
+    /// <inheritdoc/>
     public bool Record(in VulkanBackdropContext context, out VulkanBackdropResult result)
     {
         result = default;
@@ -595,6 +611,9 @@ public sealed unsafe class VulkanBackdropGlass : IVulkanBackdropEffect, IBackdro
         cache.Clear();
     }
 
+    /// <summary>
+    /// Waits for the device to go idle and destroys every Vulkan object that the glass created, the inner blur included. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

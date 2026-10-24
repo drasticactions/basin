@@ -5,6 +5,9 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// One client request to lock or confine the pointer on a surface. The constraint applies only while it is active, and <see cref="PointerConstraintDriver"/> decides when that is.
+/// </summary>
 public sealed class PointerConstraint
 {
     private readonly PointerConstraintsManager _owner;
@@ -51,24 +54,54 @@ public sealed class PointerConstraint
         surface.Destroyed += Dispose;
     }
 
+    /// <summary>
+    /// Gets the surface that the constraint applies to.
+    /// </summary>
     public Surface Surface { get; }
 
+    /// <summary>
+    /// Gets a value that tells a lock from a confinement.
+    /// </summary>
     public ConstraintKind Kind { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the constraint survives deactivation. A oneshot constraint is destroyed on its first deactivation.
+    /// </summary>
     public bool IsPersistent { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the constraint currently applies to the pointer.
+    /// </summary>
     public bool IsActive => _active;
 
+    /// <summary>
+    /// Gets the last committed cursor position hint of a lock, in surface-local logical coordinates. It is <see langword="null"/> until the client commits a hint.
+    /// </summary>
     public (double X, double Y)? CursorPositionHint { get; private set; }
 
+    /// <summary>
+    /// Occurs when an active constraint stops applying, including when the client or the surface destroys it.
+    /// </summary>
     public event Action? Deactivated;
 
+    /// <summary>
+    /// Tests a point against the constraint region. The region is the surface size, intersected with the input region and the region that the client set.
+    /// </summary>
+    /// <param name="surfaceX">The X coordinate in surface-local logical pixels.</param>
+    /// <param name="surfaceY">The Y coordinate in surface-local logical pixels.</param>
+    /// <returns><see langword="true"/> when the point is inside the region.</returns>
     public bool Contains(double surfaceX, double surfaceY)
     {
         var region = Effective();
         return surfaceX >= 0 && surfaceY >= 0 && region.Contains((int)Math.Floor(surfaceX), (int)Math.Floor(surfaceY));
     }
 
+    /// <summary>
+    /// Moves a point outside the constraint region to the nearest point inside it. It leaves the point unchanged when the point is inside or the region is empty.
+    /// </summary>
+    /// <param name="surfaceX">The X coordinate in surface-local logical pixels, changed in place.</param>
+    /// <param name="surfaceY">The Y coordinate in surface-local logical pixels, changed in place.</param>
+    /// <returns><see langword="true"/> when the point moved.</returns>
     public bool Clamp(ref double surfaceX, ref double surfaceY)
     {
         if (Contains(surfaceX, surfaceY))
@@ -101,6 +134,9 @@ public sealed class PointerConstraint
         return true;
     }
 
+    /// <summary>
+    /// Starts to apply the constraint and sends <c>locked</c> or <c>confined</c> to the client. It does nothing when the constraint is already active or destroyed.
+    /// </summary>
     public void Activate()
     {
         if (_active || _disposed)
@@ -122,6 +158,9 @@ public sealed class PointerConstraint
         _owner.NotifyActivated(this);
     }
 
+    /// <summary>
+    /// Stops the constraint, sends <c>unlocked</c> or <c>unconfined</c> and raises <see cref="Deactivated"/>. A oneshot constraint is then destroyed.
+    /// </summary>
     public void Deactivate()
     {
         if (!_active)

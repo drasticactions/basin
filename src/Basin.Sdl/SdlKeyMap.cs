@@ -3,6 +3,10 @@ using SDL3;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Maps SDL scancodes and mouse buttons to basin key codes and evdev codes.
+/// An SDL scancode is a USB HID usage, so the map is the same on every operating system.
+/// </summary>
 public static class SdlKeyMap
 {
     private static readonly (SDL.Scancode Scancode, HostKeyCode Code)[] Table =
@@ -170,17 +174,36 @@ public static class SdlKeyMap
 
     private static readonly HostKeyCode[] ByScancode = Build();
 
+    /// <summary>
+    /// Gets every scancode pair of the map. When two pairs share a scancode, <see cref="ToHostKey"/> uses the first.
+    /// </summary>
     public static IReadOnlyList<(SDL.Scancode Scancode, HostKeyCode Code)> Entries => Table;
 
+    /// <summary>
+    /// Maps an SDL scancode to a basin key code.
+    /// </summary>
+    /// <param name="scancode">The scancode of an SDL keyboard event.</param>
+    /// <returns>The key code, or <see cref="HostKeyCode.None"/> when the map has no entry.</returns>
     public static HostKeyCode ToHostKey(SDL.Scancode scancode)
     {
         var index = (int)scancode;
         return index > 0 && index < ByScancode.Length ? ByScancode[index] : HostKeyCode.None;
     }
 
+    /// <summary>
+    /// Maps an SDL scancode to an evdev key code.
+    /// </summary>
+    /// <param name="scancode">The scancode of an SDL keyboard event.</param>
+    /// <param name="evdev">The evdev code, or 0 when the method returns <see langword="false"/>.</param>
+    /// <returns><see langword="false"/> when the scancode has no evdev code.</returns>
     public static bool TryToEvdev(SDL.Scancode scancode, out uint evdev) =>
         HostKeyMap.TryToEvdev(ToHostKey(scancode), out evdev);
 
+    /// <summary>
+    /// Maps an SDL mouse button to an evdev button code. Buttons 1 to 5 are left, middle, right, side and extra.
+    /// </summary>
+    /// <param name="button">The SDL button number.</param>
+    /// <returns>The evdev code, or 0 for a button above 5.</returns>
     public static uint ButtonCode(byte button) => button switch
     {
         1 => InputCodes.BtnLeft,

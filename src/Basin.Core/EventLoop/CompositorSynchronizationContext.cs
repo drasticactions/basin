@@ -3,6 +3,9 @@ using Basin.Diagnostics;
 
 namespace Basin;
 
+/// <summary>
+/// A synchronization context that runs posted work on the compositor loop thread. Any thread can post, and a wake pipe on the loop starts the work.
+/// </summary>
 public sealed class CompositorSynchronizationContext : SynchronizationContext, IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -14,6 +17,10 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
     private readonly IEventSource _wake;
     private volatile bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CompositorSynchronizationContext"/> class. It must be made on the loop thread, which becomes the target thread. It throws <see cref="InvalidOperationException"/> when the wake pipe cannot be made.
+    /// </summary>
+    /// <param name="loop">The loop that watches the wake pipe.</param>
     public CompositorSynchronizationContext(ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -42,8 +49,14 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the caller runs on the loop thread.
+    /// </summary>
     public bool IsOnLoopThread => Environment.CurrentManagedThreadId == _loopThreadId;
 
+    /// <summary>
+    /// Gets the number of posted callbacks that did not run yet.
+    /// </summary>
     public int Pending
     {
         get
@@ -55,6 +68,11 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         }
     }
 
+    /// <summary>
+    /// Queues a callback for the loop thread. It can be called from any thread. A post after <see cref="Dispose"/> is ignored, and an exception from the callback is logged.
+    /// </summary>
+    /// <param name="d">The callback.</param>
+    /// <param name="state">The argument for the callback.</param>
     public override void Post(SendOrPostCallback d, object? state)
     {
         ArgumentNullException.ThrowIfNull(d);
@@ -75,6 +93,11 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         }
     }
 
+    /// <summary>
+    /// Runs a callback now on the loop thread. It throws <see cref="InvalidOperationException"/> from another thread, because a block on the compositor can deadlock.
+    /// </summary>
+    /// <param name="d">The callback.</param>
+    /// <param name="state">The argument for the callback.</param>
     public override void Send(SendOrPostCallback d, object? state)
     {
         ArgumentNullException.ThrowIfNull(d);
@@ -87,8 +110,15 @@ public sealed class CompositorSynchronizationContext : SynchronizationContext, I
         Run(d, state);
     }
 
+    /// <summary>
+    /// Gets this context, because all copies share one queue.
+    /// </summary>
+    /// <returns>This instance.</returns>
     public override SynchronizationContext CreateCopy() => this;
 
+    /// <summary>
+    /// Drops the queued callbacks, stops the wake watch and closes the pipe. It must be called on the loop thread.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

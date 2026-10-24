@@ -2,6 +2,11 @@ using Basin.Capabilities;
 
 namespace Basin.Frames.Metacity;
 
+/// <summary>
+/// The window state and pointer state that the painter maps onto marco's frame type, frame state, focus and button states.
+/// </summary>
+/// <param name="State">The window state.</param>
+/// <param name="Interaction">The pointer state that selects the pressed and prelight buttons.</param>
 public readonly record struct MetacityFrameInput(FrameState State, FrameInteraction Interaction)
 {
     internal MetacityFrameType Type => State.Kind switch

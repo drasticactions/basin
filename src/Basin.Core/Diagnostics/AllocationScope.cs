@@ -3,6 +3,9 @@ using System.Runtime.CompilerServices;
 
 namespace Basin.Diagnostics;
 
+/// <summary>
+/// Asserts at run time that a code region allocates no managed memory on the current thread. The calls exist only in builds that define <c>BASIN_COUNTERS</c>.
+/// </summary>
 public static class AllocationScope
 {
     private const int MaxDepth = 8;
@@ -28,8 +31,17 @@ public static class AllocationScope
     private static int _paused;
     private static bool _thrown;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether new scopes measure. A scope that begins while it is false never fails.
+    /// </summary>
     public static bool Enabled { get; set; } = true;
 
+    /// <summary>
+    /// Opens a measured region. Scopes can nest up to 8 deep, and up to 64 region names can exist.
+    /// </summary>
+    /// <param name="warmup">The number of first entries to the region that are not measured.</param>
+    /// <param name="region">The region name. It must be a string literal, because names compare by reference.</param>
+    /// <param name="forgiving">A value that permits the region to fail 8 times before it throws.</param>
     [Conditional("BASIN_COUNTERS")]
     public static void Begin(int warmup = 0, [CallerMemberName] string region = "", bool forgiving = false)
     {
@@ -53,6 +65,10 @@ public static class AllocationScope
         _depth++;
     }
 
+    /// <summary>
+    /// Closes the innermost region. It throws <see cref="InvalidOperationException"/> when the region allocated more than the allowance, once per outermost scope.
+    /// </summary>
+    /// <param name="allowance">The number of bytes that the region can allocate.</param>
     [Conditional("BASIN_COUNTERS")]
     public static void End(long allowance = 0)
     {
@@ -88,6 +104,9 @@ public static class AllocationScope
         }
     }
 
+    /// <summary>
+    /// Stops the measurement of the open regions, for example around a consumer callback. Pauses can nest up to 8 deep.
+    /// </summary>
     [Conditional("BASIN_COUNTERS")]
     public static void Pause()
     {
@@ -101,6 +120,9 @@ public static class AllocationScope
         _paused++;
     }
 
+    /// <summary>
+    /// Restarts the measurement that the matching <see cref="Pause"/> stopped. The bytes allocated during the pause do not count.
+    /// </summary>
     [Conditional("BASIN_COUNTERS")]
     public static void Resume()
     {
@@ -121,6 +143,9 @@ public static class AllocationScope
         }
     }
 
+    /// <summary>
+    /// Closes all open scopes and pauses, and clears the entry and failure counts of every region.
+    /// </summary>
     public static void Reset()
     {
         _depth = 0;

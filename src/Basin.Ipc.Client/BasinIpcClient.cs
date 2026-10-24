@@ -10,6 +10,9 @@ using Microsoft.Win32.SafeHandles;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// A connection to a compositor's control socket. Calls can run in parallel from any thread. An error reply raises <see cref="IpcCallException"/>, and a failed connection raises <see cref="IOException"/>.
+/// </summary>
 public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
 {
     private static readonly JsonWriterOptions WriterOptions = new()
@@ -36,10 +39,21 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         _reader = Task.Run(ReadLoopAsync);
     }
 
+    /// <summary>
+    /// Gets the socket path that the client connected to.
+    /// </summary>
     public string Path { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the connection has not failed and is not disposed.
+    /// </summary>
     public bool IsConnected => _failure is null && !_closing.IsCancellationRequested;
 
+    /// <summary>
+    /// Chooses a socket path: the given path, then <c>BASIN_SOCKET</c>, then the one <c>basin-*.sock</c> file in <c>XDG_RUNTIME_DIR</c>.
+    /// </summary>
+    /// <param name="path">The path to use, or <see langword="null"/> to search.</param>
+    /// <returns>The path, or <see langword="null"/> when no socket or several sockets are found.</returns>
     public static string? ResolvePath(string? path = null)
     {
         if (!string.IsNullOrEmpty(path))
@@ -61,6 +75,11 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         return candidates.Length == 1 ? candidates[0] : null;
     }
 
+    /// <summary>
+    /// Lists the <c>basin-*.sock</c> files in a runtime directory.
+    /// </summary>
+    /// <param name="runtimeDirectory">The directory, or <see langword="null"/> for <c>XDG_RUNTIME_DIR</c>.</param>
+    /// <returns>The paths in ordinal order, or an empty array when the directory does not exist.</returns>
     public static string[] Candidates(string? runtimeDirectory = null)
     {
         runtimeDirectory ??= Environment.GetEnvironmentVariable("XDG_RUNTIME_DIR");
@@ -74,6 +93,13 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         return candidates;
     }
 
+    /// <summary>
+    /// Connects to a control socket. The connect is synchronous, and the task is complete when it returns.
+    /// </summary>
+    /// <param name="path">The socket path, or <see langword="null"/> to resolve it as <see cref="ResolvePath"/> does.</param>
+    /// <param name="cancellationToken">A token checked before the connect.</param>
+    /// <returns>The connected client.</returns>
+    /// <exception cref="IOException">No socket path is found, or the connect fails.</exception>
     public static Task<BasinIpcClient> ConnectAsync(string? path = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -98,6 +124,16 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         return Task.FromResult(new BasinIpcClient(socket, fd, resolved));
     }
 
+    /// <summary>
+    /// Calls a method and waits for its reply.
+    /// </summary>
+    /// <param name="method">The method name.</param>
+    /// <param name="writeParams">A callback that writes the params value, or <see langword="null"/> for no params.</param>
+    /// <param name="cancellationToken">A token that stops the wait for the reply. The compositor can still run the call.</param>
+    /// <returns>The result, which the caller must dispose to close its descriptors.</returns>
+    /// <exception cref="IpcCallException">The compositor answered with an error.</exception>
+    /// <exception cref="IOException">The connection failed.</exception>
+    /// <exception cref="ArgumentException">The request is larger than the request limit.</exception>
     public async Task<IpcResult> CallAsync(
         string method, Action<Utf8JsonWriter>? writeParams = null, CancellationToken cancellationToken = default)
     {
@@ -124,6 +160,15 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         }
     }
 
+    /// <summary>
+    /// Calls a method and reads its result before the result is disposed.
+    /// </summary>
+    /// <typeparam name="T">The type that the read returns.</typeparam>
+    /// <param name="method">The method name.</param>
+    /// <param name="writeParams">A callback that writes the params value, or <see langword="null"/> for no params.</param>
+    /// <param name="read">A function that reads the result. Descriptors that it does not take are closed after it returns.</param>
+    /// <param name="cancellationToken">A token that stops the wait for the reply.</param>
+    /// <returns>The value that <paramref name="read"/> returns.</returns>
     public async Task<T> CallAsync<T>(
         string method,
         Action<Utf8JsonWriter>? writeParams,
@@ -135,6 +180,13 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         return read(result);
     }
 
+    /// <summary>
+    /// Sends a request written as JSON text. The client replaces its <c>id</c> with one of its own.
+    /// </summary>
+    /// <param name="json">A request object with <c>method</c> and optional <c>params</c>.</param>
+    /// <param name="cancellationToken">A token that stops the wait for the reply.</param>
+    /// <returns>The result, which the caller must dispose.</returns>
+    /// <exception cref="ArgumentException">The text is not a valid request.</exception>
     public async Task<IpcResult> RawAsync(string json, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(json);
@@ -152,9 +204,22 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
             cancellationToken).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Subscribes to events when the enumeration starts, and yields the events with the given names.
+    /// </summary>
+    /// <param name="events">The event names.</param>
+    /// <param name="cancellationToken">A token that ends the enumeration.</param>
+    /// <returns>The events. The enumeration ends when the client is disposed, and throws when the connection fails.</returns>
     public IAsyncEnumerable<IpcEvent> SubscribeAsync(IReadOnlyList<string> events, CancellationToken cancellationToken = default) =>
         SubscribeAsync(events, null, cancellationToken);
 
+    /// <summary>
+    /// Subscribes to events when the enumeration starts, and yields the events with the given names. Events that arrive before the subscription reply are kept.
+    /// </summary>
+    /// <param name="events">The event names.</param>
+    /// <param name="subscribed">An action that runs after the compositor confirms the subscription, or <see langword="null"/>.</param>
+    /// <param name="cancellationToken">A token that ends the enumeration.</param>
+    /// <returns>The events. The enumeration ends when the client is disposed, and throws when the connection fails.</returns>
     public async IAsyncEnumerable<IpcEvent> SubscribeAsync(
         IReadOnlyList<string> events, Action? subscribed, [EnumeratorCancellation] CancellationToken cancellationToken = default)
     {
@@ -193,6 +258,9 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         }
     }
 
+    /// <summary>
+    /// Closes the connection. Pending calls fail with <see cref="IOException"/>, and subscriptions end.
+    /// </summary>
     public void Dispose()
     {
         if (_closing.IsCancellationRequested)
@@ -223,6 +291,10 @@ public sealed partial class BasinIpcClient : IAsyncDisposable, IDisposable
         _closing.Dispose();
     }
 
+    /// <summary>
+    /// Closes the connection, as <see cref="Dispose"/> does.
+    /// </summary>
+    /// <returns>A completed task.</returns>
     public ValueTask DisposeAsync()
     {
         Dispose();

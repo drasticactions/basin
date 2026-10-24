@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's stretch animation for maximize and restore. It holds the window in place until the client commits the new size, then maps the frame onto a rectangle that moves from the old box to the new one, with a cross-fade from a snapshot.
+/// </summary>
 public sealed class StretchEffect
 {
     private const string NodeName = "stretch";
@@ -23,8 +26,23 @@ public sealed class StretchEffect
     private Box _unsettled;
     private EffectTimeline _settle;
 
+    /// <summary>
+    /// Gets a value indicating whether the effect node is live.
+    /// </summary>
     public bool IsRunning => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Starts the hold phase when the state change is requested. It takes a snapshot of the window and keeps it drawn at its old position.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="frame">The frame box of the window, in node coordinates.</param>
+    /// <param name="from">The outer box that the window had before the move.</param>
+    /// <param name="current">The outer box that the window has after the move.</param>
+    /// <param name="originX">The horizontal scene origin of the window.</param>
+    /// <param name="originY">The vertical scene origin of the window.</param>
+    /// <param name="duration">The length of the animation, which also bounds the hold.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled or <paramref name="frame"/> is empty, and then nothing starts.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Capture(
         TransformStack stack, in Box frame, in Box from, in Box current, int originX, int originY,
         AnimationDuration duration)
@@ -52,6 +70,18 @@ public sealed class StretchEffect
         return true;
     }
 
+    /// <summary>
+    /// Starts the size phase when the client commits a new size. The frame maps onto a rectangle that moves from <paramref name="from"/> to <paramref name="to"/>, and the snapshot fades out.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="frame">The frame box of the window, in node coordinates.</param>
+    /// <param name="from">The scene box that the window had before the change.</param>
+    /// <param name="to">The scene box that the client committed.</param>
+    /// <param name="originX">The horizontal scene origin of the window.</param>
+    /// <param name="originY">The vertical scene origin of the window.</param>
+    /// <param name="duration">The length of the animation.</param>
+    /// <returns><see langword="false"/> when <paramref name="duration"/> is disabled, a box is empty, or the size does not change.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public bool Begin(
         TransformStack stack, in Box frame, in Box from, in Box to, int originX, int originY,
         AnimationDuration duration)
@@ -76,6 +106,15 @@ public sealed class StretchEffect
         return true;
     }
 
+    /// <summary>
+    /// Applies the pose for a tick against the current frame. At the end, it holds the last pose for up to two seconds while the client still shows its old size, and then removes the node and the snapshot.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="frame">The current frame box of the window, in node coordinates.</param>
+    /// <param name="originX">The horizontal scene origin of the window.</param>
+    /// <param name="originY">The vertical scene origin of the window.</param>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the animation or the hold runs.</returns>
     public bool Step(TransformStack stack, in Box frame, int originX, int originY, in FrameTick tick)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -113,6 +152,10 @@ public sealed class StretchEffect
         return false;
     }
 
+    /// <summary>
+    /// Destroys the snapshot and removes the transform node at once.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
     public void End(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -160,6 +203,9 @@ public sealed class StretchEffect
             RenderTransform.Scale(fitX, fitY));
     }
 
+    /// <summary>
+    /// Destroys the snapshot and its fade node, and keeps the transform node. A consumer calls it for a window that is destroyed during the animation.
+    /// </summary>
     public void Release() => ReleasePrevious();
 
     private void ReleasePrevious()

@@ -4,6 +4,10 @@ using static Basin.AppMenu.AppMenuLog;
 
 namespace Basin.AppMenu;
 
+/// <summary>
+/// One session bus connection that every menu reader and the registrar share. It connects on first use, off the compositor thread, and posts results back to the loop.
+/// A missing or silent bus makes the readers fail, and it is never an error.
+/// </summary>
 public sealed class AppMenuBus : IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -13,6 +17,12 @@ public sealed class AppMenuBus : IDisposable
     private DBusConnection? _connection;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="AppMenuBus"/> class. It does not connect yet.
+    /// </summary>
+    /// <param name="loop">The compositor loop that results are posted to.</param>
+    /// <param name="address">The D-Bus address, or <see langword="null"/> for the session bus of the environment.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
     public AppMenuBus(ICompositorEventLoop loop, string? address = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -21,6 +31,9 @@ public sealed class AppMenuBus : IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a bus address is known. When it is <see langword="false"/>, every reader fails.
+    /// </summary>
     public bool HasAddress => _address is not null;
 
     internal Task<DBusConnection?> ConnectionAsync()
@@ -45,6 +58,9 @@ public sealed class AppMenuBus : IDisposable
         }, null);
     }
 
+    /// <summary>
+    /// Closes the connection and stops posting to the loop. Work posted before is dropped. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

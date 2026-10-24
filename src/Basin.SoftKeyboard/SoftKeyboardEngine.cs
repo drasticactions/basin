@@ -2,10 +2,23 @@ using System.Numerics;
 
 namespace Basin.SoftKeyboard;
 
+/// <summary>
+/// Turns touches in keyboard coordinates into keys: presses, slides, rollover, repeats, long-press lists and traces. It draws nothing.
+/// Every method that depends on time takes the time as an argument. A press, a move, a release and a repeat tick allocate nothing.
+/// </summary>
 public sealed class SoftKeyboardEngine
 {
+    /// <summary>
+    /// The largest number of touches that the engine tracks at the same time. A further touch is ignored.
+    /// </summary>
     public const int MaxTouches = 10;
+    /// <summary>
+    /// The cell index that means no cell.
+    /// </summary>
     public const int NoCell = -1;
+    /// <summary>
+    /// The largest number of points in a trace path. Later points are dropped.
+    /// </summary>
     public const int TraceCapacity = 1024;
 
     private readonly TouchSlot[] _touches = new TouchSlot[MaxTouches];
@@ -27,6 +40,12 @@ public sealed class SoftKeyboardEngine
     private KeyPageSet? _pages;
     private string _page = KeyPageSet.MainPage;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SoftKeyboardEngine"/> class. Call <see cref="Layout"/> before the first touch.
+    /// </summary>
+    /// <param name="grid">The grid to show.</param>
+    /// <param name="timing">The timing constants, or <see langword="null"/> for <see cref="KeyTiming.Default"/>.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="grid"/> is <see langword="null"/>.</exception>
     public SoftKeyboardEngine(KeyGrid grid, KeyTiming? timing = null)
     {
         ArgumentNullException.ThrowIfNull(grid);
@@ -35,6 +54,10 @@ public sealed class SoftKeyboardEngine
         _hit = new KeyHitTester(grid);
     }
 
+    /// <summary>
+    /// Gets or sets the timing constants of the engine and its state. A change takes effect on the next press and the next Shift tap.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public KeyTiming Timing
     {
         get => _timing;
@@ -46,10 +69,20 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Gets the shift and symbol state machine.
+    /// </summary>
     public KeyboardState State { get; }
 
+    /// <summary>
+    /// Gets the hit tester of the current grid and layout.
+    /// </summary>
     public KeyHitTester HitTester => _hit;
 
+    /// <summary>
+    /// Gets or sets the grid that shows now. Setting it clears <see cref="Pages"/>, closes a long-press list and stops a repeat.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public KeyGrid Grid
     {
         get => _hit.Grid;
@@ -62,6 +95,10 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Gets or sets the page set, or <see langword="null"/> when the grid has no pages. Setting it shows the main page and raises <see cref="PageChanged"/>.
+    /// </summary>
+    /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
     public KeyPageSet? Pages
     {
         get => _pages;
@@ -75,38 +112,89 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Gets the name of the page that shows now. It is <see cref="KeyPageSet.MainPage"/> without pages.
+    /// </summary>
     public string Page => _page;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the hit test applies the row-edge correction between rows.
+    /// </summary>
     public bool Diamonds { get; set; } = true;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether every long press waits <see cref="KeyTiming.SlowLongPressMs"/>. A consumer turns it on with trace typing.
+    /// </summary>
     public bool SlowLongPress { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether a lone touch that starts on a letter and travels past <see cref="KeyTiming.TraceThreshold"/> becomes a trace.
+    /// </summary>
     public bool TraceEnabled { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether a trace is in progress.
+    /// </summary>
     public bool IsTracing => _traceSlot >= 0;
 
+    /// <summary>
+    /// Gets the points of the current or the last trace, in keyboard coordinates. Points closer than 2 pixels to the previous one are skipped.
+    /// </summary>
     public ReadOnlySpan<Vector2> TracePath => _trace.AsSpan(0, _traceCount);
 
+    /// <summary>
+    /// Gets the keyboard width of the last layout, in logical pixels.
+    /// </summary>
     public float Width => _hit.Width;
 
+    /// <summary>
+    /// Gets the height of the key rows of the last layout, in logical pixels.
+    /// </summary>
     public float KeymapHeight => _hit.Height;
 
+    /// <summary>
+    /// Gets the padding above the key rows of the last layout. A touch in it has a negative y.
+    /// </summary>
     public float Padding => _padding;
 
+    /// <summary>
+    /// Gets the rect of each cell of the current grid, by cell index.
+    /// </summary>
     public ReadOnlySpan<KeyRect> Rects => _hit.Rects;
 
+    /// <summary>
+    /// Gets a value indicating whether a long-press list is open.
+    /// </summary>
     public bool IsLongPressOpen => _longPress is not null;
 
+    /// <summary>
+    /// Gets the cell whose long-press list is open, or <see cref="NoCell"/>.
+    /// </summary>
     public int LongPressCell => _longPressCell;
 
+    /// <summary>
+    /// Gets the entries of the open long-press list, or <see langword="null"/>.
+    /// </summary>
     public IReadOnlyList<KeyCap>? LongPressEntries => _longPress;
 
+    /// <summary>
+    /// Gets the geometry of the open long-press list. The value is stale when no list is open.
+    /// </summary>
     public LongPressFrame LongPressGeometry => _longPressFrame;
 
+    /// <summary>
+    /// Gets the highlighted entry of the open list, or <see cref="LongPressFrame.Nothing"/>.
+    /// </summary>
     public int LongPressHighlightIndex => _longPressHighlight;
 
+    /// <summary>
+    /// Gets the time in milliseconds when <see cref="Tick"/> has work, or <see cref="long.MaxValue"/> for none.
+    /// </summary>
     public long NextDeadline => _repeatDeadline;
 
+    /// <summary>
+    /// Gets a value indicating whether any touch is down.
+    /// </summary>
     public bool HasTouches
     {
         get
@@ -123,44 +211,107 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Occurs when a key shows pressed, with its cell index.
+    /// </summary>
     public event Action<int>? Pressed;
 
+    /// <summary>
+    /// Occurs when a key stops showing pressed, with its cell index.
+    /// </summary>
     public event Action<int>? Released;
 
+    /// <summary>
+    /// Occurs for each key that produces input: on release, on rollover, on a repeat and on a long-press choice.
+    /// </summary>
     public event Action<TypedKey>? Typed;
 
+    /// <summary>
+    /// Occurs on each press of a key or a list entry, and on each repeat, so a consumer can play the key sound.
+    /// </summary>
     public event Action<KeyCap>? Clicked;
 
+    /// <summary>
+    /// Occurs when a long-press list opens, with the cell and the entries.
+    /// </summary>
     public event Action<int, IReadOnlyList<KeyCap>>? LongPressOpened;
 
+    /// <summary>
+    /// Occurs when the highlighted entry of the open list changes, with the entry index or <see cref="LongPressFrame.Nothing"/>.
+    /// </summary>
     public event Action<int>? LongPressHighlight;
 
+    /// <summary>
+    /// Occurs when an entry of the list is chosen, before the entry is handled as a key.
+    /// </summary>
     public event Action<KeyCap>? LongPressChosen;
 
+    /// <summary>
+    /// Occurs when the open long-press list closes.
+    /// </summary>
     public event Action? LongPressClosed;
 
+    /// <summary>
+    /// Occurs when the Hide key is typed. The consumer hides the keyboard.
+    /// </summary>
     public event Action? HideRequested;
 
+    /// <summary>
+    /// Occurs when a size key is typed, with the size.
+    /// </summary>
     public event Action<KeyboardSize>? SizeChosen;
 
+    /// <summary>
+    /// Occurs when the language key is typed.
+    /// </summary>
     public event Action? LanguageNext;
 
+    /// <summary>
+    /// Occurs when a language is chosen from the language key's list, with the language index.
+    /// </summary>
     public event Action<int>? LanguageChosen;
 
+    /// <summary>
+    /// Occurs when anything that a view draws can have changed.
+    /// </summary>
     public event Action? Invalidated;
 
+    /// <summary>
+    /// Occurs when a touch becomes a trace.
+    /// </summary>
     public event Action? TraceStarted;
 
+    /// <summary>
+    /// Occurs when the trace path gets new points.
+    /// </summary>
     public event Action? TraceUpdated;
 
+    /// <summary>
+    /// Occurs when the tracing touch lifts. <see cref="TracePath"/> then holds the whole path.
+    /// </summary>
     public event Action? TraceEnded;
 
+    /// <summary>
+    /// Occurs when <see cref="NextDeadline"/> can have changed.
+    /// </summary>
     public event Action? DeadlineChanged;
 
+    /// <summary>
+    /// Occurs when a different page shows, with its name.
+    /// </summary>
     public event Action<string>? PageChanged;
 
+    /// <summary>
+    /// Occurs when a shape key is typed, with the shape name, or with <see langword="null"/> for the next shape. The consumer swaps the grid.
+    /// </summary>
     public event Action<string?>? ShapeRequested;
 
+    /// <summary>
+    /// Lays the keyboard out at a size. It closes a long-press list and raises <see cref="Invalidated"/>.
+    /// </summary>
+    /// <param name="width">The keyboard width in logical pixels.</param>
+    /// <param name="keymapHeight">The height of the key rows in logical pixels.</param>
+    /// <param name="padding">The height of the padding above the key rows in logical pixels.</param>
     public void Layout(float width, float keymapHeight, float padding)
     {
         _padding = padding;
@@ -169,8 +320,18 @@ public sealed class SoftKeyboardEngine
         Invalidated?.Invoke();
     }
 
+    /// <summary>
+    /// Gives the cap that a cell shows now, after Shift and Symbol.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <returns>The cap, or <see langword="null"/> for an index out of range or a cell with no key.</returns>
     public KeyCap? CapAt(int cell) => cell >= 0 && cell < _hit.Grid.CellCount ? State.Resolve(_hit.Grid[cell]) : null;
 
+    /// <summary>
+    /// Tests whether a cell shows pressed now.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <returns><see langword="true"/> when a visible, handled touch is on the cell.</returns>
     public bool IsPressed(int cell)
     {
         foreach (ref readonly var touch in _touches.AsSpan())
@@ -184,6 +345,13 @@ public sealed class SoftKeyboardEngine
         return false;
     }
 
+    /// <summary>
+    /// Tests whether a touch at a point belongs to the keyboard. The grace band above the padding counts for a short time after a touch begins.
+    /// </summary>
+    /// <param name="x">The horizontal position in keyboard coordinates.</param>
+    /// <param name="y">The vertical position, from the top of the key rows.</param>
+    /// <param name="now">The time in milliseconds.</param>
+    /// <returns><see langword="true"/> inside the keyboard, and everywhere while a long-press list is open.</returns>
     public bool Accepts(float x, float y, long now)
     {
         if (IsLongPressOpen)
@@ -200,6 +368,13 @@ public sealed class SoftKeyboardEngine
         return y >= -_padding - grace;
     }
 
+    /// <summary>
+    /// Records a press. <see cref="Frame"/> or a motion of the same touch handles it. An eleventh touch is ignored.
+    /// </summary>
+    /// <param name="id">The touch id.</param>
+    /// <param name="x">The horizontal position in keyboard coordinates.</param>
+    /// <param name="y">The vertical position, from the top of the key rows.</param>
+    /// <param name="now">The time in milliseconds.</param>
     public void TouchDown(int id, float x, float y, long now)
     {
         var slot = FindSlot(id);
@@ -232,6 +407,13 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Moves a touch. A press moves to the key under the finger, and a trace collects the point. An unknown id is ignored.
+    /// </summary>
+    /// <param name="id">The touch id.</param>
+    /// <param name="x">The horizontal position in keyboard coordinates.</param>
+    /// <param name="y">The vertical position, from the top of the key rows.</param>
+    /// <param name="now">The time in milliseconds.</param>
     public void TouchMotion(int id, float x, float y, long now)
     {
         var slot = FindSlot(id);
@@ -265,6 +447,11 @@ public sealed class SoftKeyboardEngine
         Update(slot, x, y, now, newTouch: false);
     }
 
+    /// <summary>
+    /// Releases a touch. A key that was not sent or consumed is typed now. An unknown id is ignored.
+    /// </summary>
+    /// <param name="id">The touch id.</param>
+    /// <param name="now">The time in milliseconds.</param>
     public void TouchUp(int id, long now)
     {
         var slot = FindSlot(id);
@@ -299,6 +486,10 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Handles the recorded presses, after the releases and motions of the same input frame.
+    /// </summary>
+    /// <param name="now">The time in milliseconds.</param>
     public void Frame(long now)
     {
         for (var slot = 0; slot < _touches.Length; slot++)
@@ -310,6 +501,10 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Marks a touch consumed without sending its key, for example when an edge gesture claims it. A trace on it is dropped.
+    /// </summary>
+    /// <param name="id">The touch id.</param>
     public void Cancel(int id)
     {
         var slot = FindSlot(id);
@@ -342,6 +537,9 @@ public sealed class SoftKeyboardEngine
         Invalidated?.Invoke();
     }
 
+    /// <summary>
+    /// Cancels every touch and clears the Shift and Symbol holds.
+    /// </summary>
     public void CancelAll()
     {
         for (var slot = 0; slot < _touches.Length; slot++)
@@ -356,6 +554,9 @@ public sealed class SoftKeyboardEngine
         State.SetSymbolHeld(false);
     }
 
+    /// <summary>
+    /// Drops every touch and trace, stops a repeat, closes a long-press list and clears the holds. The locks and the page stay.
+    /// </summary>
     public void Reset()
     {
         Array.Clear(_touches);
@@ -368,6 +569,10 @@ public sealed class SoftKeyboardEngine
         Invalidated?.Invoke();
     }
 
+    /// <summary>
+    /// Runs the deadline: a repeat of a repeating key, or the opening of a long-press list. Before <see cref="NextDeadline"/> it does nothing.
+    /// </summary>
+    /// <param name="now">The time in milliseconds.</param>
     public void Tick(long now)
     {
         if (now < _repeatDeadline || _repeatCell == NoCell)
@@ -407,6 +612,12 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// Presses and releases the center of a cell at one time, as one touch.
+    /// </summary>
+    /// <param name="id">The touch id to use.</param>
+    /// <param name="cell">The cell index.</param>
+    /// <param name="now">The time in milliseconds.</param>
     public void TapCell(int id, int cell, long now)
     {
         var rect = _hit.RectOf(cell);
@@ -415,6 +626,9 @@ public sealed class SoftKeyboardEngine
         TouchUp(id, now);
     }
 
+    /// <summary>
+    /// Closes the open long-press list without typing. It does nothing when no list is open.
+    /// </summary>
     public void CloseLongPress()
     {
         if (_longPress is null)
@@ -429,6 +643,11 @@ public sealed class SoftKeyboardEngine
         Invalidated?.Invoke();
     }
 
+    /// <summary>
+    /// Chooses an entry of the open list and handles it as a key. An index out of range, or no open list, does nothing.
+    /// </summary>
+    /// <param name="index">The entry index.</param>
+    /// <param name="now">The time in milliseconds.</param>
     public void ChooseLongPress(int index, long now)
     {
         if (_longPress is not { } entries || index < 0 || index >= entries.Count)
@@ -442,6 +661,12 @@ public sealed class SoftKeyboardEngine
         HandleKey(entry, now);
     }
 
+    /// <summary>
+    /// Shows a page by name. The name of the page that shows already shows the main page.
+    /// </summary>
+    /// <param name="name">The page name.</param>
+    /// <returns><see langword="false"/> without pages or when the set has no such page.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="name"/> is <see langword="null"/>.</exception>
     public bool ShowPage(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -466,6 +691,12 @@ public sealed class SoftKeyboardEngine
         return true;
     }
 
+    /// <summary>
+    /// Opens the long-press list of a cell. A letter on the symbol page has no list. A cell with no list closes the open list.
+    /// </summary>
+    /// <param name="cell">The cell index.</param>
+    /// <param name="cancelIfSame"><see langword="true"/> to leave the list as it is when the same list is open already.</param>
+    /// <returns><see langword="true"/> when the list opened.</returns>
     public bool OpenLongPress(int cell, bool cancelIfSame = false)
     {
         var entries = LongPressFor(cell);
@@ -815,6 +1046,9 @@ public sealed class SoftKeyboardEngine
         }
     }
 
+    /// <summary>
+    /// The name of the first emoji page, which the emoji key shows.
+    /// </summary>
     public const string EmojiPage = "emoji";
 
     private KeyModifiers ModifiersFor(KeyCap cap)

@@ -6,14 +6,29 @@ using static Basin.Portal.PortalLog;
 
 namespace Basin.Portal;
 
+/// <summary>
+/// Serves <c>org.freedesktop.impl.portal.Screenshot</c>. It writes screenshots as PNG files and picks colors through <see cref="IScreenCapture"/>.
+/// </summary>
 public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, IScreenshotProperties
 {
+    /// <summary>
+    /// The screenshot target bit for the whole layout.
+    /// </summary>
     public const uint TargetScreen = 1;
 
+    /// <summary>
+    /// The screenshot target bit for a window that the user picks.
+    /// </summary>
     public const uint TargetWindow = 2;
 
+    /// <summary>
+    /// The screenshot target bit for an area that the user selects.
+    /// </summary>
     public const uint TargetArea = 4;
 
+    /// <summary>
+    /// The screenshot target bit for the window on top of the stack.
+    /// </summary>
     public const uint TargetActiveWindow = 8;
 
     private IScreenCapture _capture = null!;
@@ -25,20 +40,28 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
     private ToplevelInfo[] _toplevelScratch = new ToplevelInfo[32];
     private ulong[] _stackScratch = new ulong[32];
 
+    /// <inheritdoc/>
     public override string WireInterface => "org.freedesktop.impl.portal.Screenshot";
 
+    /// <inheritdoc/>
     public override int Version => 3;
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Capabilities => [typeof(IToplevelModel), typeof(IToplevelStack), typeof(IAppInfoResolver)];
 
+    /// <inheritdoc/>
     public override IReadOnlyList<Type> Drivers => [typeof(IScreenCapture), typeof(IPortalPrompts)];
 
     internal override DBusHandler.DBusInterface Interface => DBusHandler.DBusInterface.OrgFreedesktopImplPortalScreenshot;
 
+    /// <summary>
+    /// Gets the target bits that the module offers. The window targets need an <see cref="IToplevelModel"/>, and the active window also needs an <see cref="IToplevelStack"/>.
+    /// </summary>
     public uint AvailableTargets => TargetScreen | TargetArea | (_toplevels is null ? 0 : TargetWindow) | (_toplevels is null || _stack is null ? 0 : TargetActiveWindow);
 
     uint IScreenshotProperties.Version => (uint)Version;
 
+    /// <inheritdoc/>
     protected override void Bind(BasinServices services)
     {
         _capture = services.Require<IScreenCapture>();
@@ -53,6 +76,14 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
 
     ValueTask IScreenshotHandler.HandleGetAllPropertiesAsync(IScreenshotHandler.GetAllPropertiesContext context) => context.Handle(this);
 
+    /// <summary>
+    /// Captures the requested target and writes it as a PNG file in <see cref="PortalOptions.ResolveScreenshotDirectory"/>. A non-interactive call asks for confirmation unless the frontend already checked the permission.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="appId">The application that asks.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>interactive</c>, <c>modal</c>, <c>permission_store_checked</c> and <c>target</c> options.</param>
+    /// <returns>The <c>uri</c> of the file, or a cancel or other response when the target, the prompt, the capture or the write fails.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> ScreenshotAsync(
         ObjectPath handle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {
@@ -182,6 +213,14 @@ public sealed class PortalScreenshotModule : PortalModule, IScreenshotHandler, I
         }
     }
 
+    /// <summary>
+    /// Asks the user to pick a point and reads the color of that pixel.
+    /// </summary>
+    /// <param name="handle">The request object path.</param>
+    /// <param name="appId">The application that asks.</param>
+    /// <param name="parentWindow">The parent window identifier of the application.</param>
+    /// <param name="options">The <c>modal</c> option.</param>
+    /// <returns>The <c>color</c> result as linear red, green and blue from 0 to 1, or a cancel or other response.</returns>
     public async ValueTask<(uint Response, Dictionary<string, VariantValue> Results)> PickColorAsync(
         ObjectPath handle, string appId, string parentWindow, Dictionary<string, VariantValue> options)
     {

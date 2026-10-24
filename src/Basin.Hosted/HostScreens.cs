@@ -2,6 +2,10 @@ using Basin.Desktop;
 
 namespace Basin.Hosted;
 
+/// <summary>
+/// The <c>wl_output</c> globals that describe the host desktop to clients. It shows either the host monitors from <see cref="Apply"/> or the outputs from <see cref="Advertise"/>, never both.
+/// A placeholder screen stands in until the first real screen arrives.
+/// </summary>
 public sealed class HostScreens : IDisposable
 {
     private readonly BasinCompositorHost _host;
@@ -30,6 +34,9 @@ public sealed class HostScreens : IDisposable
         SyncDefaultScale();
     }
 
+    /// <summary>
+    /// Gets a snapshot of the screen rows, including the placeholder while it is present.
+    /// </summary>
     public IReadOnlyCollection<HostScreenInfo> Current
     {
         get
@@ -44,10 +51,24 @@ public sealed class HostScreens : IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets the key of the first output that the consumer advertised. It is <see langword="null"/> when the consumer advertised none.
+    /// </summary>
     public string? AdvertisedKey => _advertised.Count > 0 ? _advertised[0] : null;
 
+    /// <summary>
+    /// Gets the keys of all outputs that the consumer advertised, in the order of advertisement.
+    /// </summary>
     public IReadOnlyList<string> AdvertisedKeys => _advertised;
 
+    /// <summary>
+    /// Publishes an output that the consumer owns as a screen row, or updates the row when the key is already advertised for the same output.
+    /// The row never resizes or destroys the output.
+    /// </summary>
+    /// <param name="output">The output to publish.</param>
+    /// <param name="info">The description of the row. Its key identifies the row.</param>
+    /// <exception cref="InvalidOperationException">A row with the same key holds a different output.</exception>
+    /// <exception cref="ObjectDisposedException">The screens are disposed.</exception>
     public void Advertise(Backend.Hosted.HostedOutput output, HostScreenInfo info)
     {
         ArgumentNullException.ThrowIfNull(output);
@@ -105,6 +126,13 @@ public sealed class HostScreens : IDisposable
         });
     }
 
+    /// <summary>
+    /// Reconciles the rows with a snapshot of the host monitors: it adds new keys, updates changed rows and retires missing ones.
+    /// An empty list does nothing. A repeated key counts once.
+    /// </summary>
+    /// <param name="screens">The host monitors.</param>
+    /// <exception cref="InvalidOperationException">The consumer advertised an output of its own.</exception>
+    /// <exception cref="ObjectDisposedException">The screens are disposed.</exception>
     public void Apply(IReadOnlyList<HostScreenInfo> screens)
     {
         ArgumentNullException.ThrowIfNull(screens);
@@ -164,6 +192,11 @@ public sealed class HostScreens : IDisposable
         }
     }
 
+    /// <summary>
+    /// Puts a surface tree on the screen with <paramref name="key"/> and announces that screen's scale to it.
+    /// </summary>
+    /// <param name="surface">The root of the surface tree.</param>
+    /// <param name="key">The screen key, or <see langword="null"/> to remove the tree from every screen.</param>
     public void EnterScreen(Surface surface, string? key)
     {
         RefreshPresence(surface, key);
@@ -173,6 +206,11 @@ public sealed class HostScreens : IDisposable
         }
     }
 
+    /// <summary>
+    /// Sets the output presence of a surface tree so that it is on the screen with <paramref name="key"/> and on no other. It announces no scale.
+    /// </summary>
+    /// <param name="surface">The root of the surface tree.</param>
+    /// <param name="key">The screen key, or <see langword="null"/> to remove the tree from every screen.</param>
     public void RefreshPresence(Surface surface, string? key)
     {
         ArgumentNullException.ThrowIfNull(surface);
@@ -210,6 +248,13 @@ public sealed class HostScreens : IDisposable
         }
     }
 
+    /// <summary>
+    /// Records the scale that a host window observed on a screen. A changed scale resizes the row's output so that the logical size stays the same.
+    /// An advertised row records the scale and keeps its mode. An unknown key or a scale of zero or less does nothing.
+    /// </summary>
+    /// <param name="key">The screen key.</param>
+    /// <param name="scale">The observed scale.</param>
+    /// <exception cref="ObjectDisposedException">The screens are disposed.</exception>
     public void NoteWindowScale(string key, double scale)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -233,9 +278,17 @@ public sealed class HostScreens : IDisposable
         SyncDefaultScale();
     }
 
+    /// <summary>
+    /// Gets the effective scale of a screen: the observed window scale when there is one, or else the host scale.
+    /// </summary>
+    /// <param name="key">The screen key.</param>
+    /// <returns>The scale, or 1 for an unknown key.</returns>
     public double ScalingOf(string key) =>
         _rows.TryGetValue(key, out var row) ? row.Effective : 1.0;
 
+    /// <summary>
+    /// Gets the effective scale of the default screen, which is the primary one, else the first with an observed scale, else the first row. It is 1 with no rows.
+    /// </summary>
     public double DefaultScaling
     {
         get
@@ -260,9 +313,17 @@ public sealed class HostScreens : IDisposable
         }
     }
 
+    /// <summary>
+    /// Finds the output global of a screen.
+    /// </summary>
+    /// <param name="key">The screen key.</param>
+    /// <returns>The global, or <see langword="null"/> for an unknown key.</returns>
     public OutputGlobal? GlobalFor(string key) =>
         _rows.TryGetValue(key, out var row) ? row.Global : null;
 
+    /// <summary>
+    /// Gets the key of the default screen, chosen as for <see cref="DefaultScaling"/>. It is <see langword="null"/> with no rows.
+    /// </summary>
     public string? DefaultKey
     {
         get
@@ -287,6 +348,11 @@ public sealed class HostScreens : IDisposable
         }
     }
 
+    /// <summary>
+    /// Finds the key of the screen that an output global belongs to.
+    /// </summary>
+    /// <param name="global">The output global, or <see langword="null"/>.</param>
+    /// <returns>The screen key, or <see cref="DefaultKey"/> when the global is <see langword="null"/> or not a screen.</returns>
     public string? KeyOf(OutputGlobal? global)
     {
         if (global is null)
@@ -376,6 +442,10 @@ public sealed class HostScreens : IDisposable
         return null;
     }
 
+    /// <summary>
+    /// Retires a row that <see cref="Advertise"/> published. The output itself stays with the consumer. A key that is not advertised does nothing.
+    /// </summary>
+    /// <param name="key">The key of the advertised row.</param>
     public void Withdraw(string key)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -393,6 +463,9 @@ public sealed class HostScreens : IDisposable
 
     private static int LogicalY(HostScreenInfo info) => (int)Math.Round(info.Y / info.Scaling);
 
+    /// <summary>
+    /// Removes every row from the layout and disposes its global. It destroys the outputs that the screens created, but not the advertised ones.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

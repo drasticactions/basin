@@ -2,8 +2,16 @@ using Xkb;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Converts the active modifiers of an xkb state to <see cref="Modifiers"/>.
+/// </summary>
 public static class HeldModifiers
 {
+    /// <summary>
+    /// Reads the Shift, Control, Mod1, Mod3, Mod4 and Mod5 modifiers that are active in the state. Lock and Mod2 are not reported.
+    /// </summary>
+    /// <param name="state">The xkb state, or <see langword="null"/>.</param>
+    /// <returns>The active modifiers, or <see cref="Modifiers.None"/> when <paramref name="state"/> is <see langword="null"/>.</returns>
     public static Modifiers From(XkbState? state)
     {
         if (state is null)

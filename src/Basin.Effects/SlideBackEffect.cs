@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's slideback effect. A window moves through a translation from an offset back to its place with a <see cref="WindowMotion"/> on each axis.
+/// </summary>
 public sealed class SlideBackEffect
 {
     private const string NodeName = "slideback";
@@ -16,8 +19,21 @@ public sealed class SlideBackEffect
     private long _lastNanos;
     private bool _hasLast;
 
+    /// <summary>
+    /// Gets a value indicating whether a window still moves.
+    /// </summary>
     public bool IsActive => _entries.Count > 0;
 
+    /// <summary>
+    /// Starts or retargets the motion of a window. A window that already moves keeps its current offset and velocity.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <param name="fromX">The start horizontal offset, in pixels. It applies only to a new motion.</param>
+    /// <param name="fromY">The start vertical offset, in pixels. It applies only to a new motion.</param>
+    /// <param name="toX">The target horizontal offset, in pixels.</param>
+    /// <param name="toY">The target vertical offset, in pixels.</param>
+    /// <param name="durationFactor">The animation factor of the desktop. A larger value slows the motion. Zero or less jumps to the target.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void Move(TransformStack stack, double fromX, double fromY, double toX, double toY, double durationFactor)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -53,6 +69,11 @@ public sealed class SlideBackEffect
         Apply(entry);
     }
 
+    /// <summary>
+    /// Advances every motion by the time since the last tick. A motion that settles on both axes removes its node.
+    /// </summary>
+    /// <param name="tick">The frame tick. The first tick only starts the clock.</param>
+    /// <returns>The value of <see cref="IsActive"/> after the step.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -105,6 +126,11 @@ public sealed class SlideBackEffect
         return IsActive;
     }
 
+    /// <summary>
+    /// Stops the motion of a window and removes its node.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="stack"/> is <see langword="null"/>.</exception>
     public void Release(TransformStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);

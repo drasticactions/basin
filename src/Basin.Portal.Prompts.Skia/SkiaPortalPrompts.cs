@@ -4,6 +4,10 @@ using SkiaSharp;
 
 namespace Basin.Portal.Prompts.Skia;
 
+/// <summary>
+/// Implements <see cref="IPortalPrompts"/> with dialogs that Skia draws and that an <see cref="ISkiaPromptHost"/> shows.
+/// Use it on the thread that runs the event loop.
+/// </summary>
 public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
 {
     private static readonly BasinLogger Log = BasinLog.For("portal-prompts");
@@ -15,6 +19,12 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
     private SKTypeface? _typeface;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SkiaPortalPrompts"/> class.
+    /// </summary>
+    /// <param name="host">The host that shows the views.</param>
+    /// <param name="layout">The layout that supplies the outputs and their positions.</param>
+    /// <exception cref="ArgumentNullException">An argument is <see langword="null"/>.</exception>
     public SkiaPortalPrompts(ISkiaPromptHost host, OutputLayout layout)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -23,6 +33,9 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         _layout = layout;
     }
 
+    /// <summary>
+    /// Gets or sets the typeface for the dialogs. A change drops the theme, and the next prompt builds it again. The caller keeps ownership.
+    /// </summary>
     public SKTypeface? Typeface
     {
         get => _typeface;
@@ -34,10 +47,19 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets or sets the keymap that the shortcut prompt uses to turn keycodes into keysyms.
+    /// </summary>
     public IKeymapLookup? Keymap { get; set; }
 
+    /// <summary>
+    /// Gets the number of prompts that are on the screen now.
+    /// </summary>
     public int Open => _shown.Count;
 
+    /// <summary>
+    /// Gets the theme for the dialogs. It is made on first use, and this instance owns it.
+    /// </summary>
     public SkiaPromptTheme Theme => _theme ??= new SkiaPromptTheme(_typeface);
 
     internal static string AppLine(string appId, string displayName) =>
@@ -45,6 +67,12 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
             ? string.IsNullOrEmpty(appId) ? "An unknown application is asking" : $"{appId} is asking"
             : $"{displayName} ({appId}) is asking";
 
+    /// <summary>
+    /// Asks the user which outputs or windows to share.
+    /// </summary>
+    /// <param name="prompt">The request.</param>
+    /// <param name="cancellation">A token that closes the dialog with a cancelled response.</param>
+    /// <returns>The chosen sources when the user accepts. A persist choice gives persist mode 2.</returns>
     public async ValueTask<PromptOutcome<SourceSelection>> SelectSources(SourcePrompt prompt, CancellationToken cancellation)
     {
         var view = new SourcePromptView(Theme, in prompt);
@@ -54,6 +82,12 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
             : new PromptOutcome<SourceSelection>(response, default);
     }
 
+    /// <summary>
+    /// Asks the user which input devices a remote desktop session can control.
+    /// </summary>
+    /// <param name="prompt">The request.</param>
+    /// <param name="cancellation">A token that closes the dialog with a cancelled response.</param>
+    /// <returns>The chosen devices and the clipboard choice when the user accepts.</returns>
     public async ValueTask<PromptOutcome<DeviceSelection>> SelectDevices(DevicePrompt prompt, CancellationToken cancellation)
     {
         var view = new DevicePromptView(Theme, in prompt);
@@ -63,6 +97,13 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
             : new PromptOutcome<DeviceSelection>(response, default);
     }
 
+    /// <summary>
+    /// Covers one output and asks the user for an area or a pixel.
+    /// The output is the one in the request, else the output of the parent window, else the first output.
+    /// </summary>
+    /// <param name="prompt">The request.</param>
+    /// <param name="cancellation">A token that closes the view with a cancelled response.</param>
+    /// <returns>The area in layout coordinates when the user accepts, or a cancelled outcome when there is no output.</returns>
     public async ValueTask<PromptOutcome<Box>> SelectArea(AreaPrompt prompt, CancellationToken cancellation)
     {
         var output = prompt.Output ?? _host.OutputFor(prompt.ParentWindow) ?? FirstOutput();
@@ -83,6 +124,12 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         return PromptOutcome<Box>.Accepted(selection.IsEmpty ? default : selection.Translated(box.X, box.Y));
     }
 
+    /// <summary>
+    /// Asks the user to bind a trigger to each requested global shortcut.
+    /// </summary>
+    /// <param name="prompt">The request.</param>
+    /// <param name="cancellation">A token that closes the dialog with a cancelled response.</param>
+    /// <returns>The bound shortcuts when the user accepts. Rows without a trigger are left out.</returns>
     public async ValueTask<PromptOutcome<ShortcutBinding[]>> BindShortcuts(ShortcutPrompt prompt, CancellationToken cancellation)
     {
         var view = new ShortcutPromptView(Theme, in prompt, Keymap);
@@ -92,6 +139,12 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
             : new PromptOutcome<ShortcutBinding[]>(response, default);
     }
 
+    /// <summary>
+    /// Asks a yes or no question.
+    /// </summary>
+    /// <param name="prompt">The request.</param>
+    /// <param name="cancellation">A token that closes the dialog with a cancelled response.</param>
+    /// <returns>An accepted outcome with <see langword="true"/> when the user allows, or the response otherwise.</returns>
     public async ValueTask<PromptOutcome<bool>> Confirm(ConfirmPrompt prompt, CancellationToken cancellation)
     {
         var view = new ConfirmPromptView(Theme, in prompt);
@@ -193,6 +246,9 @@ public sealed class SkiaPortalPrompts : IPortalPrompts, IDisposable
         completion.TrySetResult(response);
     }
 
+    /// <summary>
+    /// Hides every open prompt and disposes the theme. The pending prompt tasks do not complete.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -3,6 +3,9 @@ using Basin.Hosted;
 
 namespace Basin.Shell.Nested;
 
+/// <content>
+/// The pointer constraints, gestures and tablet input of the shell.
+/// </content>
 public sealed partial class NestedShell
 {
     private PointerConstraintDriver? _constraintDriver;
@@ -14,6 +17,9 @@ public sealed partial class NestedShell
     private RelativePointerManager? _relativePointer;
     private Action<PointerConstraint?, PointerConstraint?>? _onConstraintChanged;
 
+    /// <summary>
+    /// Gets a value indicating whether a client holds a pointer lock. The host can then hide its cursor and send relative motion.
+    /// </summary>
     public bool PointerLocked => _constraintDriver is { IsLocked: true };
 
     private void AttachPointerConstraints()

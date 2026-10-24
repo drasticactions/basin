@@ -2,10 +2,22 @@ using System.Runtime.InteropServices;
 
 namespace Basin.Audio.PipeWire;
 
+/// <summary>
+/// Probes a SOFA HRTF file through libmysofa, which the sofa plugin of PipeWire also uses.
+/// </summary>
 public static unsafe class SofaFile
 {
     private const string Library = "libmysofa.so.1";
 
+    /// <summary>
+    /// Opens a SOFA file at 48 kHz and reads its measured radius range. Copy the range to <see cref="VoiceGraph.HrtfRadiusMin"/> and <see cref="VoiceGraph.HrtfRadiusMax"/>.
+    /// </summary>
+    /// <param name="path">The path of the SOFA file.</param>
+    /// <param name="radiusMin">The smallest measured radius in meters, or 1 when the probe fails or the file has no lookup.</param>
+    /// <param name="radiusMax">The largest measured radius in meters, or 1 when the probe fails or the file has no lookup.</param>
+    /// <param name="reason">Why the probe failed, or <see langword="null"/> on success.</param>
+    /// <returns><see langword="true"/> when libmysofa loads and reads the file. <see langword="false"/> when the file is absent, libmysofa is not installed, or it cannot read the file.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public static bool TryProbe(string path, out float radiusMin, out float radiusMax, out string? reason)
     {
         ArgumentNullException.ThrowIfNull(path);

@@ -4,20 +4,34 @@ using Wayland.Server;
 
 namespace Basin;
 
+/// <summary>
+/// Serves <c>wp_viewporter</c>. A viewport writes its source crop and destination size into the pending state of its surface.
+/// </summary>
 public sealed class ViewporterGlobal : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private readonly WlGlobal _global;
     private readonly CompositorGlobal _compositor;
     private readonly HashSet<Surface> _withViewport = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ViewporterGlobal"/> class.
+    /// </summary>
+    /// <param name="display">The display that the global belongs to.</param>
+    /// <param name="compositor">The compositor global that resolves surface resources.</param>
     public ViewporterGlobal(WlServerDisplay display, CompositorGlobal compositor)
     {
         _compositor = compositor;
         _global = display.CreateGlobal(WpViewporter.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Destroys the global. Viewports that exist stay usable until their clients destroy them.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

@@ -3,6 +3,9 @@ using Prowl.Scribe;
 
 namespace Basin.UI.Quill;
 
+/// <summary>
+/// Picks system fonts for a Quill canvas.
+/// </summary>
 public static class QuillFonts
 {
     private static readonly string[] Preferred =
@@ -31,6 +34,12 @@ public static class QuillFonts
         "OpenMoji",
     ];
 
+    /// <summary>
+    /// Adds one CJK font and one emoji font from the system fonts as fallbacks of the canvas. A font that cannot be read is skipped.
+    /// </summary>
+    /// <param name="canvas">The canvas that gets the fallbacks.</param>
+    /// <param name="primary">The primary font, which is never added as a fallback, or <see langword="null"/>.</param>
+    /// <returns>The number of fonts added, from 0 to 2.</returns>
     public static int AddFallbacks(Canvas canvas, FontFile? primary)
     {
         ArgumentNullException.ThrowIfNull(canvas);
@@ -90,6 +99,11 @@ public static class QuillFonts
         return null;
     }
 
+    /// <summary>
+    /// Picks the primary user interface font from the system fonts: Cantarell, DejaVu Sans, Noto Sans or Liberation Sans, in that order. The regular style wins.
+    /// </summary>
+    /// <param name="canvas">The canvas that lists the system fonts.</param>
+    /// <returns>The font, the first system font when none of these is present, or <see langword="null"/> when there are no system fonts.</returns>
     public static FontFile? Resolve(Canvas canvas)
     {
         ArgumentNullException.ThrowIfNull(canvas);

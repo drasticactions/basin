@@ -3,18 +3,31 @@ using Basin.Diagnostics;
 
 namespace Basin;
 
+/// <summary>
+/// Streams commit and frame-callback traces for the surfaces of one <see cref="CompositorGlobal"/>. It hooks surfaces only while at least one watcher exists.
+/// </summary>
 public sealed class SurfaceDiagnostics : ISurfaceDiagnostics
 {
     private readonly CompositorGlobal _compositor;
     private readonly List<Watcher> _watchers = [];
     private readonly Dictionary<Surface, Hooks> _hooked = [];
 
+    /// <summary>Initializes a new instance of the <see cref="SurfaceDiagnostics"/> class.</summary>
+    /// <param name="compositor">The compositor whose surfaces are traced.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="compositor"/> is <see langword="null"/>.</exception>
     public SurfaceDiagnostics(CompositorGlobal compositor)
     {
         ArgumentNullException.ThrowIfNull(compositor);
         _compositor = compositor;
     }
 
+    /// <summary>
+    /// Starts a watcher. It gets a "commit" trace after each commit and a "frame-done" trace when frame callbacks go out, for each surface that passes the filter.
+    /// </summary>
+    /// <param name="filter">Selects the surfaces to trace.</param>
+    /// <param name="sink">Receives each trace on the compositor thread.</param>
+    /// <returns>A handle that stops the watcher when it is disposed.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="filter"/> or <paramref name="sink"/> is <see langword="null"/>.</exception>
     public IDisposable WatchCommits(Func<Surface, bool> filter, Action<CommitTrace> sink)
     {
         ArgumentNullException.ThrowIfNull(filter);

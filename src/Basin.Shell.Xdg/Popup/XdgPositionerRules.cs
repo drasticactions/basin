@@ -2,28 +2,65 @@ using Basin.Shell.Xdg.Protocol;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// The state of one <c>xdg_positioner</c> and the placement math over it. The coordinates are relative to the parent's window-geometry origin, in logical pixels.
+/// </summary>
 public struct XdgPositionerRules
 {
+    /// <summary>
+    /// The width of the popup.
+    /// </summary>
     public int Width;
 
+    /// <summary>
+    /// The height of the popup.
+    /// </summary>
     public int Height;
 
+    /// <summary>
+    /// The anchor rectangle on the parent.
+    /// </summary>
     public Box AnchorRect;
 
+    /// <summary>
+    /// The point of the anchor rectangle that the popup is placed from.
+    /// </summary>
     public XdgPositioner.Anchor Anchor;
 
+    /// <summary>
+    /// The direction that the popup extends in from the anchor point.
+    /// </summary>
     public XdgPositioner.Gravity Gravity;
 
+    /// <summary>
+    /// The adjustments that <see cref="Constrain"/> can apply, per axis in the order flip, slide, resize.
+    /// </summary>
     public XdgPositioner.ConstraintAdjustment ConstraintAdjustment;
 
+    /// <summary>
+    /// The horizontal offset from the anchor point. A flip does not invert it.
+    /// </summary>
     public int OffsetX;
 
+    /// <summary>
+    /// The vertical offset from the anchor point. A flip does not invert it.
+    /// </summary>
     public int OffsetY;
 
+    /// <summary>
+    /// A value indicating whether the client asked to reposition the popup when the constraints change.
+    /// </summary>
     public bool Reactive;
 
+    /// <summary>
+    /// Gets a value indicating whether the size is positive and the anchor rectangle size is not negative. A popup needs complete rules.
+    /// </summary>
     public readonly bool IsComplete => Width > 0 && Height > 0 && AnchorRect.Width >= 0 && AnchorRect.Height >= 0;
 
+    /// <summary>
+    /// Places the popup from the anchor, the gravity and the offset, without constraint adjustment.
+    /// </summary>
+    /// <returns>The popup box.</returns>
     public readonly Box Place()
     {
         var anchor = AnchorPoint();
@@ -46,6 +83,11 @@ public struct XdgPositionerRules
         return new Box(x, y, Width, Height);
     }
 
+    /// <summary>
+    /// Places the popup, then applies the allowed adjustments on each axis where it leaves <paramref name="constraint"/>. A flip is kept only when it removes the overflow on its axis.
+    /// </summary>
+    /// <param name="constraint">The box to keep the popup in.</param>
+    /// <returns>The adjusted popup box. It can still leave the constraint box when no adjustment fits.</returns>
     public readonly Box Constrain(Box constraint)
     {
         var box = Place();

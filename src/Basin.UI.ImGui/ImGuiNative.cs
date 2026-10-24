@@ -7,8 +7,14 @@ using ImGuiApi = Hexa.NET.ImGui.ImGui;
 
 namespace Basin.UI.ImGui;
 
+/// <summary>
+/// Loads and checks the four native Dear ImGui libraries: cimgui, cimplot, cimguizmo and cimnodes.
+/// </summary>
 public static unsafe class ImGuiNative
 {
+    /// <summary>
+    /// The Dear ImGui version that the managed bindings match. Each native library must report this version.
+    /// </summary>
     public const string BindingVersion = "1.92.2b";
 
     private static readonly string[] Libraries = ["cimgui", "cimplot", "cimguizmo", "cimnodes"];
@@ -16,8 +22,16 @@ public static unsafe class ImGuiNative
     private static bool _probed;
     private static string? _declined;
 
+    /// <summary>
+    /// Gets the Dear ImGui version that the native libraries report. It is <see langword="null"/> before <see cref="TryLoad"/> or when the first library does not load.
+    /// </summary>
     public static string? Version { get; private set; }
 
+    /// <summary>
+    /// Loads the native libraries and compares their versions with <see cref="BindingVersion"/>. The probe runs once for each process, and later calls return the same result.
+    /// </summary>
+    /// <param name="declined">The reason that the libraries cannot be used, or <see langword="null"/> when they load.</param>
+    /// <returns><see langword="true"/> when all four libraries load and match the bindings.</returns>
     public static bool TryLoad(out string? declined)
     {
         if (!_probed)

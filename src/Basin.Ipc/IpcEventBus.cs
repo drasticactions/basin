@@ -4,6 +4,9 @@ using System.Text.Json.Serialization.Metadata;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// The declared events and their subscribers. A library source attaches to its capability only while its event has a subscriber.
+/// </summary>
 public sealed class IpcEventBus : IDisposable
 {
     private readonly Dictionary<string, Topic> _topics = new(StringComparer.Ordinal);
@@ -16,10 +19,16 @@ public sealed class IpcEventBus : IDisposable
     private string? _emitting;
     private string[]? _sorted;
 
+    /// <summary>
+    /// Gets the declared event names in ordinal order.
+    /// </summary>
     public IReadOnlyList<string> Names => SortedNames;
 
     internal string[] SortedNames => _sorted ??= [.. _topics.Keys.Order(StringComparer.Ordinal)];
 
+    /// <summary>
+    /// Gets the number of library event sources that watch their capability now.
+    /// </summary>
     public int AttachedSources
     {
         get
@@ -37,6 +46,12 @@ public sealed class IpcEventBus : IDisposable
         }
     }
 
+    /// <summary>
+    /// Declares a consumer event so that clients can subscribe to it.
+    /// </summary>
+    /// <param name="name">The event name, <c>namespace/verb</c> in <c>[a-z0-9-]</c>.</param>
+    /// <exception cref="ArgumentException">The name is not valid, or its namespace belongs to the library.</exception>
+    /// <exception cref="InvalidOperationException">The name is already declared.</exception>
     public void Declare(string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -51,18 +66,53 @@ public sealed class IpcEventBus : IDisposable
         Add(name, null);
     }
 
+    /// <summary>
+    /// Tells whether an event is declared.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <returns><see langword="true"/> when the event is declared.</returns>
     public bool IsDeclared(string name) => _topics.ContainsKey(name);
 
+    /// <summary>
+    /// Finds the oldest subscriber of an event.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <returns>The subscriber, or <see langword="null"/> when the event has none or is not declared.</returns>
     public IIpcEventSubscriber? FirstSubscriber(string name) =>
         _topics.TryGetValue(name, out var topic) && topic.Subscribers.Count > 0 ? topic.Subscribers[0] : null;
 
+    /// <summary>
+    /// Tells whether an event has a subscriber. An emitter can check it to skip work.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <returns><see langword="false"/> when the event has no subscriber or is not declared.</returns>
     public bool HasSubscribers(string name) => _topics.TryGetValue(name, out var topic) && topic.Subscribers.Count > 0;
 
+    /// <summary>
+    /// Subscribes to an event with no options.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="subscriber">The subscriber.</param>
+    /// <returns><see langword="false"/> when the event is not declared or its source refuses.</returns>
     public bool Subscribe(string name, IIpcEventSubscriber subscriber) => TrySubscribe(name, subscriber, null, out _);
 
+    /// <summary>
+    /// Checks a subscription before it is made.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="options">The subscription's options, or <see langword="null"/>.</param>
+    /// <returns>The text of the refusal, or <see langword="null"/> when the subscription is valid.</returns>
     public string? Validate(string name, JsonElement? options) =>
         !_topics.TryGetValue(name, out var topic) ? $"no event '{name}' in this session" : topic.Source?.Validate(name, options);
 
+    /// <summary>
+    /// Subscribes to an event. A second subscription by the same subscriber replaces its options and keeps its place in the order.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="subscriber">The subscriber.</param>
+    /// <param name="options">The subscription's options, or <see langword="null"/>. The bus keeps a copy.</param>
+    /// <param name="error">The text of the refusal, or <see langword="null"/> on success.</param>
+    /// <returns><see langword="false"/> when the event is not declared or its source refuses the options.</returns>
     public bool TrySubscribe(string name, IIpcEventSubscriber subscriber, JsonElement? options, out string? error)
     {
         ArgumentNullException.ThrowIfNull(subscriber);
@@ -94,14 +144,30 @@ public sealed class IpcEventBus : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Lists the subscribers of an event, oldest first.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <returns>The live list of subscribers. It is empty when the event is not declared.</returns>
     public IReadOnlyList<IIpcEventSubscriber> Subscribers(string name) =>
         _topics.TryGetValue(name, out var topic) ? topic.Subscribers : [];
 
+    /// <summary>
+    /// Finds the options that a subscriber gave for an event.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="subscriber">The subscriber.</param>
+    /// <returns>The options, or <see langword="null"/> when the subscriber gave none.</returns>
     public JsonElement? OptionsOf(string name, IIpcEventSubscriber subscriber) =>
         _topics.TryGetValue(name, out var topic) && topic.Options is { } options && options.TryGetValue(subscriber, out var found)
             ? found
             : null;
 
+    /// <summary>
+    /// Sets how the line front prints an event. A second call for the same event replaces the first.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="format">A function from the event's <c>data</c> JSON to the text to print, or to <see langword="null"/> to print nothing.</param>
     public void AddLineFormatter(string name, Func<ReadOnlySpan<byte>, string?> format)
     {
         ArgumentNullException.ThrowIfNull(format);
@@ -110,6 +176,11 @@ public sealed class IpcEventBus : IDisposable
 
     internal Func<ReadOnlySpan<byte>, string?>? LineFormatter(string name) => _lineFormatters.GetValueOrDefault(name);
 
+    /// <summary>
+    /// Removes a subscription. It does nothing when the subscriber is not subscribed.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="subscriber">The subscriber.</param>
     public void Unsubscribe(string name, IIpcEventSubscriber subscriber)
     {
         if (!_topics.TryGetValue(name, out var topic) || !topic.Subscribers.Remove(subscriber))
@@ -125,6 +196,10 @@ public sealed class IpcEventBus : IDisposable
         }
     }
 
+    /// <summary>
+    /// Removes every subscription of a subscriber, for example when its connection closes.
+    /// </summary>
+    /// <param name="subscriber">The subscriber.</param>
     public void UnsubscribeAll(IIpcEventSubscriber subscriber)
     {
         foreach (var name in Names)
@@ -133,6 +208,13 @@ public sealed class IpcEventBus : IDisposable
         }
     }
 
+    /// <summary>
+    /// Starts to write the <c>data</c> of an event. <see cref="EndEvent"/> sends it. Only one event can be written at a time.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <returns>The writer of the <c>data</c> JSON. It is valid until <see cref="EndEvent"/>.</returns>
+    /// <exception cref="InvalidOperationException">Another event is still being written.</exception>
+    /// <exception cref="ArgumentException">The event is not declared.</exception>
     public Utf8JsonWriter BeginEvent(string name)
     {
         if (_emitting is not null)
@@ -153,6 +235,13 @@ public sealed class IpcEventBus : IDisposable
         return _dataWriter;
     }
 
+    /// <summary>
+    /// Serializes an event and sends it to every subscriber. It does nothing when the event has no subscriber.
+    /// </summary>
+    /// <typeparam name="T">The event contract type.</typeparam>
+    /// <param name="name">The event name.</param>
+    /// <param name="value">The event data.</param>
+    /// <param name="info">The source-generated metadata of <typeparamref name="T"/>.</param>
     public void Emit<T>(string name, T value, JsonTypeInfo<T> info)
     {
         ArgumentNullException.ThrowIfNull(info);
@@ -165,6 +254,10 @@ public sealed class IpcEventBus : IDisposable
         EndEvent();
     }
 
+    /// <summary>
+    /// Finishes the event that <see cref="BeginEvent"/> started and sends it to every subscriber.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">No event is being written.</exception>
     public void EndEvent()
     {
         var name = _emitting ?? throw new InvalidOperationException("no event is being written");
@@ -173,6 +266,14 @@ public sealed class IpcEventBus : IDisposable
         Emit(name, _data!.Length == 0 ? "{}"u8 : _data.Written);
     }
 
+    /// <summary>
+    /// Serializes an event and sends it to one subscriber only, whether it is subscribed or not.
+    /// </summary>
+    /// <typeparam name="T">The event contract type.</typeparam>
+    /// <param name="name">The event name, which must be declared.</param>
+    /// <param name="subscriber">The subscriber that receives the event.</param>
+    /// <param name="value">The event data.</param>
+    /// <param name="info">The source-generated metadata of <typeparamref name="T"/>.</param>
     public void EmitTo<T>(string name, IIpcEventSubscriber subscriber, T value, JsonTypeInfo<T> info)
     {
         ArgumentNullException.ThrowIfNull(subscriber);
@@ -184,6 +285,11 @@ public sealed class IpcEventBus : IDisposable
         subscriber.OnEvent(name, _message!.Written);
     }
 
+    /// <summary>
+    /// Sends an event whose <c>data</c> is already JSON to every subscriber. It does nothing when the event has no subscriber or is not declared.
+    /// </summary>
+    /// <param name="name">The event name.</param>
+    /// <param name="data">The <c>data</c> JSON. The bus does not validate it.</param>
     public void Emit(string name, ReadOnlySpan<byte> data)
     {
         if (!_topics.TryGetValue(name, out var topic) || topic.Subscribers.Count == 0)
@@ -216,6 +322,9 @@ public sealed class IpcEventBus : IDisposable
         _messageWriter.Flush();
     }
 
+    /// <summary>
+    /// Removes every subscriber and detaches every library source.
+    /// </summary>
     public void Dispose()
     {
         foreach (var topic in _topics.Values)

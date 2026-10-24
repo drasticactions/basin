@@ -6,8 +6,14 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_export_dmabuf_manager_v1</c> global. Each frame request exports the current output dmabuf, or sends a cancel event when no frame is available.
+/// </summary>
 public sealed class ExportDmabufManager : IDisposable
 {
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     [DllImport("libc")]
@@ -18,6 +24,12 @@ public sealed class ExportDmabufManager : IDisposable
     private readonly WlGlobal _global;
     private readonly IDmabufCapture? _capture;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ExportDmabufManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="capture">The dmabuf source. With <see langword="null"/>, every frame request gets a permanent cancel.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> is <see langword="null"/>.</exception>
     public ExportDmabufManager(WlServerDisplay display, IDmabufCapture? capture)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -25,6 +37,9 @@ public sealed class ExportDmabufManager : IDisposable
         _global = display.CreateGlobal(ZwlrExportDmabufManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Removes the global. Bound clients keep their resources.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

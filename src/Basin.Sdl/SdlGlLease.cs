@@ -4,6 +4,10 @@ using SkiaSharp;
 
 namespace Basin.Sdl;
 
+/// <summary>
+/// Draws into the default framebuffer of one GL window with the shared context of an <see cref="SdlGlDevice"/>.
+/// The age comes from <c>EGL_EXT_buffer_age</c> when the display offers it, else it is 0.
+/// </summary>
 public sealed class SdlGlLease : ISdlRenderLease
 {
     private const uint GlRgba8 = 0x8058;
@@ -32,10 +36,13 @@ public sealed class SdlGlLease : ISdlRenderLease
         Resize(width, height);
     }
 
+    /// <inheritdoc/>
     public string Name => SdlRenderDevices.Gl;
 
+    /// <inheritdoc/>
     public SdlHdrState Hdr => SdlHdrState.Sdr;
 
+    /// <inheritdoc/>
     public void Resize(int pixelWidth, int pixelHeight)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -78,6 +85,13 @@ public sealed class SdlGlLease : ISdlRenderLease
         return true;
     }
 
+    /// <summary>
+    /// Makes the shared context current on the window, resets the Skia GL state and starts a frame.
+    /// </summary>
+    /// <param name="canvas">The canvas over framebuffer 0, in device pixels.</param>
+    /// <param name="context">The shared Skia context of the device.</param>
+    /// <param name="age">The EGL buffer age, or 0 when it is unknown.</param>
+    /// <returns><see langword="false"/> when the context is missing or lost, or cannot be made current.</returns>
     public bool Begin(out SKCanvas canvas, out GRContext? context, out int age)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -104,6 +118,7 @@ public sealed class SdlGlLease : ISdlRenderLease
         return true;
     }
 
+    /// <inheritdoc/>
     public void Present()
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -111,9 +126,11 @@ public sealed class SdlGlLease : ISdlRenderLease
         _ = SDL.GLSwapWindow(_window.Handle);
     }
 
+    /// <inheritdoc/>
     public bool ReadPixels(SKImageInfo info, nint pixels, int rowBytes) =>
         _surface is { } surface && surface.ReadPixels(info, pixels, rowBytes, 0, 0);
 
+    /// <inheritdoc/>
     public bool MakeCurrent() => _device.Context is not null && _device.MakeCurrent(_window);
 
     private void ReleaseTarget()
@@ -132,6 +149,9 @@ public sealed class SdlGlLease : ISdlRenderLease
         }
     }
 
+    /// <summary>
+    /// Releases the Skia surface over the window. The device keeps the shared context. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

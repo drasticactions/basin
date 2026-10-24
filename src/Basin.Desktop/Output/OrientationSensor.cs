@@ -6,6 +6,9 @@ using static Basin.Desktop.DesktopLog;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Reads the accelerometer orientation from iio-sensor-proxy on the system bus. Bus work runs off the loop and reaches the loop through a wake pipe.
+/// </summary>
 public sealed class OrientationSensor : IOrientationSource, IDisposable
 {
     private const string Service = "net.hadess.SensorProxy";
@@ -23,6 +26,12 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
     private bool _claimed;
     private volatile bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OrientationSensor"/> class and starts to connect in the background. Without a system bus or the proxy, the sensor stays unavailable.
+    /// </summary>
+    /// <param name="loop">The loop that receives the changes.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="loop"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">The wake pipe cannot be created.</exception>
     public OrientationSensor(ICompositorEventLoop loop)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -42,12 +51,21 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         _ = BindAsync();
     }
 
+    /// <inheritdoc/>
     public bool IsAvailable { get; private set; }
 
+    /// <inheritdoc/>
     public OutputTransform? Orientation { get; private set; }
 
+    /// <summary>
+    /// Occurs on the loop thread when <see cref="IsAvailable"/> or <see cref="Orientation"/> changes.
+    /// </summary>
     public event Action? Changed;
 
+    /// <summary>
+    /// Claims or releases the accelerometer. A claim reads the current orientation. A call before the bus connects takes effect when it connects.
+    /// </summary>
+    /// <param name="enabled"><see langword="true"/> to claim the accelerometer.</param>
     public void SetEnabled(bool enabled)
     {
         DBusConnection? connection;
@@ -68,6 +86,9 @@ public sealed class OrientationSensor : IOrientationSource, IDisposable
         }
     }
 
+    /// <summary>
+    /// Closes the bus connection and the wake pipe. <see cref="Changed"/> does not occur after this call.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

@@ -1,5 +1,8 @@
 namespace Basin;
 
+/// <summary>
+/// Reports the damage of each commit in a surface tree, in the root's coordinates. It follows subsurfaces as they are added.
+/// </summary>
 public sealed class SurfaceTreeCommitWatch : IDisposable
 {
     private readonly Surface _root;
@@ -7,6 +10,10 @@ public sealed class SurfaceTreeCommitWatch : IDisposable
     private readonly Dictionary<Surface, Entry> _entries = [];
     private bool _disposed;
 
+    /// <summary>Initializes a new instance of the <see cref="SurfaceTreeCommitWatch"/> class and watches the root and its current subsurfaces.</summary>
+    /// <param name="root">The root surface.</param>
+    /// <param name="committed">Called after a commit with non-empty damage, with the damage extents relative to the root.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="root"/> or <paramref name="committed"/> is <see langword="null"/>.</exception>
     public SurfaceTreeCommitWatch(Surface root, Action<Box> committed)
     {
         ArgumentNullException.ThrowIfNull(root);
@@ -17,8 +24,10 @@ public sealed class SurfaceTreeCommitWatch : IDisposable
         Reconcile(root);
     }
 
+    /// <summary>Gets the number of surfaces that the watch hooks.</summary>
     public int WatchedSurfaces => _entries.Count;
 
+    /// <summary>Unhooks every surface. A second call does nothing.</summary>
     public void Dispose()
     {
         if (_disposed)

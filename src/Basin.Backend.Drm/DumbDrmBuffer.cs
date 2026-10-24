@@ -4,6 +4,9 @@ using Drm;
 
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// A dumb buffer that <see cref="DumbAllocator"/> created. The CPU can map it, and the backend can scan it out.
+/// </summary>
 public sealed class DumbDrmBuffer : BufferBase
 {
     private readonly DrmDumbBuffer _dumb;
@@ -16,12 +19,19 @@ public sealed class DumbDrmBuffer : BufferBase
         Format = format;
     }
 
+    /// <inheritdoc/>
     public override DrmFormat Format { get; }
 
     internal uint GemHandle => _dumb.Handle;
 
     internal uint Stride => _dumb.Pitch;
 
+    /// <summary>
+    /// Maps the dumb buffer's memory for every kind of access. The mapping stays until the storage is freed.
+    /// </summary>
+    /// <param name="access">The requested access. The buffer allows all access.</param>
+    /// <param name="view">The mapped pixels with the kernel's pitch.</param>
+    /// <returns>Always <see langword="true"/>.</returns>
     protected override unsafe bool TryMap(BufferDataAccess access, out BufferDataView view)
     {
         if (_data == 0)
@@ -33,6 +43,9 @@ public sealed class DumbDrmBuffer : BufferBase
         return true;
     }
 
+    /// <summary>
+    /// Destroys the dumb buffer in the kernel.
+    /// </summary>
     protected override void OnFreeStorage()
     {
         _data = 0;

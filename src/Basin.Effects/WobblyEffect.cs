@@ -2,6 +2,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs the Compiz wobbly window model. A 4 by 4 grid of point masses on springs deforms the window through a bicubic patch. A resting model removes its deformer and costs nothing.
+/// </summary>
 public sealed class WobblyEffect : IMeshTransform
 {
     private const int GridSize = 4;
@@ -36,6 +39,10 @@ public sealed class WobblyEffect : IMeshTransform
     private bool _wobbly;
     private SceneTransform? _node;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="WobblyEffect"/> class.
+    /// </summary>
+    /// <param name="options">The settings. The default value uses the default <see cref="WobblyOptions"/>.</param>
     public WobblyEffect(WobblyOptions options = default)
     {
         var resolved = options == default ? new WobblyOptions() : options;
@@ -45,10 +52,20 @@ public sealed class WobblyEffect : IMeshTransform
         BuildSprings();
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the effect has a live node.
+    /// </summary>
     public bool IsAttached => _node is { IsDestroyed: false };
 
+    /// <summary>
+    /// Gets a value indicating whether the model still moves or a mass is grabbed. A grabbed model never settles.
+    /// </summary>
     public bool IsWobbling => _wobbly || _grabbed >= 0;
 
+    /// <summary>
+    /// Adds the effect node to a window. The model takes its size from the content at the next grab or activation.
+    /// </summary>
+    /// <param name="stack">The transform stack of the window.</param>
     public void Attach(TransformStack stack)
     {
         _node = stack.Get("wobbly") ?? stack.Add(TransformStack.ZOrder.Effect, "wobbly");
@@ -56,6 +73,9 @@ public sealed class WobblyEffect : IMeshTransform
         _hasLast = false;
     }
 
+    /// <summary>
+    /// Removes the deformer from the node and forgets the node. The node stays on the stack.
+    /// </summary>
     public void Detach()
     {
         if (_node is { IsDestroyed: false } node)
@@ -66,6 +86,11 @@ public sealed class WobblyEffect : IMeshTransform
         _node = null;
     }
 
+    /// <summary>
+    /// Pins the mass nearest a point and kicks the model. It does nothing without a live node.
+    /// </summary>
+    /// <param name="localX">The horizontal position, in the window's local coordinates.</param>
+    /// <param name="localY">The vertical position, in the window's local coordinates.</param>
     public void Grab(double localX, double localY)
     {
         if (_node is not { IsDestroyed: false } node)
@@ -94,6 +119,9 @@ public sealed class WobblyEffect : IMeshTransform
         Wake(node);
     }
 
+    /// <summary>
+    /// Lets the grabbed mass go, so the model can settle. A tiled model keeps its corners pinned.
+    /// </summary>
     public void Release()
     {
         if (_grabbed >= 0)
@@ -113,6 +141,9 @@ public sealed class WobblyEffect : IMeshTransform
         }
     }
 
+    /// <summary>
+    /// Kicks the model without a grab, for example when a window maps. It does nothing without a live node.
+    /// </summary>
     public void Activate()
     {
         if (_node is not { IsDestroyed: false } node)
@@ -125,6 +156,10 @@ public sealed class WobblyEffect : IMeshTransform
         Wake(node);
     }
 
+    /// <summary>
+    /// Pins or frees the four corner masses. A grabbed mass stays pinned.
+    /// </summary>
+    /// <param name="tiled"><see langword="true"/> to pin the corners.</param>
     public void SetTiled(bool tiled)
     {
         _tiled = tiled;
@@ -139,6 +174,11 @@ public sealed class WobblyEffect : IMeshTransform
         }
     }
 
+    /// <summary>
+    /// Reports that the window moved, so the free masses lag behind by the same distance.
+    /// </summary>
+    /// <param name="dx">The horizontal move, in pixels.</param>
+    /// <param name="dy">The vertical move, in pixels.</param>
     public void NotifyMoved(int dx, int dy)
     {
         if (!_sized || (dx == 0 && dy == 0))
@@ -161,6 +201,11 @@ public sealed class WobblyEffect : IMeshTransform
         }
     }
 
+    /// <summary>
+    /// Integrates the model in fixed 15 ms steps for the time since the last tick, and damages the node. A settled model removes its deformer, and a resting model does no work.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns><see langword="true"/> while the model moves or a mass is grabbed.</returns>
     public bool Step(in FrameTick tick)
     {
         if (_node is not { IsDestroyed: false } node || !_sized)
@@ -220,6 +265,11 @@ public sealed class WobblyEffect : IMeshTransform
         return true;
     }
 
+    /// <summary>
+    /// Calculates the union of the content bounds and the hull of the masses.
+    /// </summary>
+    /// <param name="childBounds">The undeformed content bounds, in the transform's local coordinates.</param>
+    /// <returns>The union box, or <paramref name="childBounds"/> before the model has a size.</returns>
     public Box MapBounds(in Box childBounds)
     {
         if (!_sized)
@@ -246,8 +296,10 @@ public sealed class WobblyEffect : IMeshTransform
         return new Box(x0, y0, x1 - x0, y1 - y0);
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box childBounds) => _resolution * _resolution * 6;
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box childBounds, Span<MeshVertex> into)
     {
         EnsureSized(childBounds);

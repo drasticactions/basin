@@ -5,8 +5,12 @@ using static Basin.Diagnostics.CoreLog;
 
 namespace Basin;
 
+/// <summary>
+/// basin's own <c>wl_shm</c> global over the WaylandSharpest shared-memory seam. It enforces <see cref="ShmLimits"/> and never moves a mapping that a reader holds.
+/// </summary>
 public sealed class ManagedShmGlobal : IDisposable
 {
+    /// <summary>The <c>wl_shm</c> version that this global advertises.</summary>
     public const int Version = 2;
 
     private readonly WlGlobal _global;
@@ -32,6 +36,16 @@ public sealed class ManagedShmGlobal : IDisposable
         public bool Released;
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ManagedShmGlobal"/> class and creates the global. ARGB8888 and XRGB8888 are always advertised.
+    /// </summary>
+    /// <param name="display">The display that gets the global.</param>
+    /// <param name="sharedMemory">The platform mapper for client pool fds, or <see langword="null"/> when only token transports can create pools.</param>
+    /// <param name="buffers">The registry that receives each new buffer.</param>
+    /// <param name="policy">The requested access policy. A guarded request falls back to direct when the fault-safe copy is unavailable.</param>
+    /// <param name="limits">The per-client caps, or <see langword="null"/> for the defaults.</param>
+    /// <param name="extraFormats">The formats to advertise beyond the two required ones.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> or <paramref name="buffers"/> is <see langword="null"/>.</exception>
     public ManagedShmGlobal(
         WlServerDisplay display,
         ISharedMemory? sharedMemory,
@@ -53,8 +67,13 @@ public sealed class ManagedShmGlobal : IDisposable
         _global = display.CreateGlobal(WlShm.Interface, Version, OnBind);
     }
 
+    /// <summary>Gets the access policy in effect after the fallback check.</summary>
     public ShmAccessPolicy Policy { get; }
 
+    /// <summary>
+    /// Adds formats to the advertised list. Only clients that bind after the call see the new formats.
+    /// </summary>
+    /// <param name="formats">The formats to add. Duplicates are ignored.</param>
     public void Advertise(ReadOnlySpan<DrmFormat> formats)
     {
         foreach (var format in formats)
@@ -90,6 +109,9 @@ public sealed class ManagedShmGlobal : IDisposable
         return false;
     }
 
+    /// <summary>
+    /// Disposes every client pool and removes the global.
+    /// </summary>
     public void Dispose()
     {
         foreach (var state in _clients.Values)

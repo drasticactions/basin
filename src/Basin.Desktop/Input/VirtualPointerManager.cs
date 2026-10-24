@@ -7,13 +7,24 @@ using Xkb;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>zwlr_virtual_pointer_manager_v1</c> global. Events go to the input sink of the requested seat, or to the default sink when the client names no seat.
+/// </summary>
 public sealed class VirtualPointerManager : IDisposable
 {
+    /// <summary>
+    /// The highest global version that the manager advertises.
+    /// </summary>
     public const int Version = 2;
 
     private readonly WlGlobal _global;
     private readonly IInputSink? _sink;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="VirtualPointerManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display to create the global on.</param>
+    /// <param name="sink">The default sink. When it is <see langword="null"/>, a pointer with no seat has no effect.</param>
     public VirtualPointerManager(WlServerDisplay display, IInputSink? sink)
     {
         ArgumentNullException.ThrowIfNull(display);
@@ -21,6 +32,9 @@ public sealed class VirtualPointerManager : IDisposable
         _global = display.CreateGlobal(ZwlrVirtualPointerManagerV1.Interface, Version, OnBind);
     }
 
+    /// <summary>
+    /// Removes the global.
+    /// </summary>
     public void Dispose() => _global.Dispose();
 
     private void OnBind(WlClient client, uint version, uint id)

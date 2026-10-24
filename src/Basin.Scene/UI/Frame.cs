@@ -4,6 +4,13 @@ using Pixman;
 
 namespace Basin.Scene;
 
+/// <summary>
+/// Server-side window decoration. An <see cref="IFrameRenderer"/> draws the chrome into one UI surface, and four scene buffers show its edges around the client.
+/// The frame hit tests its parts, reports user actions through <see cref="Requested"/>, and animates on an <see cref="IFrameClock"/>.
+/// </summary>
+/// <remarks>
+/// All members must be called on the thread that created the frame. A renderer or host exception faults the frame for good and raises <see cref="Faulted"/>.
+/// </remarks>
 public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, IDisposable
 {
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
@@ -60,11 +67,26 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
 
     private Scene? _scene;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Frame"/> class that draws with one host.
+    /// </summary>
+    /// <param name="host">The host that creates the chrome surface.</param>
+    /// <param name="renderer">The renderer that draws the chrome.</param>
+    /// <param name="parent">The scene tree that holds the frame tree.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="host"/> or <paramref name="renderer"/> is <see langword="null"/>.</exception>
     public Frame(IUIHost host, IFrameRenderer renderer, SceneTree parent)
         : this(new FrameHosts(host), renderer, parent)
     {
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="Frame"/> class.
+    /// The first <see cref="Configure(in Box, double, in FrameState)"/> picks a host from <paramref name="hosts"/> and creates the surface.
+    /// </summary>
+    /// <param name="hosts">The hosts to choose from.</param>
+    /// <param name="renderer">The renderer that draws the chrome.</param>
+    /// <param name="parent">The scene tree that holds the frame tree.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="hosts"/> or <paramref name="renderer"/> is <see langword="null"/>.</exception>
     public Frame(FrameHosts hosts, IFrameRenderer renderer, SceneTree parent)
     {
         ArgumentNullException.ThrowIfNull(hosts);
@@ -83,12 +105,24 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         Register();
     }
 
+    /// <summary>
+    /// Gets or sets the client surface that the frame decorates. The frame does not use it. Scene diagnostics read it to name the window.
+    /// </summary>
     public Surface? Window { get; set; }
 
+    /// <summary>
+    /// Gets the number of times the renderer has drawn the chrome.
+    /// </summary>
     public long DrawCount { get; private set; }
 
+    /// <summary>
+    /// Gets the state of the last draw.
+    /// </summary>
     public FrameState DrawnState { get; private set; }
 
+    /// <summary>
+    /// Gets the pointer interaction of the last draw.
+    /// </summary>
     public FrameInteraction DrawnInteraction { get; private set; }
 
     private void Register()
@@ -109,66 +143,160 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         Drawn?.Invoke(state, _interaction);
     }
 
+    /// <summary>
+    /// Gets the tree that holds the edge strips and the underlay. The frame destroys it at disposal or on a fault.
+    /// </summary>
     public SceneTree Tree => _tree;
 
+    /// <summary>
+    /// Gets the chrome buffer that the strips show, or <see langword="null"/> before the first <see cref="Commit"/>.
+    /// </summary>
     public IBuffer? PresentedChrome => _shown.Buffer;
 
+    /// <summary>
+    /// Gets the chrome thickness on each side of the client from the last <see cref="Commit"/>, in logical pixels.
+    /// </summary>
     public FrameInsets Insets { get; private set; }
 
+    /// <summary>
+    /// Gets the extra drawn margin outside the chrome, such as a shadow, from the last <see cref="Commit"/>, in logical pixels.
+    /// </summary>
     public FrameInsets Outsets { get; private set; }
 
+    /// <summary>
+    /// Gets the box that the chrome surface covers, outsets included, from the last <see cref="Commit"/>. It is in parent tree coordinates.
+    /// </summary>
     public Box DrawnBounds { get; private set; }
 
+    /// <summary>
+    /// Gets or sets the clock that paces animation. With no clock, the chrome does not animate. Set it before the first draw.
+    /// </summary>
     public IFrameClock? Clock { get; set; }
 
+    /// <summary>
+    /// Gets or sets the time source in nanoseconds that stamps interaction changes. The default reads the monotonic clock.
+    /// </summary>
     public Func<long> Time { get; set; } = static () => MonotonicClock.Nanos;
 
+    /// <summary>
+    /// Gets a value indicating whether the renderer reported that the shown chrome animates.
+    /// </summary>
     public bool Animating => _animating;
 
+    /// <summary>
+    /// Gets the four edge strips in the order top, left, right, bottom. A strip with an empty box is disabled.
+    /// </summary>
     public IReadOnlyList<SceneBuffer> StripNodes => _strips;
 
+    /// <summary>
+    /// Gets the box of one edge strip in chrome surface coordinates.
+    /// </summary>
+    /// <param name="index">The strip index from 0 to 3, in the order of <see cref="StripNodes"/>.</param>
+    /// <returns>The strip box from the last <see cref="Commit"/>.</returns>
+    /// <exception cref="IndexOutOfRangeException"><paramref name="index"/> is outside 0 to 3.</exception>
     public Box StripBounds(int index) => _stripBoxes[index];
 
+    /// <summary>
+    /// Gets the box of the client plus the chrome, outsets excluded, from the last <see cref="Commit"/>. It is in parent tree coordinates.
+    /// </summary>
     public Box OuterBounds { get; private set; }
 
+    /// <summary>
+    /// Gets the scale of the shown chrome. It is 0 before the first <see cref="Commit"/>.
+    /// </summary>
     public double Scale => _shownScale;
 
+    /// <summary>
+    /// Occurs at the end of each <see cref="Commit"/> that shows a new chrome buffer.
+    /// </summary>
     public event Action? Committed;
 
+    /// <summary>
+    /// Gets a value indicating whether a renderer or host failure has stopped the frame.
+    /// </summary>
     public bool IsFaulted => _faulted;
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the frame tree is drawn. A hidden frame reports no parts.
+    /// </summary>
     public bool Visible
     {
         get => _tree.Enabled;
         set => _tree.Enabled = value;
     }
 
+    /// <summary>
+    /// Occurs when the user asks for a window action through the chrome, for example move, resize, close or a menu item.
+    /// The frame does not act on the request. The compositor owns that policy.
+    /// </summary>
     public event Action<FrameAction>? Requested;
 
+    /// <summary>
+    /// Gets or sets the effect that the strips apply behind the region that the renderer reports as backdrop. It applies at the next <see cref="Commit"/>.
+    /// </summary>
     public IBackdropEffect? BackdropEffect { get; set; }
 
+    /// <summary>
+    /// Gets or sets the key that <see cref="BackdropEffect"/> caches its state under. When it is <see langword="null"/>, each strip is its own key.
+    /// </summary>
     public object? BackdropKey { get; set; }
 
+    /// <summary>
+    /// Gets or sets the effect for the underlay node, which covers the shape that the renderer reports. It applies at the next <see cref="Commit"/>.
+    /// </summary>
     public IBackdropEffect? UnderlayEffect { get; set; }
 
+    /// <summary>
+    /// Gets or sets the key that <see cref="UnderlayEffect"/> caches its state under. When it is <see langword="null"/>, the underlay node is the key.
+    /// </summary>
     public object? UnderlayKey { get; set; }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the underlay also covers the client hole of the shape. The default is <see langword="true"/>.
+    /// </summary>
     public bool UnderlayCoversClient { get; set; } = true;
 
+    /// <summary>
+    /// Gets the backdrop-only node that carries <see cref="UnderlayEffect"/>. It never accepts input.
+    /// </summary>
     public SceneBuffer UnderlayNode => _underlay;
 
+    /// <summary>
+    /// Occurs when the underlay shape is first set or changes. It does not occur when no <see cref="UnderlayEffect"/> is set.
+    /// </summary>
     public event Action<FrameBackdropShape>? ShapePublished;
 
+    /// <summary>
+    /// Occurs after each draw of the chrome, with the state and the interaction that the renderer drew.
+    /// </summary>
     public event Action<FrameState, FrameInteraction>? Drawn;
 
+    /// <summary>
+    /// Gets or sets the tree that the window menu popup goes into. When it is <see langword="null"/>, <see cref="OpenMenu(double, double)"/> raises a <see cref="FrameActionKind.ShowMenu"/> request instead.
+    /// </summary>
     public SceneTree? MenuLayer { get; set; }
 
+    /// <summary>
+    /// Gets or sets the box in menu layer coordinates that the menu popup must stay inside. An empty box sets no limit.
+    /// </summary>
     public Box MenuConstraint { get; set; }
 
+    /// <summary>
+    /// Gets a value indicating whether the frame shows its own menu popup.
+    /// </summary>
     public bool IsMenuOpen => _menuSurface is not null;
 
+    /// <summary>
+    /// Occurs once, when a renderer or host failure stops the frame. The frame tears down its surface and nodes before it raises the event.
+    /// </summary>
     public event Action<Exception>? Faulted;
 
+    /// <summary>
+    /// Asks the renderer for the chrome thickness for a state, without a draw. A layout can use it to size the client before <see cref="Configure(in Box, double, in FrameState)"/>.
+    /// </summary>
+    /// <param name="state">The state to measure.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <returns>The insets in logical pixels, or the default value after a fault or disposal.</returns>
     public FrameInsets Measure(in FrameState state, double scale)
     {
         _thread.Assert();
@@ -188,6 +316,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Gets or sets where the window sits in a layout. A change redraws the shown chrome when the renderer follows placement. It also overrides the placement of every later configured state.
+    /// </summary>
     public FramePlacement Placement
     {
         get => _placement;
@@ -204,6 +335,13 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Draws the chrome for a client box into a pending buffer. The strips keep the old buffer until <see cref="Commit"/>, so the caller can match the change to a client commit.
+    /// A call with the same geometry, scale and state as the pending or shown chrome does nothing.
+    /// </summary>
+    /// <param name="geometry">The client box in parent tree coordinates and logical pixels.</param>
+    /// <param name="scale">The output scale.</param>
+    /// <param name="requested">The state to draw. Its placement is replaced by <see cref="Placement"/>.</param>
     public void Configure(in Box geometry, double scale, in FrameState requested)
     {
         _thread.Assert();
@@ -310,6 +448,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         _pendingScale = scale;
     }
 
+    /// <summary>
+    /// Shows the pending chrome. It moves the tree, sets the strip boxes, applies the backdrop and underlay, closes the menu and raises <see cref="Committed"/>. It does nothing when no draw is pending.
+    /// </summary>
     public void Commit()
     {
         _thread.Assert();
@@ -541,12 +682,23 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Checks whether a pending draw matches a client box and scale.
+    /// </summary>
+    /// <param name="geometry">The client box to compare.</param>
+    /// <param name="scale">The scale to compare.</param>
+    /// <returns><see langword="true"/> when a <see cref="Commit"/> shows chrome for that box and scale.</returns>
     public bool HasPendingFor(in Box geometry, double scale)
     {
         _thread.Assert();
         return _hasPending && _pendingGeometry == geometry && _pendingScale == scale;
     }
 
+    /// <summary>
+    /// Checks whether a scene node is in the frame tree. The menu popup is not in the frame tree.
+    /// </summary>
+    /// <param name="node">The node to check, for example the result of a hit test.</param>
+    /// <returns><see langword="true"/> when <paramref name="node"/> is <see cref="Tree"/> or one of its descendants.</returns>
     public bool OwnsNode(SceneNode node)
     {
         _thread.Assert();
@@ -561,6 +713,12 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         return false;
     }
 
+    /// <summary>
+    /// Finds the chrome part at a point.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <returns><see cref="FramePart.None"/> inside the client, outside the chrome, before the first commit, or when the frame is hidden, faulted or disposed.</returns>
     public FramePart PartAt(double x, double y)
     {
         _thread.Assert();
@@ -604,6 +762,13 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Lets a strip accept input only where the renderer reports a part, so transparent chrome and shadows pass input through. The underlay never accepts input.
+    /// </summary>
+    /// <param name="buffer">The node that the hit test reached.</param>
+    /// <param name="x">The horizontal position in node-local coordinates.</param>
+    /// <param name="y">The vertical position in node-local coordinates.</param>
+    /// <returns><see langword="true"/> when the point is on a part, or when <paramref name="buffer"/> is not a frame node.</returns>
     public bool AcceptsInputAt(SceneBuffer buffer, double x, double y)
     {
         _thread.Assert();
@@ -627,6 +792,12 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         return SurfacePartAt(box.X + x, box.Y + y) != FramePart.None;
     }
 
+    /// <summary>
+    /// Gets the cursor name that the renderer wants for the part at a point.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <returns>The cursor name, or <see langword="null"/> when no part is there.</returns>
     public string? CursorAt(double x, double y)
     {
         _thread.Assert();
@@ -647,8 +818,18 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Reports that the pointer entered the frame. It acts the same as <see cref="PointerMotion(double, double)"/>.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
     public void PointerEnter(double x, double y) => PointerMotion(x, y);
 
+    /// <summary>
+    /// Reports pointer motion. A change of the hot part redraws the parts that changed. Pointer-following renderers start to animate.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
     public void PointerMotion(double x, double y)
     {
         _thread.Assert();
@@ -664,6 +845,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         FollowPointer();
     }
 
+    /// <summary>
+    /// Reports that the pointer left the frame. It clears the hot and pressed parts and redraws them.
+    /// </summary>
     public void PointerLeave()
     {
         _thread.Assert();
@@ -732,6 +916,14 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Reports a pointer button. A press on the title or border requests a move, a press on an edge requests a resize, and a second title press inside 400 ms requests maximize.
+    /// A button fires its action on release over the same part. It does nothing while a touch point is latched.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
+    /// <param name="timeMs">The event time in milliseconds, or 0 to disable double-click detection.</param>
     public void PointerButton(double x, double y, bool pressed, uint timeMs = 0)
     {
         _thread.Assert();
@@ -828,8 +1020,19 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
 
     private const uint DoubleClickMs = 400;
 
+    /// <summary>
+    /// Gets or sets the distance in logical pixels outside the chrome that a touch still finds the nearest resize edge. The default is 0.
+    /// </summary>
     public double TouchSlop { get; set; }
 
+    /// <summary>
+    /// Reports a touch down. It acts like a pointer press, uses <see cref="TouchSlop"/> to find an edge, and latches the touch on a button part.
+    /// It does nothing while a touch is latched or a button is pressed.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="id">The touch point id.</param>
+    /// <param name="timeMs">The event time in milliseconds, or 0 to disable double-tap detection.</param>
     public void TouchDown(double x, double y, int id, uint timeMs = 0)
     {
         _thread.Assert();
@@ -879,6 +1082,12 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Reports a touch up. The latched button fires its action when the touch ends over the same part. Other ids are ignored.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="id">The touch point id.</param>
     public void TouchUp(double x, double y, int id)
     {
         _thread.Assert();
@@ -928,6 +1137,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Cancels the latched touch and releases its button with no action.
+    /// </summary>
     public void TouchCancel()
     {
         _thread.Assert();
@@ -969,8 +1181,16 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         return EdgesOf(near) != FrameEdges.None ? near : part;
     }
 
+    /// <summary>
+    /// Gets or sets the offset from the frame input coordinates to <see cref="MenuLayer"/> coordinates.
+    /// </summary>
     public Point MenuOrigin { get; set; }
 
+    /// <summary>
+    /// Opens the window menu at a point. When the renderer has no menu, no <see cref="MenuLayer"/> is set or the popup fails, it raises a <see cref="FrameActionKind.ShowMenu"/> request instead.
+    /// </summary>
+    /// <param name="x">The horizontal position in the coordinates of the parent tree, the same space as the configured geometry.</param>
+    /// <param name="y">The vertical position in the coordinates of the parent tree, the same space as the configured geometry.</param>
     public void OpenMenu(double x, double y)
     {
         _thread.Assert();
@@ -1032,6 +1252,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Closes the menu popup and destroys its node. It does nothing when no menu is open.
+    /// </summary>
     public void DismissMenu()
     {
         _thread.Assert();
@@ -1058,8 +1281,18 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Checks whether a scene node is the menu popup of this frame.
+    /// </summary>
+    /// <param name="node">The node to check, for example the result of a hit test.</param>
+    /// <returns><see langword="true"/> when a menu is open and <paramref name="node"/> shows it.</returns>
     public bool OwnsMenuNode(SceneNode node) => _menuNode is not null && node == _menuNode;
 
+    /// <summary>
+    /// Reports pointer motion over the menu popup and redraws it when the hot item changes.
+    /// </summary>
+    /// <param name="x">The horizontal position in menu-local coordinates.</param>
+    /// <param name="y">The vertical position in menu-local coordinates.</param>
     public void MenuPointerMotion(double x, double y)
     {
         _thread.Assert();
@@ -1083,6 +1316,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Reports that the pointer left the menu popup and clears the hot item.
+    /// </summary>
     public void MenuPointerLeave()
     {
         _thread.Assert();
@@ -1102,6 +1338,12 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Reports a button over the menu popup. A release closes the menu and raises <see cref="Requested"/> with the action of the item under the pointer, if any. A press does nothing.
+    /// </summary>
+    /// <param name="x">The horizontal position in menu-local coordinates.</param>
+    /// <param name="y">The vertical position in menu-local coordinates.</param>
+    /// <param name="pressed"><see langword="true"/> for a press, <see langword="false"/> for a release.</param>
     public void MenuPointerButton(double x, double y, bool pressed)
     {
         _thread.Assert();
@@ -1137,6 +1379,11 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Forwards damage from the chrome surface to the strips, or from the menu popup to its node.
+    /// </summary>
+    /// <param name="surface">The surface that changed.</param>
+    /// <param name="damage">The changed region. An empty region damages everything.</param>
     public void OnSurfaceDamaged(IUISurface surface, PixmanRegion32 damage)
     {
         if (ReferenceEquals(surface, _surface))
@@ -1149,6 +1396,10 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
     }
 
+    /// <summary>
+    /// Does nothing. The frame owns its surfaces and disposes them itself.
+    /// </summary>
+    /// <param name="surface">The disposed surface.</param>
     public void OnSurfaceDestroyed(IUISurface surface)
     {
     }
@@ -1190,12 +1441,26 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         _interaction = _interaction with { PreviousPressed = _interaction.Pressed, Pressed = part, PressChangedAt = Time() };
     }
 
+    /// <summary>
+    /// Advances the chrome animation to the predicted vblank through <see cref="Tick(long)"/>. A value of 0 is passed on as the time.
+    /// </summary>
+    /// <param name="output">The output that the frame is for.</param>
+    /// <param name="predictedVblankNanos">The predicted vblank on the monotonic clock in nanoseconds.</param>
     public void BeginFrame(IOutput output, long predictedVblankNanos) => Tick(predictedVblankNanos);
 
+    /// <summary>
+    /// Does nothing. The frame paces its animation only on <see cref="BeginFrame(IOutput, long)"/>.
+    /// </summary>
+    /// <param name="output">The output that presented the frame.</param>
+    /// <param name="presentedNanos">The presentation time in nanoseconds.</param>
     public void EndFrame(IOutput output, long presentedNanos)
     {
     }
 
+    /// <summary>
+    /// Redraws an animating chrome at a time and asks the clock for another frame while it still animates. It does nothing while a draw is pending.
+    /// </summary>
+    /// <param name="now">The animation time on the monotonic clock in nanoseconds.</param>
     public void Tick(long now)
     {
         _thread.Assert();
@@ -1374,6 +1639,11 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         _clockAttached = false;
     }
 
+    /// <summary>
+    /// Maps a resize part to the edges that it moves.
+    /// </summary>
+    /// <param name="part">The part to map.</param>
+    /// <returns>The edges, or <see cref="FrameEdges.None"/> for a part that does not resize.</returns>
     public static FrameEdges EdgesOf(FramePart part) => part switch
     {
         FramePart.Top => FrameEdges.Top,
@@ -1387,6 +1657,9 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         _ => FrameEdges.None,
     };
 
+    /// <summary>
+    /// Removes the frame from its scene, closes the menu, disposes the chrome surface and destroys the frame tree. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         _thread.Assert();

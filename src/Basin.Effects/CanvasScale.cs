@@ -2,8 +2,14 @@ using Basin.Diagnostics;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Draws a window in a zone as an axis-aligned rectangle that gets smaller with depth, in place of the mesh. Every method is arithmetic on the stack.
+/// </summary>
 public sealed class CanvasScale
 {
+    /// <summary>
+    /// The default least scale of a window in a zone.
+    /// </summary>
     public const double DefaultMinScale = 0.35;
 
     private const int ResizeIterations = 48;
@@ -11,18 +17,30 @@ public sealed class CanvasScale
     private double _minScale = DefaultMinScale;
     private double _reach = 1.0;
 
+    /// <summary>
+    /// Gets or sets the least scale of a window in a zone. The setter clamps it to the range from 0.05 to 1.
+    /// </summary>
     public double MinScale
     {
         get => _minScale;
         set => _minScale = Math.Clamp(value, 0.05, 1.0);
     }
 
+    /// <summary>
+    /// Gets or sets how much canvas depth the shrink spreads over, as a multiple of the extension. The setter clamps it to the range from 1 to 16.
+    /// </summary>
     public double Reach
     {
         get => _reach;
         set => _reach = Math.Clamp(value, 1.0, 16.0);
     }
 
+    /// <summary>
+    /// Returns the scale on one axis for a window whose inner edge is at a canvas coordinate. It does not apply <see cref="MinScale"/>.
+    /// </summary>
+    /// <param name="warp">The zone on that axis, or <see langword="null"/> for none.</param>
+    /// <param name="inner">The canvas coordinate of the window edge nearest the flat area.</param>
+    /// <returns>1 at and before the seam, then the curve of the zone stretched by <see cref="Reach"/>.</returns>
     public double AxisScale(CanvasWarp? warp, double inner)
     {
         if (warp is null || warp.IsIdentity)
@@ -45,6 +63,11 @@ public sealed class CanvasScale
         return warp.ScaleAt(warp.Seam + (warp.Direction * warp.Extension * v));
     }
 
+    /// <summary>
+    /// Returns the scale of a window from the depth of its inner edges.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <returns>The smaller axis scale, at least <see cref="MinScale"/> and at most 1.</returns>
     public double ScaleFor(CanvasWarpTransform map, in Box canvasBox)
     {
         var (kx, _) = Axis(Across(map.Left, map.Right, canvasBox.X, canvasBox.Width), canvasBox.X, canvasBox.Width);
@@ -52,6 +75,11 @@ public sealed class CanvasScale
         return Floor(Math.Min(kx, ky));
     }
 
+    /// <summary>
+    /// Returns the canvas point that the placement holds on the field. It ramps from the box center to the inner edge while the box straddles the seam.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <returns>The anchor in canvas pixels.</returns>
     public (double X, double Y) AnchorFor(CanvasWarpTransform map, in Box canvasBox)
     {
         var (_, x) = Axis(Across(map.Left, map.Right, canvasBox.X, canvasBox.Width), canvasBox.X, canvasBox.Width);
@@ -59,6 +87,11 @@ public sealed class CanvasScale
         return (x, y);
     }
 
+    /// <summary>
+    /// Returns the placement of a resting window: the scale from its inner edges about its anchor, drawn where the warp puts the anchor.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <returns>The identity while the inner edges are on the flat side of every seam.</returns>
     public RenderTransform PlacementFor(CanvasWarpTransform map, in Box canvasBox)
     {
         AllocationScope.Begin();
@@ -71,6 +104,12 @@ public sealed class CanvasScale
         return placement;
     }
 
+    /// <summary>
+    /// Returns the eased scale from the depth of a screen point in the deepest zone that holds it.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="screenX">The screen X coordinate.</param>
+    /// <param name="screenY">The screen Y coordinate.</param>
+    /// <returns>1 outside every zone and <see cref="MinScale"/> at the screen edge.</returns>
     public double ScaleAtScreen(CanvasWarpTransform map, double screenX, double screenY)
     {
         var depth = Math.Max(
@@ -85,12 +124,29 @@ public sealed class CanvasScale
         return 1.0 - ((1.0 - _minScale) * eased);
     }
 
+    /// <summary>
+    /// Returns the resting placement for an anchor, drawn at its field position through the same solve as <see cref="HandPlacementFor"/>.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="anchorX">The canvas X coordinate of the anchor.</param>
+    /// <param name="anchorY">The canvas Y coordinate of the anchor.</param>
+    /// <returns>The placement matrix.</returns>
     public RenderTransform AnchoredPlacementFor(CanvasWarpTransform map, in Box canvasBox, double anchorX, double anchorY)
     {
         var (screenX, screenY) = map.ToScreenPoint(anchorX, anchorY);
         return HandPlacementFor(map, canvasBox, anchorX, anchorY, screenX, screenY);
     }
 
+    /// <summary>
+    /// Returns the placement of a held window, with the scale solved from its drawn edges. The window reaches the floor exactly as its leading edge meets the screen edge.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="anchorX">The canvas X coordinate of the grabbed point.</param>
+    /// <param name="anchorY">The canvas Y coordinate of the grabbed point.</param>
+    /// <param name="screenX">The screen X coordinate where the grabbed point draws.</param>
+    /// <param name="screenY">The screen Y coordinate where the grabbed point draws.</param>
+    /// <param name="bias">A value added to the eased scale, which lets a consumer blend in from another scale.</param>
+    /// <returns>The placement matrix, with a scale from <see cref="MinScale"/> to 1.</returns>
     public RenderTransform HandPlacementFor(
         CanvasWarpTransform map,
         in Box canvasBox,
@@ -143,6 +199,15 @@ public sealed class CanvasScale
         return k - wanted;
     }
 
+    /// <summary>
+    /// Returns the placement of a dragged window with the grabbed point as the fixed point of the scale. The scale comes from the inner edges.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="grabX">The canvas X coordinate of the grabbed point.</param>
+    /// <param name="grabY">The canvas Y coordinate of the grabbed point.</param>
+    /// <param name="cursorX">The screen X coordinate of the cursor.</param>
+    /// <param name="cursorY">The screen Y coordinate of the cursor.</param>
+    /// <returns>The placement matrix.</returns>
     public RenderTransform DragPlacementFor(
         CanvasWarpTransform map,
         in Box canvasBox,
@@ -157,6 +222,15 @@ public sealed class CanvasScale
         return placement;
     }
 
+    /// <summary>
+    /// Returns a uniform scale that draws a canvas point at a screen point.
+    /// </summary>
+    /// <param name="scale">The uniform scale.</param>
+    /// <param name="canvasX">The canvas X coordinate of the fixed point.</param>
+    /// <param name="canvasY">The canvas Y coordinate of the fixed point.</param>
+    /// <param name="screenX">The screen X coordinate where the point draws.</param>
+    /// <param name="screenY">The screen Y coordinate where the point draws.</param>
+    /// <returns>The matrix, or <see cref="RenderTransform.Identity"/> when it changes nothing.</returns>
     public static RenderTransform About(double scale, double canvasX, double canvasY, double screenX, double screenY)
     {
         if (scale == 1.0 && canvasX == screenX && canvasY == screenY)
@@ -170,6 +244,13 @@ public sealed class CanvasScale
             0, 0, 1);
     }
 
+    /// <summary>
+    /// Interpolates the scale and translation entries of two axis-aligned scales.
+    /// </summary>
+    /// <param name="from">The placement at 0.</param>
+    /// <param name="to">The placement at 1.</param>
+    /// <param name="t">The blend fraction. Values outside the range from 0 to 1 return an end.</param>
+    /// <returns>An axis-aligned scale. It ignores any rotation or projection in the inputs.</returns>
     public static RenderTransform Blend(in RenderTransform from, in RenderTransform to, double t)
     {
         if (t <= 0)
@@ -189,6 +270,12 @@ public sealed class CanvasScale
         return new RenderTransform(scaleX, 0, x, 0, scaleY, y, 0, 0, 1);
     }
 
+    /// <summary>
+    /// Returns the screen box that a placement draws a canvas box into.
+    /// </summary>
+    /// <param name="placement">The placement matrix.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <returns>The drawn box, or the canvas box when the placement is the identity or cannot map it.</returns>
     public Box DrawnBox(in RenderTransform placement, in Box canvasBox)
     {
         if (placement.IsIdentity)
@@ -199,6 +286,12 @@ public sealed class CanvasScale
         return placement.TryMapBounds(canvasBox, out var drawn) ? drawn : canvasBox;
     }
 
+    /// <summary>
+    /// Searches for the deepest position on one side at which the drawn outer edge stays on the screen. It samples each canvas pixel from the seam to the far edge.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="side">The zone to park in.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <returns>The canvas origin of the box on that axis, or the position with the least overhang when no position fits.</returns>
     public int ParkTarget(CanvasWarpTransform map, CanvasWarp side, in Box canvasBox)
     {
         var vertical = ReferenceEquals(side, map.Top) || ReferenceEquals(side, map.Bottom);
@@ -236,6 +329,13 @@ public sealed class CanvasScale
         return fit != int.MinValue ? fit : leastAt;
     }
 
+    /// <summary>
+    /// Searches along the diagonal from the seams of a corner for the deepest position at which both drawn outer edges stay on the screen.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="side">The left or right zone of the corner.</param>
+    /// <param name="end">The top or bottom zone of the corner.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <returns>The canvas origin of the box, or the position with the least overhang when no position fits.</returns>
     public (int X, int Y) CornerParkTarget(CanvasWarpTransform map, CanvasWarp side, CanvasWarp end, in Box canvasBox)
     {
         if (side.IsIdentity || end.IsIdentity)
@@ -280,6 +380,19 @@ public sealed class CanvasScale
         return fitX != int.MinValue ? (fitX, fitY) : (leastX, leastY);
     }
 
+    /// <summary>
+    /// Solves a resize that holds the opposite corner still and puts the drawn grabbed edges on the cursor.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="start">The window box in canvas pixels when the resize started.</param>
+    /// <param name="left"><see langword="true"/> when the left edge is grabbed.</param>
+    /// <param name="right"><see langword="true"/> when the right edge is grabbed.</param>
+    /// <param name="top"><see langword="true"/> when the top edge is grabbed.</param>
+    /// <param name="bottom"><see langword="true"/> when the bottom edge is grabbed.</param>
+    /// <param name="fixedScreenX">The screen X coordinate of the corner that stays still.</param>
+    /// <param name="fixedScreenY">The screen Y coordinate of the corner that stays still.</param>
+    /// <param name="cursorX">The screen X coordinate of the cursor.</param>
+    /// <param name="cursorY">The screen Y coordinate of the cursor.</param>
+    /// <returns>The scale of the resized window and the canvas point under the cursor. The consumer applies its own size rules to that point.</returns>
     public (double Scale, double X, double Y) ResizeCursor(
         CanvasWarpTransform map,
         in Box start,
@@ -353,16 +466,38 @@ public sealed class CanvasScale
         return ScaleFor(map, box) - k;
     }
 
+    /// <summary>
+    /// Returns the fit shrink of a window at rest on a terrace shelf. In a corner the smaller of the two axes applies.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <returns>A factor up to 1, which is 1 when the window fits the shelf or no terrace holds it.</returns>
     public double FitFor(CanvasWarpTransform map, in Box canvasBox, double shelfMin) =>
         Math.Min(
             AxisFit(Across(map.Left, map.Right, canvasBox.X, canvasBox.Width), canvasBox.Width, shelfMin),
             AxisFit(Across(map.Top, map.Bottom, canvasBox.Y, canvasBox.Height), canvasBox.Height, shelfMin));
 
+    /// <summary>
+    /// Returns the fit shrink eased in by the screen depth of the leading edges. It is 1 at the seam and <see cref="FitFor"/> at the screen edge.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <param name="leadingX">The screen X coordinate of the leading edge, in the unzoomed frame.</param>
+    /// <param name="leadingY">The screen Y coordinate of the leading edge, in the unzoomed frame.</param>
+    /// <returns>The eased factor.</returns>
     public double FitAtDepth(CanvasWarpTransform map, in Box canvasBox, double shelfMin, double leadingX, double leadingY) =>
         Math.Min(
             AxisFitAtDepth(Across(map.Left, map.Right, canvasBox.X, canvasBox.Width), canvasBox.Width, shelfMin, leadingX),
             AxisFitAtDepth(Across(map.Top, map.Bottom, canvasBox.Y, canvasBox.Height), canvasBox.Height, shelfMin, leadingY));
 
+    /// <summary>
+    /// Finds the fit shrink at which the leading edges, drawn through that shrink, give the same shrink back. It solves by bisection.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <param name="anchorX">The canvas X coordinate of the pre-scale anchor.</param>
+    /// <param name="anchorY">The canvas Y coordinate of the pre-scale anchor.</param>
+    /// <returns>The fit factor, from <see cref="FitFor"/> to 1.</returns>
     public double SolveFit(CanvasWarpTransform map, in Box canvasBox, double shelfMin, double anchorX, double anchorY)
     {
         var rest = FitFor(map, canvasBox, shelfMin);
@@ -396,6 +531,12 @@ public sealed class CanvasScale
         return 0.5 * (low + high);
     }
 
+    /// <summary>
+    /// Returns the scale at which a window draws on a terrace shelf: the shelf scale times the fit shrink.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <returns>The draw scale. It does not include the view zoom.</returns>
     public double ShelfScaleFor(CanvasWarpTransform map, in Box canvasBox, double shelfMin)
     {
         var sideX = Across(map.Left, map.Right, canvasBox.X, canvasBox.Width);
@@ -406,6 +547,13 @@ public sealed class CanvasScale
         return k * FitFor(map, canvasBox, shelfMin);
     }
 
+    /// <summary>
+    /// Returns the closed-form park position on a terrace side, with the pre-scaled outer edge on the screen edge and the anchor at the center.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="side">The zone to park in.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <returns>The canvas origin of the box on that axis. A zone that is not a terrace falls back to <see cref="ParkTarget"/>.</returns>
     public int TerraceParkTarget(CanvasWarpTransform map, CanvasWarp side, in Box canvasBox, double shelfMin)
     {
         var vertical = ReferenceEquals(side, map.Top) || ReferenceEquals(side, map.Bottom);
@@ -421,6 +569,14 @@ public sealed class CanvasScale
         return (int)Math.Round(center - (size / 2.0));
     }
 
+    /// <summary>
+    /// Returns the park position in a terrace corner, with the pre-scaled outer corner on the screen corner.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="side">The left or right zone of the corner.</param>
+    /// <param name="end">The top or bottom zone of the corner.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <returns>The canvas origin of the box. A corner that is not two terraces falls back to <see cref="CornerParkTarget"/>.</returns>
     public (int X, int Y) TerraceCornerParkTarget(
         CanvasWarpTransform map, CanvasWarp side, CanvasWarp end, in Box canvasBox, double shelfMin)
     {
@@ -432,6 +588,16 @@ public sealed class CanvasScale
         return TerraceCornerTarget(map, side, end, canvasBox, shelfMin, side.OuterEdge, end.OuterEdge);
     }
 
+    /// <summary>
+    /// Returns the position that puts the pre-scaled outer corner of a meshed window on a point, through the inverse map.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="side">The left or right zone of the corner.</param>
+    /// <param name="end">The top or bottom zone of the corner.</param>
+    /// <param name="canvasBox">The window box in canvas pixels.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <param name="outerX">The X coordinate of the target point in the unzoomed frame.</param>
+    /// <param name="outerY">The Y coordinate of the target point in the unzoomed frame.</param>
+    /// <returns>The canvas origin of the box.</returns>
     public (int X, int Y) TerraceCornerTarget(
         CanvasWarpTransform map, CanvasWarp side, CanvasWarp end, in Box canvasBox, double shelfMin, double outerX, double outerY)
     {
@@ -449,6 +615,20 @@ public sealed class CanvasScale
         return ((int)Math.Round(x), (int)Math.Round(y));
     }
 
+    /// <summary>
+    /// Solves a resize on a terrace shelf, where the drawn scale is the shelf scale times the fit and the view zoom.
+    /// </summary><param name="map">The warp map of the output.</param>
+    /// <param name="start">The window box in canvas pixels when the resize started.</param>
+    /// <param name="left"><see langword="true"/> when the left edge is grabbed.</param>
+    /// <param name="right"><see langword="true"/> when the right edge is grabbed.</param>
+    /// <param name="top"><see langword="true"/> when the top edge is grabbed.</param>
+    /// <param name="bottom"><see langword="true"/> when the bottom edge is grabbed.</param>
+    /// <param name="fixedScreenX">The screen X coordinate of the corner that stays still.</param>
+    /// <param name="fixedScreenY">The screen Y coordinate of the corner that stays still.</param>
+    /// <param name="cursorX">The screen X coordinate of the cursor.</param>
+    /// <param name="cursorY">The screen Y coordinate of the cursor.</param>
+    /// <param name="shelfMin">The least scale at which a window can draw on a shelf.</param>
+    /// <returns>The drawn scale of the resized window and the canvas point under the cursor.</returns>
     public (double Scale, double X, double Y) TerraceResizeCursor(
         CanvasWarpTransform map,
         in Box start,

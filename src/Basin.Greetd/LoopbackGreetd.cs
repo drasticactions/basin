@@ -5,6 +5,9 @@ using Basin;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// A fake greetd server in the process, on the compositor loop, for a demo mode. It accepts any user with one password and starts nothing.
+/// </summary>
 public sealed partial class LoopbackGreetd : IDisposable
 {
     private const int AfUnix = 1;
@@ -28,8 +31,18 @@ public sealed partial class LoopbackGreetd : IDisposable
         _source = loop.AddFd((int)_socket.Handle, FdReadiness.Readable, OnReady);
     }
 
+    /// <summary>
+    /// Occurs when the client sends <c>start_session</c> after a correct password. The server answers success and runs nothing.
+    /// </summary>
     public event Action<GreetdStartSession>? SessionStarted;
 
+    /// <summary>
+    /// Creates a socket pair and serves one end on <paramref name="loop"/>.
+    /// </summary>
+    /// <param name="loop">The loop that reads the server end.</param>
+    /// <param name="options">The conversation, or <see langword="null"/> for the defaults.</param>
+    /// <returns>The server and the client socket for <see cref="GreetdClient.Adopt"/>. The caller owns both.</returns>
+    /// <exception cref="IOException">The socket pair cannot be made.</exception>
     public static (LoopbackGreetd Server, Socket Client) Create(ICompositorEventLoop loop, LoopbackGreetdOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(loop);
@@ -44,6 +57,9 @@ public sealed partial class LoopbackGreetd : IDisposable
         return (new LoopbackGreetd(loop, server, options ?? new LoopbackGreetdOptions()), client);
     }
 
+    /// <summary>
+    /// Removes the server from the loop and closes its end of the socket pair. It does not close the client socket.
+    /// </summary>
     public void Dispose()
     {
         if (!_source.IsRemoved)

@@ -2,8 +2,15 @@ using System.Text;
 
 namespace Basin.Capabilities;
 
+/// <summary>
+/// Types a string as key presses through the active keymap.
+/// It holds the needed modifiers for each character, and it can map spare keycodes for characters that the layout does not have.
+/// </summary>
 public sealed class TextTyper
 {
+    /// <summary>
+    /// The evdev keycodes that <see cref="IKeymapOverride"/> can remap to type a missing character. One batch can use each keycode once.
+    /// </summary>
     public static readonly uint[] SpareKeycodes = [183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194];
 
     private static readonly (uint Mask, uint Keysym)[] ModifierKeysyms =
@@ -20,6 +27,12 @@ public sealed class TextTyper
     private readonly List<(uint Keycode, uint Keysym)> _spares = new(12);
     private readonly List<uint> _held = new(4);
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="TextTyper"/> class.
+    /// </summary>
+    /// <param name="lookup">The lookup that finds the key and the modifiers for each keysym.</param>
+    /// <param name="keymapOverride">The override for characters that the keymap does not have, or <see langword="null"/> to type only what the keymap has.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="lookup"/> is <see langword="null"/>.</exception>
     public TextTyper(IKeymapLookup lookup, IKeymapOverride? keymapOverride)
     {
         ArgumentNullException.ThrowIfNull(lookup);
@@ -27,6 +40,11 @@ public sealed class TextTyper
         _override = keymapOverride;
     }
 
+    /// <summary>
+    /// Gets the XKB keysym for a character. Control characters map to their function keysyms, for example a newline to Return.
+    /// </summary>
+    /// <param name="rune">The character.</param>
+    /// <returns>The Latin-1 keysym, a function keysym, or the Unicode keysym <c>0x01000000</c> plus the code point.</returns>
     public static uint KeysymOf(Rune rune) => rune.Value switch
     {
         '\n' or '\r' => 0xff0du,
@@ -37,10 +55,28 @@ public sealed class TextTyper
         _ => 0x01000000u | (uint)rune.Value,
     };
 
+    /// <summary>
+    /// Tells whether the active keymap can type a character with Shift, Control, Alt and Level 3 only. It does not consider spare keycodes.
+    /// </summary>
+    /// <param name="rune">The character.</param>
+    /// <returns><see langword="true"/> when a key and its modifiers produce the character.</returns>
     public bool CanType(Rune rune) => Resolve(KeysymOf(rune), out _, out _);
 
+    /// <summary>
+    /// Gets or sets a value indicating whether <see cref="Type"/> skips a character that it cannot type instead of stopping there.
+    /// It applies only without an <see cref="IKeymapOverride"/>.
+    /// </summary>
     public bool SkipUntypable { get; set; }
 
+    /// <summary>
+    /// Types text as key presses and releases. It holds the modifiers around each key and releases them after it.
+    /// </summary>
+    /// <param name="text">The text to type.</param>
+    /// <param name="timeMs">The event time in milliseconds for all key events.</param>
+    /// <param name="target">The target that receives the key events.</param>
+    /// <param name="error">A message for the first character that the keymap cannot type, or <see langword="null"/>.</param>
+    /// <returns>The number of characters whose key events the target accepted.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
     public int Type(ReadOnlySpan<char> text, uint timeMs, ITextKeyTarget target, out string? error)
     {
         ArgumentNullException.ThrowIfNull(target);

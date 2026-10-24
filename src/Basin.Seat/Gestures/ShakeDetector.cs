@@ -2,6 +2,9 @@ using Basin.Diagnostics;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Detects a fast back-and-forth shake of the pointer, for example to make the cursor larger. It must be used on the thread that created it.
+/// </summary>
 public sealed class ShakeDetector
 {
     private const double Tolerance = 1.0;
@@ -11,16 +14,32 @@ public sealed class ShakeDetector
     private readonly ThreadAffinity _thread = ThreadAffinity.Capture();
     private readonly List<(double X, double Y, long Nanos)> _history = [];
 
+    /// <summary>
+    /// Gets or sets the time window in milliseconds over which the shake is measured.
+    /// </summary>
     public double IntervalMillis { get; set; } = 1000;
 
+    /// <summary>
+    /// Gets or sets the ratio of path length to the diagonal of the covered box above which the motion is a shake. A lower value fires more easily.
+    /// </summary>
     public double Sensitivity { get; set; } = 4;
 
+    /// <summary>
+    /// Forgets the motion history.
+    /// </summary>
     public void Reset()
     {
         _thread.Assert();
         _history.Clear();
     }
 
+    /// <summary>
+    /// Adds a pointer position. Motion that covers a box with a diagonal under 100 units never fires.
+    /// </summary>
+    /// <param name="x">The horizontal position in layout coordinates.</param>
+    /// <param name="y">The vertical position in layout coordinates.</param>
+    /// <param name="nanos">The event time in nanoseconds on a monotonic clock.</param>
+    /// <returns><see langword="true"/> when the motion is a shake. The history is then cleared.</returns>
     public bool Update(double x, double y, long nanos)
     {
         _thread.Assert();

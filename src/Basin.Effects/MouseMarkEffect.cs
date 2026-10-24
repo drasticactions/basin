@@ -3,8 +3,14 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's mouse mark effect. It keeps freehand lines and arrows that the user draws in the feedback overlay until they are cleared.
+/// </summary>
 public sealed class MouseMarkEffect : IMeshSource
 {
+    /// <summary>
+    /// The default value of <see cref="LineWidth"/>, in pixels.
+    /// </summary>
     public const double DefaultLineWidth = 3;
 
     private const double ArrowHeadLength = 30;
@@ -17,16 +23,36 @@ public sealed class MouseMarkEffect : IMeshSource
     private SceneMesh? _mesh;
     private (double X, double Y)? _arrowStart;
 
+    /// <summary>
+    /// Gets or sets the line width, in pixels. A change shows at the next change of the marks.
+    /// </summary>
     public double LineWidth { get; set; } = DefaultLineWidth;
 
+    /// <summary>
+    /// Gets or sets the line color. The default is red.
+    /// </summary>
     public RenderColor Color { get; set; } = new(1f, 0f, 0f, 1f);
 
+    /// <summary>
+    /// Gets a value indicating whether there is a finished mark or a line in progress.
+    /// </summary>
     public bool IsActive => _marks.Count > 0 || _drawing.Count > 0;
 
+    /// <summary>
+    /// Gets a value indicating whether a freehand line is in progress.
+    /// </summary>
     public bool IsDrawing => _drawing.Count > 0;
 
+    /// <summary>
+    /// Gets a value indicating whether an arrow has a start point and waits for <see cref="EndArrow"/>.
+    /// </summary>
     public bool IsArrowing => _arrowStart is not null;
 
+    /// <summary>
+    /// Claims a mesh in the feedback overlay and draws into it from now on.
+    /// </summary>
+    /// <param name="overlay">The feedback overlay of the output.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Attach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -34,6 +60,11 @@ public sealed class MouseMarkEffect : IMeshSource
         _mesh = overlay.Claim(this, this);
     }
 
+    /// <summary>
+    /// Releases the mesh in the feedback overlay and removes every mark.
+    /// </summary>
+    /// <param name="overlay">The overlay that <see cref="Attach"/> received.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Detach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -43,6 +74,11 @@ public sealed class MouseMarkEffect : IMeshSource
         Clear();
     }
 
+    /// <summary>
+    /// Starts a freehand line at a point and drops a line that was in progress.
+    /// </summary>
+    /// <param name="x">The horizontal position, in the coordinates of the overlay.</param>
+    /// <param name="y">The vertical position, in the coordinates of the overlay.</param>
     public void BeginFreehand(double x, double y)
     {
         _thread.Assert();
@@ -51,6 +87,11 @@ public sealed class MouseMarkEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Adds a point to the freehand line in progress. It does nothing when no line is in progress.
+    /// </summary>
+    /// <param name="x">The horizontal position.</param>
+    /// <param name="y">The vertical position.</param>
     public void Extend(double x, double y)
     {
         _thread.Assert();
@@ -61,6 +102,9 @@ public sealed class MouseMarkEffect : IMeshSource
         }
     }
 
+    /// <summary>
+    /// Keeps the freehand line in progress as a mark when it has at least two points.
+    /// </summary>
     public void EndFreehand()
     {
         _thread.Assert();
@@ -73,12 +117,22 @@ public sealed class MouseMarkEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Sets the start point of an arrow. Nothing draws until <see cref="EndArrow"/>.
+    /// </summary>
+    /// <param name="x">The horizontal position.</param>
+    /// <param name="y">The vertical position.</param>
     public void BeginArrow(double x, double y)
     {
         _thread.Assert();
         _arrowStart = (x, y);
     }
 
+    /// <summary>
+    /// Adds an arrow from the start point to a point. An arrow shorter than one pixel, or one with no start point, adds nothing.
+    /// </summary>
+    /// <param name="x">The horizontal position of the arrow head.</param>
+    /// <param name="y">The vertical position of the arrow head.</param>
     public void EndArrow(double x, double y)
     {
         _thread.Assert();
@@ -109,6 +163,9 @@ public sealed class MouseMarkEffect : IMeshSource
         Refresh();
     }
 
+    /// <summary>
+    /// Removes the last finished mark.
+    /// </summary>
     public void UndoLast()
     {
         _thread.Assert();
@@ -119,6 +176,9 @@ public sealed class MouseMarkEffect : IMeshSource
         }
     }
 
+    /// <summary>
+    /// Removes every mark, the line in progress and the arrow start.
+    /// </summary>
     public void Clear()
     {
         _thread.Assert();
@@ -128,6 +188,7 @@ public sealed class MouseMarkEffect : IMeshSource
         Refresh();
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds)
     {
         var segments = 0;
@@ -140,6 +201,7 @@ public sealed class MouseMarkEffect : IMeshSource
         return segments * FeedbackShapes.QuadVertexCount;
     }
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into)
     {
         var color = FeedbackShapes.Premultiplied(Color, 1.0);

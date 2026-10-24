@@ -2,10 +2,18 @@ using Prowl.PaperUI;
 
 namespace Basin.UI.Paper;
 
+/// <summary>
+/// Maps evdev keycodes to Paper keys.
+/// </summary>
 public static class EvdevPaperKeys
 {
     private static readonly PaperKey[] Table = Build();
 
+    /// <summary>
+    /// Gets the Paper key for an evdev keycode.
+    /// </summary>
+    /// <param name="key">The evdev keycode.</param>
+    /// <returns>The Paper key, or <see cref="PaperKey.Unknown"/> for a code with no match.</returns>
     public static PaperKey KeyOf(uint key) => key < (uint)Table.Length ? Table[key] : PaperKey.Unknown;
 
     private static PaperKey[] Build()

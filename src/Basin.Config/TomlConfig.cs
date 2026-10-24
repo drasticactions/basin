@@ -4,8 +4,17 @@ using Tomlyn.Model;
 
 namespace Basin.Config;
 
+/// <summary>
+/// Finds, seeds and reads the TOML configuration file of a program.
+/// </summary>
 public static class TomlConfig
 {
+    /// <summary>
+    /// Gives the default configuration path: <c>$XDG_CONFIG_HOME/NAME/NAME.toml</c>, or <c>~/.config/NAME/NAME.toml</c> when the variable is unset or relative.
+    /// </summary>
+    /// <param name="name">The program name.</param>
+    /// <returns>The absolute path of the configuration file.</returns>
+    /// <exception cref="ArgumentException"><paramref name="name"/> is <see langword="null"/> or empty.</exception>
     public static string DefaultPath(string name)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -19,6 +28,16 @@ public static class TomlConfig
         return Path.Combine(configHome, name, name + ".toml");
     }
 
+    /// <summary>
+    /// Loads the configuration of a program. A file at the default path that is missing is first written from the template.
+    /// A named file that does not load sets <see cref="TomlLoad.Fatal"/>. A default file that does not parse only gives a warning.
+    /// </summary>
+    /// <param name="namedPath">The path that the user gave, or <see langword="null"/> or empty for the default path.</param>
+    /// <param name="name">The program name for the default path.</param>
+    /// <param name="none">If <see langword="true"/>, no file is read and the result is empty.</param>
+    /// <param name="template">Opens the default file contents, or <see langword="null"/> to write no default file.</param>
+    /// <param name="log">The logger for warnings.</param>
+    /// <returns>The loaded table, the path that was tried and a fatal error, if any.</returns>
     public static TomlLoad Load(string? namedPath, string name, bool none, Func<Stream>? template, BasinLogger log)
     {
         ArgumentException.ThrowIfNullOrEmpty(name);
@@ -54,6 +73,13 @@ public static class TomlConfig
         return new TomlLoad(null, file, null);
     }
 
+    /// <summary>
+    /// Writes the template to a file that does not exist yet and creates its directory. An existing file is never replaced.
+    /// </summary>
+    /// <param name="file">The path to write.</param>
+    /// <param name="template">The default file contents.</param>
+    /// <param name="log">The logger for the result.</param>
+    /// <returns><see langword="false"/> when the file exists or cannot be written.</returns>
     public static bool Seed(string file, Stream template, BasinLogger log)
     {
         ArgumentException.ThrowIfNullOrEmpty(file);
@@ -80,6 +106,12 @@ public static class TomlConfig
         }
     }
 
+    /// <summary>
+    /// Reads and parses a TOML file. It warns when the file exists but does not parse.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    /// <param name="log">The logger for warnings.</param>
+    /// <returns>The table, or <see langword="null"/> when the file is missing, cannot be read or does not parse.</returns>
     public static TomlTable? Read(string path, BasinLogger log)
     {
         var table = Read(path, out var failure);
@@ -91,6 +123,13 @@ public static class TomlConfig
         return table;
     }
 
+    /// <summary>
+    /// Reads and parses a TOML file without logging.
+    /// </summary>
+    /// <param name="path">The path of the file.</param>
+    /// <param name="failure">The reason for a <see langword="null"/> result, else <see langword="null"/>.</param>
+    /// <returns>The table, or <see langword="null"/> when the file is missing, cannot be read or does not parse.</returns>
+    /// <exception cref="ArgumentException"><paramref name="path"/> is <see langword="null"/> or empty.</exception>
     public static TomlTable? Read(string path, out string? failure)
     {
         ArgumentException.ThrowIfNullOrEmpty(path);
@@ -124,24 +163,51 @@ public static class TomlConfig
         }
     }
 
+    /// <summary>
+    /// Reads a boolean key.
+    /// </summary>
+    /// <param name="table">The table to read.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="fallback">The value when the key is missing or not a boolean.</param>
+    /// <returns>The value of the key, or <paramref name="fallback"/>.</returns>
     public static bool Flag(TomlTable table, string key, bool fallback)
     {
         ArgumentNullException.ThrowIfNull(table);
         return table.TryGetValue(key, out var value) && value is bool flag ? flag : fallback;
     }
 
+    /// <summary>
+    /// Reads a string key.
+    /// </summary>
+    /// <param name="table">The table to read.</param>
+    /// <param name="key">The key.</param>
+    /// <returns>The string, or <see langword="null"/> when the key is missing, empty or not a string.</returns>
     public static string? Text(TomlTable table, string key)
     {
         ArgumentNullException.ThrowIfNull(table);
         return table.TryGetValue(key, out var value) && value is string text && text.Length > 0 ? text : null;
     }
 
+    /// <summary>
+    /// Reads an integer key. A value outside the <see cref="int"/> range is truncated.
+    /// </summary>
+    /// <param name="table">The table to read.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="fallback">The value when the key is missing or not an integer.</param>
+    /// <returns>The value of the key, or <paramref name="fallback"/>.</returns>
     public static int Number(TomlTable table, string key, int fallback)
     {
         ArgumentNullException.ThrowIfNull(table);
         return table.TryGetValue(key, out var value) && value is long number ? (int)number : fallback;
     }
 
+    /// <summary>
+    /// Reads a float or integer key as a <see cref="double"/>.
+    /// </summary>
+    /// <param name="table">The table to read.</param>
+    /// <param name="key">The key.</param>
+    /// <param name="fallback">The value when the key is missing or not a number.</param>
+    /// <returns>The value of the key, or <paramref name="fallback"/>.</returns>
     public static double Number(TomlTable table, string key, double fallback)
     {
         ArgumentNullException.ThrowIfNull(table);

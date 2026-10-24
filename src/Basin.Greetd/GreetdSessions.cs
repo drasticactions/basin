@@ -3,8 +3,16 @@ using static Basin.Greetd.GreetdLog;
 
 namespace Basin.Greetd;
 
+/// <summary>
+/// Lists the sessions that a greeter offers and builds the free command session.
+/// </summary>
 public static class GreetdSessions
 {
+    /// <summary>
+    /// Lists the Wayland sessions, then the X11 sessions, then the lines of the environments file. An id that is already taken is skipped, so a Wayland entry wins over an X11 entry.
+    /// </summary>
+    /// <param name="options">The directories, the X11 wrapper and the environments file, or <see langword="null"/> for the defaults.</param>
+    /// <returns>A new list of sessions. It is empty when nothing is installed.</returns>
     public static IReadOnlyList<GreetdSession> List(GreetdSessionsOptions? options = null)
     {
         options ??= new GreetdSessionsOptions();
@@ -25,12 +33,23 @@ public static class GreetdSessions
         return sessions;
     }
 
+    /// <summary>
+    /// Makes a <see cref="GreetdSessionType.Command"/> session with the id <c>command</c> from a command line that the user typed.
+    /// </summary>
+    /// <param name="commandLine">The shell command line. It is not quoted.</param>
+    /// <returns>A session with no desktop entry and no environment lines.</returns>
+    /// <exception cref="ArgumentException"><paramref name="commandLine"/> is empty or white space.</exception>
     public static GreetdSession FreeCommand(string commandLine)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(commandLine);
         return new GreetdSession("command", commandLine, GreetdSessionType.Command, [commandLine], [], [], null);
     }
 
+    /// <summary>
+    /// Quotes one argument for <c>/bin/sh</c>, the way <see cref="ExecLine.Join"/> does.
+    /// </summary>
+    /// <param name="argument">The argument to quote.</param>
+    /// <returns>The argument, quoted when it holds a character that the shell treats as special.</returns>
     public static string Quote(string argument)
     {
         ArgumentNullException.ThrowIfNull(argument);

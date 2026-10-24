@@ -5,11 +5,20 @@ using Xkb;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Edits the text of a compiled xkb keymap.
+/// </summary>
 public static partial class KeymapEdit
 {
     [GeneratedRegex(@"<(?<name>[A-Za-z0-9_+\-]+)>\s*=\s*(?<code>\d+)\s*;")]
     private static partial Regex KeycodeLine();
 
+    /// <summary>
+    /// Adds keys to a keymap that each produce one keysym. A keycode with no name in the keymap gets a new name.
+    /// </summary>
+    /// <param name="keymap">The keymap text in the xkb v1 format.</param>
+    /// <param name="keys">The Linux evdev keycodes and the keysym each one produces.</param>
+    /// <returns>The new keymap text, or <see langword="null"/> when the keymap has no keycodes or symbols section or a keysym has no name.</returns>
     public static string? WithKeysyms(string keymap, ReadOnlySpan<(uint Keycode, uint Keysym)> keys)
     {
         ArgumentNullException.ThrowIfNull(keymap);

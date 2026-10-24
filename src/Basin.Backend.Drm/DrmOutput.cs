@@ -6,6 +6,9 @@ using static Basin.Backend.Drm.DrmLog;
 
 namespace Basin.Backend.Drm;
 
+/// <summary>
+/// One connector of a <see cref="DrmBackend"/> on its CRTC, with a primary plane and an optional cursor plane. Every commit is an atomic KMS commit.
+/// </summary>
 public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingOutput, Basin.Capabilities.IOutputColorPipeline
 {
     private readonly DrmBackend _backend;
@@ -13,14 +16,20 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     private readonly long[] _outFenceSlot = new long[1];
     private readonly System.Runtime.InteropServices.GCHandle _outFencePin;
 
+    /// <summary>
+    /// Gets the out-fence fd of the last frame commit. It is -1 when that commit did not request an out fence, the CRTC has none, or the flip was asynchronous.
+    /// The output never closes it. The next commit replaces the value.
+    /// </summary>
     public int LastOutFenceFd { get; private set; } = -1;
 
     private bool _lastFlipWasAsync;
 
+    /// <inheritdoc/>
     public override bool LastFlipWasAsync => _lastFlipWasAsync;
 
     private long _planeEpoch;
 
+    /// <inheritdoc/>
     public override long PlaneEpoch => _planeEpoch;
 
     private readonly DrmPropertyMap _connectorProps;
@@ -201,42 +210,82 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     internal uint? CursorPlaneId { get; }
 
+    /// <summary>
+    /// Gets the modes that the connector reports, in the kernel's order.
+    /// </summary>
     public IReadOnlyList<OutputMode> Modes => _modes;
 
+    /// <summary>
+    /// Gets the mode that the connector marks as preferred, or the first mode when none is marked. It is the default value when the connector reports no modes.
+    /// </summary>
     public OutputMode PreferredMode { get; private set; }
 
+    /// <inheritdoc/>
     public override OutputClass Class { get; }
 
+    /// <summary>
+    /// Gets the formats and modifiers that the primary plane reports. An empty set means that the plane reports none, and every format is tried.
+    /// </summary>
     public DrmFormatSet ScanoutFormats { get; }
 
+    /// <summary>
+    /// Gets the union of the formats of the overlay planes that can reach this CRTC.
+    /// </summary>
     public DrmFormatSet OverlayScanoutFormats { get; }
 
+    /// <inheritdoc/>
     public override bool CanScanout(DrmFormat format, ulong modifier, bool overlay)
     {
         var formats = overlay ? OverlayScanoutFormats : ScanoutFormats;
         return formats.Count == 0 || formats.Contains(format, modifier);
     }
 
+    /// <summary>
+    /// Gets the number of entries in the CRTC gamma LUT. It is 0 when the CRTC has no gamma LUT.
+    /// </summary>
     public uint GammaLutSize { get; }
 
+    /// <summary>
+    /// Gets the number of entries in the CRTC degamma LUT. It is 0 when the CRTC has no degamma LUT.
+    /// </summary>
     public uint DegammaLutSize { get; }
 
+    /// <summary>
+    /// Gets a value indicating whether the CRTC has a color transform matrix.
+    /// </summary>
     public bool SupportsCtm => _crtcProps.Has("CTM");
 
+    /// <summary>
+    /// Gets the parsed EDID. It has <c>unknown</c> make and model when the connector has no EDID.
+    /// </summary>
     public EdidInfo Edid { get; private set; }
 
+    /// <inheritdoc/>
     public override ReadOnlyMemory<byte> EdidBytes => _edidBytes;
 
+    /// <summary>
+    /// Gets the range of the connector's <c>max bpc</c> property. It is 8 to 8 when the connector has no such property.
+    /// </summary>
     public (uint Min, uint Max) MaxBitsPerColorRange { get; }
 
+    /// <inheritdoc/>
     public event Action<ulong, uint, ulong>? PresentedOnScreen;
 
+    /// <summary>
+    /// Gets the state that a previous DRM master left lit on this CRTC. It is <see langword="null"/> when nothing was lit, and after the first commit that takes it over.
+    /// </summary>
     public DrmInheritedState? Inherited { get; private set; }
 
+    /// <summary>
+    /// Occurs after the first commit that takes over <see cref="Inherited"/>, with how the takeover went, for example with or without a modeset.
+    /// </summary>
     public event Action<DrmOutput, HandoffInheritance>? HandoffInherited;
 
     private ulong? _inheritedMaxBpc;
 
+    /// <summary>
+    /// Gets the mode to enable first: the connector mode that matches the inherited mode when <see cref="DrmBackend.Inherit"/> is on, else <see cref="PreferredMode"/>.
+    /// </summary>
     public OutputMode StartMode
     {
         get
@@ -314,6 +363,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         return new HandoffRetention(Name, fbId, null);
     }
 
+    /// <summary>
+    /// Exports the inherited framebuffer as a dmabuf, so that a handoff can show the previous compositor's last frame.
+    /// </summary>
+    /// <param name="frame">The frame, which the caller owns, or <see langword="null"/> on failure.</param>
+    /// <param name="reason">A short reason on failure, for example <c>nothing-lit</c> or <c>framebuffer-gone</c>. It is empty on success.</param>
+    /// <returns><see langword="true"/> when the framebuffer was exported.</returns>
     public bool TryImportInherited([System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out InheritedFrame? frame, out string reason)
     {
         frame = null;
@@ -413,6 +468,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         _inheritedMaxBpc = state.MaxBitsPerColor;
     }
 
+    /// <inheritdoc/>
     public override void RequestFrame()
     {
         if (!_flipPending && _backend.SessionActive && Enabled)
@@ -421,27 +477,36 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    /// <inheritdoc/>
     protected override bool SupportsLayers => _liftoffOutput is not null;
 
+    /// <inheritdoc/>
     protected override bool SupportsAdaptiveSync =>
         _crtcProps.Has("VRR_ENABLED") && _connectorProps.TryGetValue("vrr_capable", out var capable) && capable != 0;
 
+    /// <inheritdoc/>
     protected override bool SupportsRgbRange => _connectorProps.Has("Broadcast RGB");
 
+    /// <inheritdoc/>
     protected override bool SupportsMaxBitsPerColor => _connectorProps.Has("max bpc");
 
+    /// <inheritdoc/>
     protected override bool SupportsOverscan =>
         _connectorProps.Has("overscan") ||
         (_connectorProps.Has("underscan") &&
          _connectorProps.Has("underscan vborder") &&
          _connectorProps.Has("underscan hborder"));
 
+    /// <inheritdoc/>
     protected override bool SupportsCustomModes => Libxcvt.IsAvailable;
 
+    /// <inheritdoc/>
     protected override bool SupportsSharpness => _crtcProps.Has("SHARPNESS_STRENGTH");
 
+    /// <inheritdoc/>
     protected override bool SupportsAbmLevel => _connectorProps.Has("adaptive backlight modulation");
 
+    /// <inheritdoc/>
     public override Basin.Capabilities.OutputConfigurationFeatures Features
     {
         get
@@ -503,6 +568,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    /// <inheritdoc/>
     public override Basin.Capabilities.OutputColorimetry? Colorimetry =>
         EdidBytes.Length == 0
             ? null
@@ -516,8 +582,10 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
                 SupportsBt2020 = Edid.SupportsBt2020,
             };
 
+    /// <inheritdoc/>
     public override bool SupportsInFence => _planeProps.Has("IN_FENCE_FD");
 
+    /// <inheritdoc/>
     protected override bool TestCommitCore(OutputState state)
     {
         var layers = (state.Fields & OutputStateFields.Layers) != 0 ? state.Layers : null;
@@ -576,6 +644,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         return (state.Fields & OutputStateFields.Mode) == 0 || ModeEquals(state.Mode, _committedMode);
     }
 
+    /// <inheritdoc/>
     protected override bool CommitCore(OutputState state)
     {
         if (!_backend.SessionActive)
@@ -1457,10 +1526,14 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         ("Right Side Up", OutputTransform.Rotate270),
     ];
 
+    /// <inheritdoc/>
     public override OutputTransform PanelOrientation => _panelOrientation;
 
     private OutputTransform _panelOrientation;
 
+    /// <summary>
+    /// Gets the content type that the last accepted state set for the connector's <c>content type</c> property.
+    /// </summary>
     public OutputContentType ContentType => _pendingContentType;
 
     private OutputTransform ReadPanelOrientation()
@@ -1832,6 +1905,13 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         EmitFrame();
     }
 
+    /// <summary>
+    /// Shows a buffer on the cursor plane, or hides the cursor plane when <paramref name="buffer"/> is <see langword="null"/>. The output keeps a lock on the buffer.
+    /// </summary>
+    /// <param name="buffer">The cursor image, or <see langword="null"/> to hide the cursor.</param>
+    /// <param name="hotspotX">The horizontal hotspot in buffer pixels.</param>
+    /// <param name="hotspotY">The vertical hotspot in buffer pixels.</param>
+    /// <returns><see langword="false"/> when the CRTC has no cursor plane, the buffer is larger than <see cref="DrmBackend.CursorSize"/>, or the buffer cannot become a framebuffer.</returns>
     public bool SetCursor(IBuffer? buffer, int hotspotX, int hotspotY)
     {
         if (_cursorProps is null)
@@ -1886,6 +1966,11 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         return true;
     }
 
+    /// <summary>
+    /// Moves the cursor hotspot to a position on the output. The move can wait for the next frame commit.
+    /// </summary>
+    /// <param name="x">The horizontal position in output pixels.</param>
+    /// <param name="y">The vertical position in output pixels.</param>
     public void MoveCursor(int x, int y)
     {
         if (x == _cursorX && y == _cursorY)
@@ -1952,6 +2037,9 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
 
     private bool _cursorAwaitingFrame;
 
+    /// <summary>
+    /// Gets a value indicating whether a cursor change waits for a frame commit, because the driver cannot commit the cursor alone while layers scan out.
+    /// </summary>
     public bool CursorAwaitingFrame => _cursorAwaitingFrame && _cursorDirty;
 
     internal bool CursorDirty => _cursorDirty;
@@ -1964,6 +2052,12 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    /// <summary>
+    /// Gets the cursor buffer on the plane and the box that it covers on the output.
+    /// </summary>
+    /// <param name="buffer">The cursor buffer, or <see langword="null"/> when the cursor is hidden.</param>
+    /// <param name="destination">The box on the output in output pixels.</param>
+    /// <returns><see langword="true"/> when a cursor is visible.</returns>
     public bool TryPresentedCursor(
         [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out IBuffer? buffer, out Box destination)
     {
@@ -2177,6 +2271,7 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
         }
     }
 
+    /// <inheritdoc/>
     protected override void OnDestroy()
     {
         if (_backend.SessionActive && _hardwareLit && !_retained)
@@ -2271,8 +2366,14 @@ public sealed unsafe class DrmOutput : OutputBase, IHardwareCursor, IPresentingO
     [System.Runtime.CompilerServices.UnsafeAccessor(System.Runtime.CompilerServices.UnsafeAccessorKind.Constructor)]
     private static extern DrmModeInfo WrapMode(ref _drmModeModeInfo native);
 
+    /// <summary>
+    /// Gets or sets how a custom mode gets its timing. <see cref="Basin.Capabilities.OutputModeGenerator.Auto"/> uses the native timing on an internal panel and CVT elsewhere.
+    /// </summary>
     public Basin.Capabilities.OutputModeGenerator ModeGenerator { get; set; }
 
+    /// <summary>
+    /// Gets or sets the highest pixel clock in kilohertz that a custom mode can use. Zero or less means no limit.
+    /// </summary>
     public int MaxClockKhz { get; set; }
 
     private bool TryBuildCustomMode(OutputMode wanted, out DrmModeInfo built)

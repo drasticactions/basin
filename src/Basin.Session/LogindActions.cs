@@ -3,6 +3,9 @@ using Tmds.DBus.Protocol;
 
 namespace Basin.Session;
 
+/// <summary>
+/// Calls the power methods of the logind manager on the system D-Bus. Every call opens its own connection and reports failure as <see langword="false"/>.
+/// </summary>
 public static class LogindActions
 {
     private const string Service = "org.freedesktop.login1";
@@ -11,10 +14,25 @@ public static class LogindActions
 
     private static readonly BasinLogger Log = BasinLog.For("logind");
 
+    /// <summary>
+    /// Gets a value indicating whether systemd is the running init system. This value is <see langword="false"/> when the directory "/run/systemd/system" does not exist.
+    /// </summary>
     public static bool Available => Directory.Exists("/run/systemd/system");
 
+    /// <summary>
+    /// Asks logind to do a power action without an interactive authorization prompt.
+    /// </summary>
+    /// <param name="action">The power action to do.</param>
+    /// <param name="address">The D-Bus address to use, or <see langword="null"/> for the system bus.</param>
+    /// <returns><see langword="true"/> when logind accepted the call, and <see langword="false"/> when no bus is available or the call failed.</returns>
     public static Task<bool> RunAsync(LogindAction action, string? address = null) => CallAsync(Method(action), address);
 
+    /// <summary>
+    /// Asks logind whether the caller can do a power action.
+    /// </summary>
+    /// <param name="action">The power action to ask about.</param>
+    /// <param name="address">The D-Bus address to use, or <see langword="null"/> for the system bus.</param>
+    /// <returns><see langword="true"/> when logind answers "yes" or "challenge", and <see langword="false"/> for any other answer or a failed call.</returns>
     public static async Task<bool> CanAsync(LogindAction action, string? address = null)
     {
         try

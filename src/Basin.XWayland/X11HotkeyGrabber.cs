@@ -5,6 +5,9 @@ using static Basin.XWayland.XWaylandLog;
 
 namespace Basin.XWayland;
 
+/// <summary>
+/// Grabs key chords on the root window of an X server, so that a nested compositor gets global hotkeys under an X11 session. It has its own xcb connection on the compositor loop.
+/// </summary>
 public sealed unsafe class X11HotkeyGrabber : IDisposable
 {
     private const byte EventKeyPress = 2;
@@ -58,6 +61,12 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
 
     private readonly ICompositorEventLoop _loop;
 
+    /// <summary>
+    /// Connects to an X server and reads its keyboard mapping.
+    /// </summary>
+    /// <param name="loop">The loop that reads the connection fd. Key callbacks run on it.</param>
+    /// <param name="display">The X display name, for example <c>:0</c>. <see langword="null"/> uses <c>DISPLAY</c>.</param>
+    /// <returns>The grabber, or <see langword="null"/> when no X server answers. The caller owns the result.</returns>
     public static X11HotkeyGrabber? TryConnect(ICompositorEventLoop loop, string? display = null)
     {
         xcb_connection_t* conn;
@@ -85,6 +94,14 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
         return new X11HotkeyGrabber(loop, conn, screen);
     }
 
+    /// <summary>
+    /// Grabs a chord on every keycode that produces the key. The grab ignores Caps Lock and Num Lock, and it follows a keyboard mapping change.
+    /// </summary>
+    /// <param name="modifiers">The modifiers that must be held exactly.</param>
+    /// <param name="key">A lowercase key name: a letter, a digit, <c>f1</c> to <c>f12</c>, or a name such as <c>space</c>, <c>enter</c> or <c>left</c>.</param>
+    /// <param name="activated">The callback that runs on the loop for each press of the chord.</param>
+    /// <returns><see langword="false"/> when the key name is unknown, no keycode produces it, another client holds the grab, or the connection is lost.</returns>
+    /// <exception cref="ObjectDisposedException">The grabber is disposed.</exception>
     public bool TryGrab(X11HotkeyModifiers modifiers, string key, Action activated)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -111,6 +128,9 @@ public sealed unsafe class X11HotkeyGrabber : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Releases every grab and closes the X connection. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

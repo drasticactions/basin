@@ -2,8 +2,17 @@ using System.Text.Json;
 
 namespace Basin.Ipc;
 
+/// <summary>
+/// Matches event data against a filter object, as <c>basin-mcp</c> does.
+/// </summary>
 public static class IpcEventMatch
 {
+    /// <summary>
+    /// Tells whether each key of the filter equals the value at the top level of the data. A string between two <c>*</c> matches as a substring, and a string matches a number with the same text.
+    /// </summary>
+    /// <param name="data">The UTF-8 JSON of the event's data.</param>
+    /// <param name="match">The filter object, or <see langword="null"/> to match all data.</param>
+    /// <returns><see langword="true"/> when every key matches. Data that is not an object never matches a filter.</returns>
     public static bool Matches(ReadOnlySpan<byte> data, JsonElement? match)
     {
         if (match is not { } wanted)

@@ -6,10 +6,16 @@ using Wayland.Server;
 
 namespace Basin.Desktop;
 
+/// <summary>
+/// Serves the <c>ext_image_copy_capture_manager_v1</c> global. It copies outputs, toplevels and the cursor into client buffers through <see cref="IScreenCapture"/>.
+/// </summary>
 public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposable
 {
     private static readonly BasinLogger Log = BasinLog.For("capture");
 
+    /// <summary>
+    /// The protocol version that the global advertises.
+    /// </summary>
     public const int Version = 1;
 
     private const uint ErrorInvalidOption = 1;
@@ -27,6 +33,14 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
     private readonly List<Frame> _waiting = [];
     private readonly List<CursorSession> _cursorSessions = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ImageCopyCaptureManager"/> class and creates the global.
+    /// </summary>
+    /// <param name="display">The display that holds the global.</param>
+    /// <param name="buffers">The registry that resolves client buffers.</param>
+    /// <param name="capture">The capture implementation. With <see langword="null"/>, every capture fails with the protocol's own failure event.</param>
+    /// <param name="dmabuf">The dmabuf device and formats to offer, or <see langword="null"/> to offer shared memory only.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="display"/> or <paramref name="buffers"/> is <see langword="null"/>.</exception>
     public ImageCopyCaptureManager(
         WlServerDisplay display,
         ClientBufferRegistry buffers,
@@ -45,6 +59,9 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         }
     }
 
+    /// <summary>
+    /// Occurs when a capture session starts or stops. The arguments are the source and its number of live sessions after the change.
+    /// </summary>
     public event Action<CaptureSource, int>? SessionCountChanged;
 
     private void ReportSessionCount(in CaptureSource source)
@@ -66,6 +83,9 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         changed(source, count);
     }
 
+    /// <summary>
+    /// Stops the damage observation and removes the global.
+    /// </summary>
     public void Dispose()
     {
         if (_capture is { } live)
@@ -76,6 +96,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         _global.Dispose();
     }
 
+    /// <inheritdoc/>
     public void OnSourceDamaged(IOutput output, Box damage)
     {
         foreach (var session in _sessions)
@@ -101,6 +122,7 @@ public sealed class ImageCopyCaptureManager : ICaptureDamageObserver, IDisposabl
         }
     }
 
+    /// <inheritdoc/>
     public void OnCursorChanged()
     {
         for (var i = _cursorSessions.Count - 1; i >= 0; i--)

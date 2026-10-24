@@ -5,32 +5,62 @@ using Avalonia.Threading;
 
 namespace Basin.SoftKeyboard.Avalonia;
 
+/// <summary>
+/// Reveals its child from the bottom edge up and hides it again with an animated slide and an optional fade. A closed panel that is not moving is hidden.
+/// </summary>
 public class RevealPanel : Decorator
 {
+    /// <summary>
+    /// Identifies the <see cref="IsOpen"/> property.
+    /// </summary>
     public static readonly StyledProperty<bool> IsOpenProperty =
         AvaloniaProperty.Register<RevealPanel, bool>(nameof(IsOpen));
 
+    /// <summary>
+    /// Identifies the <see cref="OpenDuration"/> property.
+    /// </summary>
     public static readonly StyledProperty<TimeSpan> OpenDurationProperty =
         AvaloniaProperty.Register<RevealPanel, TimeSpan>(nameof(OpenDuration), TimeSpan.FromMilliseconds(300));
 
+    /// <summary>
+    /// Identifies the <see cref="CloseDuration"/> property.
+    /// </summary>
     public static readonly StyledProperty<TimeSpan> CloseDurationProperty =
         AvaloniaProperty.Register<RevealPanel, TimeSpan>(nameof(CloseDuration), TimeSpan.FromMilliseconds(300));
 
+    /// <summary>
+    /// Identifies the <see cref="OpenDelay"/> property.
+    /// </summary>
     public static readonly StyledProperty<TimeSpan> OpenDelayProperty =
         AvaloniaProperty.Register<RevealPanel, TimeSpan>(nameof(OpenDelay));
 
+    /// <summary>
+    /// Identifies the <see cref="CloseDelay"/> property.
+    /// </summary>
     public static readonly StyledProperty<TimeSpan> CloseDelayProperty =
         AvaloniaProperty.Register<RevealPanel, TimeSpan>(nameof(CloseDelay));
 
+    /// <summary>
+    /// Identifies the <see cref="FadeDuration"/> property.
+    /// </summary>
     public static readonly StyledProperty<TimeSpan> FadeDurationProperty =
         AvaloniaProperty.Register<RevealPanel, TimeSpan>(nameof(FadeDuration));
 
+    /// <summary>
+    /// Identifies the <see cref="FadeOpenDelay"/> property.
+    /// </summary>
     public static readonly StyledProperty<TimeSpan> FadeOpenDelayProperty =
         AvaloniaProperty.Register<RevealPanel, TimeSpan>(nameof(FadeOpenDelay));
 
+    /// <summary>
+    /// Identifies the <see cref="Easing"/> property.
+    /// </summary>
     public static readonly StyledProperty<Easing> EasingProperty =
         AvaloniaProperty.Register<RevealPanel, Easing>(nameof(Easing), new CubicEaseOut());
 
+    /// <summary>
+    /// Identifies the <see cref="Revealed"/> property.
+    /// </summary>
     public static readonly DirectProperty<RevealPanel, double> RevealedProperty =
         AvaloniaProperty.RegisterDirect<RevealPanel, double>(nameof(Revealed), panel => panel.Revealed);
 
@@ -50,62 +80,95 @@ public class RevealPanel : Decorator
         IsOpenProperty.Changed.AddClassHandler<RevealPanel>((panel, _) => panel.Slide());
     }
 
+    /// <summary>
+    /// Gets or sets a value indicating whether the panel is open. A change starts the slide from the current position.
+    /// </summary>
     public bool IsOpen
     {
         get => GetValue(IsOpenProperty);
         set => SetValue(IsOpenProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the time of the opening slide. The default is 300 ms.
+    /// </summary>
     public TimeSpan OpenDuration
     {
         get => GetValue(OpenDurationProperty);
         set => SetValue(OpenDurationProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the time of the closing slide. The default is 300 ms.
+    /// </summary>
     public TimeSpan CloseDuration
     {
         get => GetValue(CloseDurationProperty);
         set => SetValue(CloseDurationProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the time before the opening slide starts. The default is zero.
+    /// </summary>
     public TimeSpan OpenDelay
     {
         get => GetValue(OpenDelayProperty);
         set => SetValue(OpenDelayProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the time before the closing slide starts. The default is zero.
+    /// </summary>
     public TimeSpan CloseDelay
     {
         get => GetValue(CloseDelayProperty);
         set => SetValue(CloseDelayProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the time of the child's fade. Zero, the default, turns the fade off.
+    /// </summary>
     public TimeSpan FadeDuration
     {
         get => GetValue(FadeDurationProperty);
         set => SetValue(FadeDurationProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the time before the fade-in starts on open. The fade-out on close starts at once.
+    /// </summary>
     public TimeSpan FadeOpenDelay
     {
         get => GetValue(FadeOpenDelayProperty);
         set => SetValue(FadeOpenDelayProperty, value);
     }
 
+    /// <summary>
+    /// Gets or sets the curve of the slide and the fade. The default is <see cref="CubicEaseOut"/>.
+    /// </summary>
     public Easing Easing
     {
         get => GetValue(EasingProperty);
         set => SetValue(EasingProperty, value);
     }
 
+    /// <summary>
+    /// Gets the visible height of the child in whole pixels. It is 0 when the panel is closed and not moving.
+    /// </summary>
     public double Revealed
     {
         get => _revealed;
         private set => SetAndRaise(RevealedProperty, ref _revealed, value);
     }
 
+    /// <summary>
+    /// Gets a value indicating whether a slide or fade is in progress.
+    /// </summary>
     public bool IsSliding => _slide is not null;
 
+    /// <summary>
+    /// Stops a slide and jumps to the end state of <see cref="IsOpen"/>, for example for a panel that is attached already open.
+    /// </summary>
     public void Settle()
     {
         StopSlide();
@@ -114,6 +177,7 @@ public class RevealPanel : Decorator
         Apply();
     }
 
+    /// <inheritdoc/>
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
@@ -123,6 +187,11 @@ public class RevealPanel : Decorator
         }
     }
 
+    /// <summary>
+    /// Measures the child with unlimited height and returns the revealed part of its height.
+    /// </summary>
+    /// <param name="availableSize">The size that the parent gives.</param>
+    /// <returns>The child's width and the revealed height.</returns>
     protected override Size MeasureOverride(Size availableSize)
     {
         var full = base.MeasureOverride(availableSize.WithHeight(double.PositiveInfinity));
@@ -131,6 +200,11 @@ public class RevealPanel : Decorator
         return new Size(full.Width, revealed);
     }
 
+    /// <summary>
+    /// Arranges the child at its full height with its top part showing at the bottom of the panel.
+    /// </summary>
+    /// <param name="finalSize">The size that the parent gives.</param>
+    /// <returns>The given size.</returns>
     protected override Size ArrangeOverride(Size finalSize)
     {
         if (Child is not { } child)
@@ -144,6 +218,7 @@ public class RevealPanel : Decorator
         return finalSize;
     }
 
+    /// <inheritdoc/>
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);

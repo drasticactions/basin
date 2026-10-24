@@ -4,6 +4,9 @@ using Basin.Themes.MsStyles;
 
 namespace Basin.Frames.MsStyles;
 
+/// <content>
+/// The glass look: the DWM composition of a Vista frame, its button hover motion and its backdrop region.
+/// </content>
 public sealed partial class MsStylesFramePainter
 {
     private static readonly int[] CornerInsets = [5, 3, 2, 1];
@@ -665,6 +668,9 @@ public sealed partial class MsStylesFramePainter
             : (state.Title?.Length ?? 0) * pixels * 0.5f;
     }
 
+    /// <summary>
+    /// Gets or sets the text measurer that sizes the glass glow plate around the title. When it is <see langword="null"/>, the width is estimated from the character count.
+    /// </summary>
     public IMsStylesTextMetrics? TextMetrics { get; set; }
 
     private static MsStylesMargins Margins(MsStylesClass dwm, int part) =>
@@ -682,6 +688,11 @@ public sealed partial class MsStylesFramePainter
         return (Math.Max(0, margins.Left), 0);
     }
 
+    /// <summary>
+    /// Fills the region of the glass ring, the window minus the client with rounded corners, where the backdrop effect shows.
+    /// </summary>
+    /// <param name="into">The region to fill in logical surface coordinates. The method clears it first.</param>
+    /// <returns><see langword="true"/> for a laid-out glass frame that is not maximized.</returns>
     public bool GlassBackdropRegion(Pixman.PixmanRegion32 into)
     {
         into.Clear();

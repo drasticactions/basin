@@ -3,6 +3,9 @@ using Basin.Scene;
 
 namespace Basin.Effects;
 
+/// <summary>
+/// Runs KWin's mouse click effect. Each click draws growing, fading rings in the feedback overlay, colored by the button.
+/// </summary>
 public sealed class MouseClickEffect : IMeshSource
 {
     private const int Segments = 48;
@@ -12,13 +15,28 @@ public sealed class MouseClickEffect : IMeshSource
     private readonly List<Ring> _clicks = [];
     private SceneMesh? _mesh;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="MouseClickEffect"/> class.
+    /// </summary>
+    /// <param name="options">The settings. The default value uses the default <see cref="MouseClickOptions"/>.</param>
     public MouseClickEffect(MouseClickOptions options = default) =>
         _options = options == default ? new MouseClickOptions() : options;
 
+    /// <summary>
+    /// Gets the settings of the effect.
+    /// </summary>
     public MouseClickOptions Options => _options;
 
+    /// <summary>
+    /// Gets a value indicating whether a click still has visible rings.
+    /// </summary>
     public bool IsActive => _clicks.Count > 0;
 
+    /// <summary>
+    /// Claims a mesh in the feedback overlay and draws into it from now on.
+    /// </summary>
+    /// <param name="overlay">The feedback overlay of the output.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Attach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -26,6 +44,11 @@ public sealed class MouseClickEffect : IMeshSource
         _mesh = overlay.Claim(this, this);
     }
 
+    /// <summary>
+    /// Releases the mesh in the feedback overlay and removes every click.
+    /// </summary>
+    /// <param name="overlay">The overlay that <see cref="Attach"/> received.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="overlay"/> is <see langword="null"/>.</exception>
     public void Detach(FeedbackOverlay overlay)
     {
         ArgumentNullException.ThrowIfNull(overlay);
@@ -35,6 +58,13 @@ public sealed class MouseClickEffect : IMeshSource
         _clicks.Clear();
     }
 
+    /// <summary>
+    /// Adds a click at a position.
+    /// </summary>
+    /// <param name="x">The horizontal position, in the coordinates of the overlay.</param>
+    /// <param name="y">The vertical position, in the coordinates of the overlay.</param>
+    /// <param name="button">The Linux button code, for example 0x110 for the left button.</param>
+    /// <param name="now">The tick of the click.</param>
     public void Click(double x, double y, uint button, in FrameTick now)
     {
         _thread.Assert();
@@ -48,6 +78,11 @@ public sealed class MouseClickEffect : IMeshSource
         Refresh(now.TargetPresentNanos);
     }
 
+    /// <summary>
+    /// Removes the clicks whose rings ended and redraws the rest for a tick.
+    /// </summary>
+    /// <param name="tick">The frame tick.</param>
+    /// <returns>The value of <see cref="IsActive"/> after the step.</returns>
     public bool Step(in FrameTick tick)
     {
         _thread.Assert();
@@ -64,9 +99,11 @@ public sealed class MouseClickEffect : IMeshSource
         return IsActive;
     }
 
+    /// <inheritdoc/>
     public int VertexCount(in Box bounds) =>
         _clicks.Count * Math.Max(1, _options.RingCount) * FeedbackShapes.RingVertexCount(Segments);
 
+    /// <inheritdoc/>
     public void WriteVertices(in Box bounds, Span<MeshVertex> into)
     {
         var rings = Math.Max(1, _options.RingCount);

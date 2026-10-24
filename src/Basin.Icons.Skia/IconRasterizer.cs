@@ -4,8 +4,20 @@ using Svg.Skia;
 
 namespace Basin.Icons.Skia;
 
+/// <summary>
+/// Draws an icon file into a square of a given pixel size. An SVG file scales as vectors, and any other file decodes as a bitmap.
+/// The icon keeps its aspect ratio and is centered in the square.
+/// </summary>
 public static class IconRasterizer
 {
+    /// <summary>
+    /// Draws the icon at <paramref name="path"/> onto <paramref name="canvas"/> at the canvas origin. The canvas is not cleared first.
+    /// </summary>
+    /// <param name="path">The path of an SVG, PNG or other image file that Skia can decode.</param>
+    /// <param name="canvas">The target canvas.</param>
+    /// <param name="sizePx">The side of the square, in pixels.</param>
+    /// <returns><see langword="false"/> when the path is empty, the size is not positive, or the file cannot be read or decoded.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="canvas"/> is <see langword="null"/>.</exception>
     public static bool Draw(string path, SKCanvas canvas, int sizePx)
     {
         ArgumentNullException.ThrowIfNull(canvas);
@@ -26,6 +38,14 @@ public static class IconRasterizer
         }
     }
 
+    /// <summary>
+    /// Clears a caller-owned BGRA8888 premultiplied pixel buffer to transparent and draws the icon into it.
+    /// </summary>
+    /// <param name="path">The path of the image file.</param>
+    /// <param name="pixels">The address of the first pixel. The caller keeps ownership of the memory.</param>
+    /// <param name="rowBytes">The stride of the buffer, in bytes. It must be at least four times <paramref name="sizePx"/>.</param>
+    /// <param name="sizePx">The width and height of the buffer, in pixels.</param>
+    /// <returns><see langword="false"/> when an argument is not valid or the icon cannot be drawn.</returns>
     public static bool Draw(string path, nint pixels, int rowBytes, int sizePx)
     {
         if (pixels == 0 || sizePx <= 0 || rowBytes < sizePx * 4)
@@ -46,6 +66,12 @@ public static class IconRasterizer
         return drawn;
     }
 
+    /// <summary>
+    /// Rasterizes the icon into a new square image with a transparent background.
+    /// </summary>
+    /// <param name="path">The path of the image file.</param>
+    /// <param name="sizePx">The side of the image, in pixels.</param>
+    /// <returns>A new image that <see cref="SkiaCensus"/> tracks and the caller owns, or <see langword="null"/> when the icon cannot be drawn.</returns>
     public static SKImage? Image(string path, int sizePx)
     {
         if (string.IsNullOrEmpty(path) || sizePx <= 0)
@@ -69,6 +95,12 @@ public static class IconRasterizer
         return SkiaCensus.Track(surface.Snapshot());
     }
 
+    /// <summary>
+    /// Rasterizes the icon into a new array of straight-alpha ARGB32 pixels, in rows from the top.
+    /// </summary>
+    /// <param name="path">The path of the image file.</param>
+    /// <param name="sizePx">The side of the square, in pixels.</param>
+    /// <returns>An array of <paramref name="sizePx"/> squared pixels, or <see langword="null"/> when the icon cannot be drawn.</returns>
     public static unsafe uint[]? Argb(string path, int sizePx)
     {
         if (string.IsNullOrEmpty(path) || sizePx <= 0)

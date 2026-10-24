@@ -2,8 +2,15 @@ using System.Runtime.InteropServices;
 
 namespace Basin.Freedesktop;
 
+/// <summary>
+/// An inotify watch on a set of directories, one level deep each. It reports each changed directory once per coalescing period.
+/// The class is not thread-safe.
+/// </summary>
 public sealed partial class DirectoryWatch : IDisposable
 {
+    /// <summary>
+    /// The delay in milliseconds from the first event to <see cref="Changed"/> when the watch runs on an event loop.
+    /// </summary>
     public const int CoalesceMillis = 100;
 
     private const int NonBlock = 0x800;
@@ -19,6 +26,10 @@ public sealed partial class DirectoryWatch : IDisposable
     private readonly List<string> _flushing = [];
     private IEventSource? _flush;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DirectoryWatch"/> class. Off Linux, or when inotify is not available, <see cref="Available"/> is false.
+    /// </summary>
+    /// <param name="loop">The loop that reads the descriptor and runs the coalescing timer, or <see langword="null"/> when the owner calls <see cref="Read"/> and <see cref="Flush"/>.</param>
     public DirectoryWatch(ICompositorEventLoop? loop = null)
     {
         _loop = loop;
@@ -29,12 +40,27 @@ public sealed partial class DirectoryWatch : IDisposable
         }
     }
 
+    /// <summary>
+    /// Occurs once for each changed directory when <see cref="Flush"/> runs. The argument is the path given to <see cref="Add(string)"/>.
+    /// </summary>
     public event Action<string>? Changed;
 
+    /// <summary>
+    /// Gets the non-blocking inotify descriptor that an owner without a loop polls, or -1 when <see cref="Available"/> is false. The watch owns it.
+    /// </summary>
     public int Fd => _fd;
 
+    /// <summary>
+    /// Gets a value indicating whether inotify is available. When it is false, nothing is watched and <see cref="Changed"/> never occurs.
+    /// </summary>
     public bool Available => _fd >= 0;
 
+    /// <summary>
+    /// Starts to watch one directory. Adding a path that is already watched does nothing.
+    /// </summary>
+    /// <param name="path">The directory to watch. Its subdirectories are not watched.</param>
+    /// <returns><see langword="true"/> when the path is watched now, <see langword="false"/> when inotify is not available or refuses the path.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="path"/> is <see langword="null"/>.</exception>
     public bool Add(string path)
     {
         ArgumentNullException.ThrowIfNull(path);
@@ -54,6 +80,10 @@ public sealed partial class DirectoryWatch : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Stops watching a directory. A path that is not watched is ignored.
+    /// </summary>
+    /// <param name="path">The path given to <see cref="Add(string)"/>.</param>
     public void Remove(string path)
     {
         if (_paths.Remove(path, out var wd))
@@ -63,6 +93,10 @@ public sealed partial class DirectoryWatch : IDisposable
         }
     }
 
+    /// <summary>
+    /// Drains the descriptor and marks each watched directory that has events. It does not raise <see cref="Changed"/>.
+    /// </summary>
+    /// <returns><see langword="true"/> when at least one directory is marked and waits for <see cref="Flush"/>.</returns>
     public unsafe bool Read()
     {
         if (_fd < 0)
@@ -96,6 +130,9 @@ public sealed partial class DirectoryWatch : IDisposable
         return _dirty.Count > 0;
     }
 
+    /// <summary>
+    /// Raises <see cref="Changed"/> once for each marked directory, clears the marks and cancels a pending coalescing timer.
+    /// </summary>
     public void Flush()
     {
         _flush?.Remove();
@@ -111,6 +148,9 @@ public sealed partial class DirectoryWatch : IDisposable
         _flushing.Clear();
     }
 
+    /// <summary>
+    /// Removes the loop source and the timer, and closes the descriptor.
+    /// </summary>
     public void Dispose()
     {
         _flush?.Remove();

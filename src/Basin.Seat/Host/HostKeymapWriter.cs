@@ -2,12 +2,26 @@ using System.Text;
 
 namespace Basin.Seat;
 
+/// <summary>
+/// Writes XKB keymap text from the keysyms that each writing key produces at four shift levels.
+/// </summary>
 public static class HostKeymapWriter
 {
+    /// <summary>
+    /// The keysym names that one writing key produces at each shift level.
+    /// </summary>
+    /// <param name="Code">The key position.</param>
+    /// <param name="Plain">The keysym with no modifier. <see cref="Write"/> leaves out a key where this is <see langword="null"/>.</param>
+    /// <param name="Shift">The keysym with Shift, or <see langword="null"/> to use <paramref name="Plain"/>.</param>
+    /// <param name="Level3">The keysym with AltGr, or <see langword="null"/> for none.</param>
+    /// <param name="Level4">The keysym with AltGr and Shift, or <see langword="null"/> for none.</param>
     public readonly record struct Levels(HostKeyCode Code, string? Plain, string? Shift, string? Level3, string? Level4);
 
     private static string? _fallback;
 
+    /// <summary>
+    /// Gets the embedded US keymap text. It is written at the first read and kept.
+    /// </summary>
     public static string Fallback => _fallback ??= Write("us", UsLevels());
 
     private static Levels[] UsLevels()
@@ -55,6 +69,12 @@ public static class HostKeymapWriter
         return [.. keys];
     }
 
+    /// <summary>
+    /// Gets the XKB dead keysym name for the character of a dead key, for example <c>dead_acute</c> for an acute accent.
+    /// A character that is not a known accent gets its <see cref="KeysymName"/>.
+    /// </summary>
+    /// <param name="value">The character that the host reports for the dead key.</param>
+    /// <returns>The keysym name.</returns>
     public static string DeadKeysymName(char value) => value switch
     {
         '`' or 'ˋ' => "dead_grave",
@@ -73,6 +93,12 @@ public static class HostKeymapWriter
         _ => KeysymName(value),
     };
 
+    /// <summary>
+    /// Gets the XKB keysym name for a character.
+    /// ASCII punctuation gets its X11 name, letters and digits stay as they are, and other characters get the <c>UXXXX</c> form.
+    /// </summary>
+    /// <param name="value">The character to name.</param>
+    /// <returns>The keysym name.</returns>
     public static string KeysymName(char value) => value switch
     {
         ' ' => "space",
@@ -169,6 +195,12 @@ public static class HostKeymapWriter
         (HostKeyCode.Space, "SPCE"),
     ];
 
+    /// <summary>
+    /// Gets the XKB keycode name of a writing key, for example <c>AD01</c> for <see cref="HostKeyCode.KeyQ"/>.
+    /// </summary>
+    /// <param name="code">The key position.</param>
+    /// <param name="name">The four-letter keycode name, or an empty string.</param>
+    /// <returns><see langword="false"/> when the position is not a writing key.</returns>
     public static bool TryKeycodeName(HostKeyCode code, out string name)
     {
         foreach (var (candidate, spelling) in WritingKeys)
@@ -184,6 +216,13 @@ public static class HostKeymapWriter
         return false;
     }
 
+    /// <summary>
+    /// Writes a complete XKB keymap with the given writing keys and the fixed keys.
+    /// Right Alt becomes <c>ISO_Level3_Shift</c> on Mod5 only when a key has a third or fourth level.
+    /// </summary>
+    /// <param name="name">The layout name for the symbols section. Double quotes are removed from it.</param>
+    /// <param name="keys">The writing keys. A key with no keycode name or no plain keysym is left out.</param>
+    /// <returns>The keymap text.</returns>
     public static string Write(string name, IReadOnlyList<Levels> keys)
     {
         ArgumentNullException.ThrowIfNull(name);

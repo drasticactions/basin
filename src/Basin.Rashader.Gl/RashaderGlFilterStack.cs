@@ -4,6 +4,10 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Rashader.Gl;
 
+/// <summary>
+/// Runs several <see cref="RashaderGlFilter"/> chains in order inside one <c>Record</c> call. Two
+/// intermediate images carry the frame between chains.
+/// </summary>
 public sealed class RashaderGlFilterStack : IGlFilter, IDisposable
 {
     private readonly RashaderGlFilter[] _filters;
@@ -14,6 +18,11 @@ public sealed class RashaderGlFilterStack : IGlFilter, IDisposable
     private int _height;
     private bool _disposed;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="RashaderGlFilterStack"/> class. The stack takes
+    /// ownership of the filters and disposes them with itself.
+    /// </summary>
+    /// <param name="filters">The chains in the order they run.</param>
     public RashaderGlFilterStack(IReadOnlyList<RashaderGlFilter> filters)
     {
         ArgumentNullException.ThrowIfNull(filters);
@@ -21,8 +30,14 @@ public sealed class RashaderGlFilterStack : IGlFilter, IDisposable
         BasinCounters.Track();
     }
 
+    /// <summary>
+    /// Gets the chains in the order they run, including chains that have failed.
+    /// </summary>
     public IReadOnlyList<RashaderGlFilter> Filters => _filters;
 
+    /// <summary>
+    /// Gets a value indicating whether at least one chain in the stack is still live.
+    /// </summary>
     public bool IsSupported
     {
         get
@@ -39,8 +54,15 @@ public sealed class RashaderGlFilterStack : IGlFilter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Gets a value indicating whether the stack needs the whole frame. It is always <see
+    /// langword="true"/>.
+    /// </summary>
     public bool NeedsFullFrame => true;
 
+    /// <summary>
+    /// Gets a value indicating whether any chain in the stack asks for a repaint every frame.
+    /// </summary>
     public bool NeedsContinuousRepaint
     {
         get
@@ -57,6 +79,12 @@ public sealed class RashaderGlFilterStack : IGlFilter, IDisposable
         }
     }
 
+    /// <summary>
+    /// Runs every live chain in order. A chain that fails is skipped and its input goes to the next
+    /// chain. The intermediate textures follow the target size.
+    /// </summary>
+    /// <param name="context">The source, the final target, the viewport and the frame options.</param>
+    /// <returns><see langword="true"/> when the last live chain wrote the final target.</returns>
     public bool Record(in GlFilterContext context)
     {
         _live.Clear();
@@ -123,6 +151,9 @@ public sealed class RashaderGlFilterStack : IGlFilter, IDisposable
         return wrote;
     }
 
+    /// <summary>
+    /// Frees the intermediate images and disposes every chain. A second call does nothing.
+    /// </summary>
     public void Dispose()
     {
         if (_disposed)

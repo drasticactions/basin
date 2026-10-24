@@ -2,11 +2,18 @@ using Basin.Capabilities;
 
 namespace Basin.Shell.Xdg;
 
+/// <summary>
+/// The <see cref="IPopupDirectory"/> over one <see cref="XdgShell"/>. It records each popup that the shell makes and forgets it when the popup is destroyed.
+/// </summary>
 public sealed class XdgPopupDirectory : IPopupDirectory, IDisposable
 {
     private readonly XdgShell _shell;
     private readonly List<XdgPopupWindow> _popups = [];
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="XdgPopupDirectory"/> class. It records only the popups that the shell makes after this call.
+    /// </summary>
+    /// <param name="shell">The shell to watch.</param>
     public XdgPopupDirectory(XdgShell shell)
     {
         ArgumentNullException.ThrowIfNull(shell);
@@ -14,6 +21,11 @@ public sealed class XdgPopupDirectory : IPopupDirectory, IDisposable
         shell.NewPopup += OnNewPopup;
     }
 
+    /// <summary>
+    /// Adds the surface of each mapped popup whose <see cref="XdgPopupWindow.Parent"/> chain reaches <paramref name="owner"/>. A popup that only a layer surface parents is not included.
+    /// </summary>
+    /// <param name="owner">The surface that owns the popups.</param>
+    /// <param name="into">The list to add the surfaces to. The call does not clear it.</param>
     public void CollectPopups(Surface owner, List<Surface> into)
     {
         ArgumentNullException.ThrowIfNull(owner);
@@ -27,6 +39,9 @@ public sealed class XdgPopupDirectory : IPopupDirectory, IDisposable
         }
     }
 
+    /// <summary>
+    /// Stops watching the shell and forgets every recorded popup.
+    /// </summary>
     public void Dispose()
     {
         _shell.NewPopup -= OnNewPopup;

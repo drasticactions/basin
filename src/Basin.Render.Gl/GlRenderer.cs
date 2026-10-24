@@ -4,6 +4,9 @@ using Silk.NET.OpenGLES;
 
 namespace Basin.Render.Gl;
 
+/// <summary>
+/// Implements <see cref="IRenderer"/> on GLES 3 through EGL on one DRM node. It takes decomposed color transforms and draws on the thread that created it.
+/// </summary>
 public sealed unsafe class GlRenderer : IRenderer
 {
     private readonly GlDevice _device;
@@ -21,6 +24,10 @@ public sealed unsafe class GlRenderer : IRenderer
     internal readonly uint MeshVbo;
     internal readonly uint PassVao;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="GlRenderer"/> class. It throws <see cref="InvalidOperationException"/> when the node cannot be opened.
+    /// </summary>
+    /// <param name="devicePath">The path of the DRM node to render on, for example a render node.</param>
     public GlRenderer(string devicePath = "/dev/dri/renderD128")
     {
         _device = new GlDevice(devicePath);
@@ -34,10 +41,18 @@ public sealed unsafe class GlRenderer : IRenderer
         _pass = new GlRenderPass(this, _device.Gl);
     }
 
+    /// <summary>
+    /// Gets the GL device that the renderer owns and disposes.
+    /// </summary>
     public GlDevice Device => _device;
 
     IRenderDevice? IRenderer.Device => Device;
 
+    /// <summary>
+    /// Creates a renderer and a GBM allocator on one render node.
+    /// </summary>
+    /// <param name="renderNodePath">The path of the DRM render node.</param>
+    /// <returns>The renderer and the allocator, which the caller disposes. On failure the renderer is disposed and the exception propagates.</returns>
     public static RenderStack CreateStack(string renderNodePath)
     {
         var renderer = new GlRenderer(renderNodePath);
@@ -52,8 +67,14 @@ public sealed unsafe class GlRenderer : IRenderer
         }
     }
 
+    /// <summary>
+    /// Gets the path of the DRM node that the renderer opened.
+    /// </summary>
     public string DevicePath => _device.DevicePath;
 
+    /// <summary>
+    /// Gets the dmabuf formats and modifiers that <see cref="ImportTexture"/> can sample. Linear NV12 is added when the device imports linear YUV planes.
+    /// </summary>
     public DrmFormatSet DmabufTextureFormats => _textureFormats ??= TextureFormats();
 
     private DrmFormatSet? _textureFormats;
@@ -80,14 +101,18 @@ public sealed unsafe class GlRenderer : IRenderer
         return formats;
     }
 
+    /// <inheritdoc/>
     public IReadOnlyList<DrmFormat> ShmTextureFormats => ShmFormatLists.All;
 
     private GlYuvConverter? _yuv;
 
+    /// <inheritdoc/>
     public bool CanConvertYuv => true;
 
+    /// <inheritdoc/>
     public bool RendersHalfFloat => true;
 
+    /// <inheritdoc/>
     public bool ConvertToYuv(ITexture source, in FBox sourceBox, IBuffer target, YuvCoefficients coefficients, YuvRange range)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -113,12 +138,19 @@ public sealed unsafe class GlRenderer : IRenderer
         return _yuv.Convert(PassVao, view, sourceBox, target, coefficients, range);
     }
 
+    /// <summary>
+    /// Gets the dmabuf formats and modifiers that a pass can draw into. It is the set that EGL can import, which includes formats that GL cannot render.
+    /// </summary>
     public DrmFormatSet DmabufRenderFormats => _device.SampleableFormats;
 
+    /// <summary>
+    /// Gets the fd of the DRM node. The device owns it.
+    /// </summary>
     public int DrmFd => _device.DrmFd;
 
     internal GL Gl => _device.Gl;
 
+    /// <inheritdoc/>
     public ColorTransformCapability ColorTransform => ColorTransformCapability.Decomposed;
 
     internal GlColorTransform? TransformFor(ImageDescription? source, ImageDescription? output)
@@ -151,14 +183,23 @@ public sealed unsafe class GlRenderer : IRenderer
         }
     }
 
+    /// <inheritdoc/>
     public bool SupportsBackdropEffects => true;
 
+    /// <inheritdoc/>
     public bool SupportsFrameFilters => true;
 
+    /// <inheritdoc/>
     public bool WaitsOnGpu => _device.WaitsOnGpu;
 
+    /// <inheritdoc/>
     public RenderFencePrecision FencePrecision => RenderFencePrecision.Context;
 
+    /// <summary>
+    /// Tells whether the renderer draws a texture filter as specified. The GL renderer draws every filter itself.
+    /// </summary>
+    /// <param name="filter">The filter to check.</param>
+    /// <returns><see langword="true"/> for every filter.</returns>
     public bool SupportsFilter(TextureFilter filter) => true;
 
     private int _completionFence = -1;
@@ -169,6 +210,7 @@ public sealed unsafe class GlRenderer : IRenderer
         _completionFence = fd;
     }
 
+    /// <inheritdoc/>
     public int ExportLastSubmissionFence()
     {
         var fd = _completionFence;
@@ -176,6 +218,7 @@ public sealed unsafe class GlRenderer : IRenderer
         return fd;
     }
 
+    /// <inheritdoc/>
     public ITexture? ImportTexture(IBuffer buffer)
     {
         if (buffer.TryGetDmabuf(out var attributes))
@@ -195,6 +238,7 @@ public sealed unsafe class GlRenderer : IRenderer
         return GlShmTexture.Uploads(buffer.Format) ? new GlShmTexture(_device, buffer) : null;
     }
 
+    /// <inheritdoc/>
     public IColorLut? ImportLut(ColorLut3D lut)
     {
         var gl = _device.Gl;
@@ -218,6 +262,7 @@ public sealed unsafe class GlRenderer : IRenderer
 
     internal void ReleaseLut(uint texture) => _device.Gl.DeleteTexture(texture);
 
+    /// <inheritdoc/>
     public IPixelShader? CompilePixelShader(in PixelShaderSource source, ReadOnlySpan<PixelShaderUniform> uniforms)
     {
         if (source.Glsl is null)
@@ -239,6 +284,7 @@ public sealed unsafe class GlRenderer : IRenderer
 
     internal void ReleaseShader(ShaderProgram program) => program.Dispose(_device.Gl);
 
+    /// <inheritdoc/>
     public IRenderPass BeginBufferPass(IBuffer target, in RenderPassOptions options)
     {
         if (_targets.TryGetValue(target, out var entry) && entry.IsCpuReadback && entry.SeenWrites != target.WriteCount)
@@ -276,6 +322,9 @@ public sealed unsafe class GlRenderer : IRenderer
         return entry;
     }
 
+    /// <summary>
+    /// Deletes every program, target and cached object, and disposes the device.
+    /// </summary>
     public void Dispose()
     {
         _yuv?.Dispose();
