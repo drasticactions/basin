@@ -99,7 +99,7 @@ public sealed class SwitcherEffectTests
         Assert.False(switcher.IsActive);
         Assert.Null(stacks[0].Get("switcher"));
         Assert.Null(stacks[1].Get("switcher"));
-        Assert.Single(a.Tree.Children);
+        Assert.Single(a.Tree.Children.ToArray());
         Assert.IsType<SceneRect>(a.Tree.Children[0]);
     }
 

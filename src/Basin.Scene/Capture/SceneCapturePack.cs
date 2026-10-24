@@ -22,7 +22,7 @@ public sealed class SceneCapturePack : ICapabilityPack
         Index = new ToplevelSceneIndex();
         Stack = new SceneToplevelStack(scene, Index);
         Capture = new SceneScreenCapture(scene, layout) { Index = Index };
-        DmabufCapture = new SceneDmabufCapture { Scene = scene };
+        DmabufCapture = new SceneDmabufCapture { Scene = scene, Layout = layout };
         Exclusion = new SceneCaptureExclusion(scene);
         Appearance = appearance ?? new DefaultSurfaceAppearance();
         scene.Appearance = Appearance;

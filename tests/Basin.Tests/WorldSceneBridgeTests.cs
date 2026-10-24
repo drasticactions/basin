@@ -22,11 +22,11 @@ public sealed class WorldSceneBridgeTests
     [Fact]
     public void A_frame_clone_is_a_separate_copy()
     {
-        var frame = new WorldWindowFrame { Rail = 0.1f, PlaqueWidth = 0.3f, PlaqueVersion = 7 };
+        var frame = new WorldWindowFrame { Rail = 0.1f, PlaqueWidth = 0.3f, PlaquePixelWidth = 7 };
         var copy = frame.Clone();
         Assert.NotSame(frame, copy);
         Assert.Equal(0.1f, copy.Rail);
-        Assert.Equal(7, copy.PlaqueVersion);
+        Assert.Equal(7, copy.PlaquePixelWidth);
         copy.Rail = 0.2f;
         Assert.Equal(0.1f, frame.Rail);
     }

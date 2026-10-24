@@ -31,6 +31,55 @@ public sealed class GlbReaderTests
         Assert.Contains("KHR_draco_mesh_compression", error.Message, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void A_cubic_spline_channel_reads_the_values_between_the_tangents()
+    {
+        var model = GlbAvatar.Load(AnimatedGlb("CUBICSPLINE"), 4, []);
+        var clip = model.Clips["move"];
+        Assert.Equal([0], clip.Nodes);
+        Assert.Equal(5, clip.FrameCount);
+        Assert.Equal(0f, clip.Translations[0].X, 5);
+        Assert.Equal(0.3125f, clip.Translations[1].X, 5);
+        Assert.Equal(1f, clip.Translations[2].X, 5);
+        Assert.Equal(1.6875f, clip.Translations[3].X, 5);
+        Assert.Equal(2f, clip.Translations[4].X, 5);
+    }
+
+    [Fact]
+    public void An_unknown_interpolation_is_refused_by_name()
+    {
+        var error = Assert.Throws<NotSupportedException>(() => GlbAvatar.Load(AnimatedGlb("BEZIER"), 4, []));
+        Assert.Contains("BEZIER", error.Message, StringComparison.Ordinal);
+    }
+
+    private static byte[] AnimatedGlb(string interpolation)
+    {
+        float[] floats =
+        [
+            0, 0, 0, 1, 0, 0, 0, 1, 0,
+            0, 1,
+            0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 2, 0, 0, 0, 0, 0,
+        ];
+        var binary = new byte[floats.Length * 4];
+        for (var i = 0; i < floats.Length; i++)
+        {
+            BinaryPrimitives.WriteSingleLittleEndian(binary.AsSpan(i * 4), floats[i]);
+        }
+
+        var json = "{\"asset\":{\"version\":\"2.0\"},\"scene\":0,\"scenes\":[{\"nodes\":[0,1]}]," +
+            "\"nodes\":[{\"name\":\"root\"},{\"name\":\"prop\",\"mesh\":0}],\"skins\":[{\"joints\":[0]}]," +
+            "\"meshes\":[{\"primitives\":[{\"attributes\":{\"POSITION\":0},\"mode\":4}]}]," +
+            "\"animations\":[{\"name\":\"move\",\"channels\":[{\"sampler\":0,\"target\":{\"node\":0,\"path\":\"translation\"}}]," +
+            $"\"samplers\":[{{\"input\":1,\"output\":2,\"interpolation\":\"{interpolation}\"}}]}}]," +
+            "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}," +
+            "{\"bufferView\":1,\"componentType\":5126,\"count\":2,\"type\":\"SCALAR\"}," +
+            "{\"bufferView\":2,\"componentType\":5126,\"count\":6,\"type\":\"VEC3\"}]," +
+            "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36},{\"buffer\":0,\"byteOffset\":36,\"byteLength\":8}," +
+            $"{{\"buffer\":0,\"byteOffset\":44,\"byteLength\":72}}],\"buffers\":[{{\"byteLength\":{binary.Length}}}]}}";
+        return Pack(json, binary);
+    }
+
     private static byte[] Glb(int mode, string? extensions)
     {
         var binary = new byte[36];
@@ -46,6 +95,11 @@ public sealed class GlbReaderTests
             "\"accessors\":[{\"bufferView\":0,\"componentType\":5126,\"count\":3,\"type\":\"VEC3\"}]," +
             "\"bufferViews\":[{\"buffer\":0,\"byteOffset\":0,\"byteLength\":36}],\"buffers\":[{\"byteLength\":36}]" +
             required + "}";
+        return Pack(json, binary);
+    }
+
+    private static byte[] Pack(string json, byte[] binary)
+    {
         var jsonBytes = Encoding.UTF8.GetBytes(json);
         var jsonLength = (jsonBytes.Length + 3) & ~3;
         var total = 12 + 8 + jsonLength + 8 + binary.Length;

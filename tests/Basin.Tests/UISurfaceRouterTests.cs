@@ -157,6 +157,27 @@ public sealed class UISurfaceRouterTests
     }
 
     [Fact]
+    public void A_point_the_deformation_does_not_cover_stays_latched_until_the_up()
+    {
+        using var fixture = new RouterFixture();
+        var squeeze = new SceneTransform(fixture.Scene.Root) { Deformer = new SqueezeDeformer { Factor = 0.5 } };
+        var panel = fixture.Add(new Box(0, 0, 100, 100), squeeze);
+
+        Assert.True(fixture.Router.TouchDown(1, 0, 10, 10));
+        Assert.Equal("touch-down 0 20,10", panel.Surface.Log[^1]);
+
+        Assert.True(fixture.Router.TouchMotion(2, 0, 90, 10));
+        Assert.DoesNotContain(panel.Surface.Log, entry => entry.StartsWith("touch-motion", StringComparison.Ordinal));
+
+        Assert.True(fixture.Router.TouchMotion(3, 0, 20, 30));
+        Assert.Equal("touch-motion 0 40,30", panel.Surface.Log[^1]);
+        Assert.True(fixture.Router.TouchUp(4, 0));
+        Assert.Equal("touch-up 0", panel.Surface.Log[^1]);
+
+        squeeze.Destroy();
+    }
+
+    [Fact]
     public void A_named_target_beats_the_hovered_surface()
     {
         using var fixture = new RouterFixture();

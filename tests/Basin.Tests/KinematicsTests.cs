@@ -116,6 +116,58 @@ public sealed class KinematicsTests
     }
 
     [Fact]
+    public void A_new_spring_motion_has_the_documented_values()
+    {
+        var spring = new SpringMotion();
+        Assert.Equal(200.0, spring.SpringConstant);
+        Assert.Equal(1.1, spring.DampingRatio);
+        Assert.Equal(1.0, spring.Epsilon);
+        Assert.Equal(0, spring.Position);
+        Assert.False(spring.IsMoving);
+
+        spring.Anchor = 100;
+        spring.Advance(50);
+        Assert.InRange(spring.Position, 0.001, 99);
+        Assert.True(spring.Velocity > 0);
+    }
+
+    [Fact]
+    public void A_default_spring_motion_settles_on_its_first_advance()
+    {
+        var springs = new SpringMotion[1];
+        springs[0].Anchor = 50;
+        Assert.True(springs[0].IsMoving);
+
+        springs[0].Advance(16);
+        Assert.False(springs[0].IsMoving);
+        Assert.Equal(50, springs[0].Position);
+        Assert.Equal(0, springs[0].Velocity);
+    }
+
+    [Fact]
+    public void A_retarget_on_a_settled_handoff_springs_from_the_old_target()
+    {
+        var spring = new SpringHandoff();
+        spring.Start(100, 0, 0, 0, 100, 0);
+        Assert.False(spring.IsMoving);
+
+        spring.Retarget(300, 0);
+        Assert.True(spring.IsMoving);
+        Assert.Equal(100, spring.X);
+        Assert.Equal(300, spring.TargetX);
+
+        var now = 1_000_000_000L;
+        spring.Step(new FrameTick(now, 16_666_666));
+        Assert.InRange(spring.X, 100.001, 299);
+        for (var i = 0; i < 600 && spring.Step(new FrameTick(now += 16_666_666, 16_666_666)); i++)
+        {
+        }
+
+        Assert.False(spring.IsMoving);
+        Assert.Equal(300, spring.X);
+    }
+
+    [Fact]
     public void A_spring_handoff_is_deterministic()
     {
         static double Run()

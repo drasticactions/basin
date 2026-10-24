@@ -721,6 +721,25 @@ public sealed class CaptureExclusionTests
     }
 
     [Fact]
+    public void A_toplevel_the_model_does_not_know_is_not_supported()
+    {
+        using var host = new CompositorTestHost();
+        var model = new TestToplevelModel();
+        var capture = new Basin.Scene.SceneScreenCapture(host.Scene, host.Layout)
+        {
+            Renderer = host.Renderer,
+            Toplevels = model,
+        };
+        var id = model.Add("known", "app.known", geometry: new Box(10, 10, 40, 40));
+
+        Assert.True(capture.Supports(CaptureSource.Toplevel(id)));
+        Assert.False(capture.Supports(CaptureSource.Toplevel(id + 1000)));
+        Assert.False(capture.TryDescribe(CaptureSource.Toplevel(id + 1000), out _));
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        Assert.False(capture.Supports(CaptureSource.Toplevel(id)));
+    }
+
+    [Fact]
     public void An_excluded_toplevel_cancels_export_dmabuf()
     {
         using var host = new CompositorTestHost();
@@ -730,6 +749,146 @@ public sealed class CaptureExclusionTests
 
         model.SetState(id, ToplevelState.ExcludedFromCapture);
         Assert.False(dmabuf.TryCurrentFrame(host.Output, out _));
+    }
+
+    [Fact]
+    public void Export_dmabuf_refuses_only_the_output_that_an_excluded_toplevel_touches()
+    {
+        using var host = new CompositorTestHost();
+        var (layout, left, right) = TwoOutputs();
+        var model = new TestToplevelModel();
+        var dmabuf = new Basin.Scene.SceneDmabufCapture { Toplevels = model, Scene = host.Scene, Layout = layout };
+        var id = model.Add("secret", "app.secret", geometry: new Box(1400, 100, 200, 200));
+        Assert.False(dmabuf.Refuses(left));
+        Assert.False(dmabuf.Refuses(right));
+
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        Assert.False(dmabuf.Refuses(left));
+        Assert.True(dmabuf.Refuses(right));
+
+        model.SetState(id, ToplevelState.ExcludedFromCapture | ToplevelState.Minimized);
+        Assert.False(dmabuf.Refuses(right));
+
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        model.Reposition(id, new Box(1200, 100, 200, 200));
+        Assert.True(dmabuf.Refuses(left));
+        Assert.True(dmabuf.Refuses(right));
+        left.Destroy();
+        right.Destroy();
+    }
+
+    [Fact]
+    public void Export_dmabuf_refuses_only_the_output_that_an_excluded_node_maps_into()
+    {
+        using var host = new CompositorTestHost();
+        var (layout, left, right) = TwoOutputs();
+        var dmabuf = new Basin.Scene.SceneDmabufCapture { Scene = host.Scene, Layout = layout };
+        var tree = new Basin.Scene.SceneTree(host.Scene.Root) { ExcludedFromCapture = true };
+        tree.SetPosition(100, 100);
+        _ = new Basin.Scene.SceneRect(tree, 50, 50, new RenderColor(1, 0, 0, 1));
+
+        Assert.True(dmabuf.Refuses(left));
+        Assert.False(dmabuf.Refuses(right));
+
+        tree.Enabled = false;
+        Assert.False(dmabuf.Refuses(left));
+        tree.Destroy();
+        left.Destroy();
+        right.Destroy();
+    }
+
+    [Fact]
+    public void A_mirror_keeps_the_export_dmabuf_refusal_global()
+    {
+        using var host = new CompositorTestHost();
+        var (layout, left, right) = TwoOutputs();
+        var model = new TestToplevelModel();
+        var dmabuf = new Basin.Scene.SceneDmabufCapture { Toplevels = model, Scene = host.Scene, Layout = layout };
+        var id = model.Add("secret", "app.secret", geometry: new Box(1400, 100, 200, 200));
+        model.SetState(id, ToplevelState.ExcludedFromCapture);
+        Assert.False(dmabuf.Refuses(left));
+
+        var source = new Basin.Scene.SceneTree(host.Scene.Root);
+        var mirror = new Basin.Scene.SceneMirror(host.Scene.Root, source, 100, 100);
+        Assert.True(dmabuf.Refuses(left));
+        Assert.True(dmabuf.Refuses(right));
+
+        mirror.Destroy();
+        Assert.False(dmabuf.Refuses(left));
+        source.Destroy();
+        left.Destroy();
+        right.Destroy();
+    }
+
+    [Fact]
+    public void A_presented_buffer_exports_for_an_output_with_no_scene_output()
+    {
+        using var host = new CompositorTestHost();
+        var (layout, left, right) = TwoOutputs();
+        var dmabuf = new Basin.Scene.SceneDmabufCapture { Scene = host.Scene, Layout = layout };
+        var buffer = new ExportableBuffer(64, 48);
+        Assert.False(dmabuf.TryCurrentFrame(right, out _));
+
+        dmabuf.NotifyPresented(right, buffer);
+        Assert.True(dmabuf.TryCurrentFrame(right, out var attributes));
+        Assert.Equal((64, 48), (attributes.Width, attributes.Height));
+        Assert.False(dmabuf.TryCurrentFrame(left, out _));
+
+        dmabuf.Forget(right);
+        Assert.False(dmabuf.TryCurrentFrame(right, out _));
+        dmabuf.NotifyPresented(right, buffer);
+        buffer.Destroy();
+        Assert.False(dmabuf.TryCurrentFrame(right, out _));
+        left.Destroy();
+        right.Destroy();
+    }
+
+    private static (OutputLayout Layout, FakeOutput Left, FakeOutput Right) TwoOutputs()
+    {
+        var layout = new OutputLayout();
+        var left = new FakeOutput("LEFT");
+        var right = new FakeOutput("RIGHT");
+        using (var state = new OutputState())
+        {
+            left.Commit(state.SetEnabled(true).SetMode(new OutputMode(1280, 720, 60000)));
+        }
+
+        using (var state = new OutputState())
+        {
+            right.Commit(state.SetEnabled(true).SetMode(new OutputMode(1280, 720, 60000)));
+        }
+
+        layout.Add(left, 0, 0);
+        layout.Add(right, 1280, 0);
+        return (layout, left, right);
+    }
+
+    private sealed class ExportableBuffer(int width, int height) : BufferBase(width, height)
+    {
+        public override DrmFormat Format => DrmFormat.Xrgb8888;
+
+        public override bool TryGetDmabuf(out DmabufAttributes attributes)
+        {
+            attributes = new DmabufAttributes { Width = Width, Height = Height, Format = Format, PlaneCount = 1 };
+            return true;
+        }
+
+        protected override bool TryMap(BufferDataAccess access, out BufferDataView view)
+        {
+            view = default;
+            return false;
+        }
+
+        protected override void OnFreeStorage()
+        {
+        }
+    }
+
+    private sealed class FakeOutput(string name) : OutputBase(name)
+    {
+        protected override bool TestCommitCore(OutputState state) => true;
+
+        protected override bool CommitCore(OutputState state) => true;
     }
 
     [Fact]

@@ -40,6 +40,7 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
     private readonly List<(ulong Point, VulkanWorldTarget Target)> _droppedTargets = [];
     private readonly List<(ulong Point, VulkanWorldImage Image)> _droppedImages = new(16);
     private readonly List<(ulong Point, VulkanWorldMesh Mesh)> _droppedMeshes = new(16);
+    private readonly List<(ulong Point, Sampler Sampler)> _droppedSamplers = new(4);
     private readonly List<WorldMesh> _evict = [];
     private readonly List<ITexture> _foreign = new(32);
     private readonly VulkanWorldLevel[] _levels = new VulkanWorldLevel[MaxLevels];
@@ -58,19 +59,20 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
     private Pipeline _bound;
     private uint _stencilReference;
     private float _directMax = 1.2f;
+    private ulong _lastPoint;
+    private IBuffer? _failedTarget;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="VulkanWorldRenderer"/> class. It creates its pipelines, samplers and frame slots on <paramref name="device"/>.
     /// </summary>
     /// <param name="device">The Vulkan device of the 2D renderer.</param>
-    /// <param name="anisotropy">The maximum anisotropic filtering for window and atlas textures. It applies only when the device enables <c>samplerAnisotropy</c>. This pass ignores <see cref="WorldRenderSettings.Anisotropy"/>.</param>
     /// <exception cref="ArgumentNullException"><paramref name="device"/> is <see langword="null"/>.</exception>
-    public VulkanWorldRenderer(VulkanDevice device, float anisotropy = 8)
+    public VulkanWorldRenderer(VulkanDevice device)
     {
         ArgumentNullException.ThrowIfNull(device);
         _device = device;
         _vk = device.Api;
-        _pipelines = new VulkanWorldPipelines(device, anisotropy);
+        _pipelines = new VulkanWorldPipelines(device, new WorldRenderSettings().Anisotropy);
         for (var i = 0; i < _frames.Length; i++)
         {
             _frames[i] = new VulkanWorldFrame(device, _pipelines);
@@ -114,10 +116,9 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
     /// </summary>
     /// <param name="frame">The world, the view, the visible set and the settings for this output.</param>
     /// <param name="target">The dmabuf to draw into. The pass caches a framebuffer for it until it is destroyed.</param>
-    /// <returns>Always <see langword="true"/>.</returns>
+    /// <returns><see langword="true"/> when the frame was drawn. <see langword="false"/> when <paramref name="target"/> is not a dmabuf or the device cannot import it. The pass logs the first failure for a target once.</returns>
     /// <exception cref="ObjectDisposedException">The renderer is disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException"><paramref name="target"/> is not a dmabuf, or the device cannot import it.</exception>
     public bool Render(in WorldFrame frame, IBuffer target)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -212,6 +213,11 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
             mesh.Destroy(_device);
         }
 
+        foreach (var (_, sampler) in _droppedSamplers)
+        {
+            _vk.DestroySampler(_device.Device, sampler, null);
+        }
+
         _white.Destroy(_device);
         foreach (var frame in _frames)
         {
@@ -224,11 +230,22 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
 
     private bool RenderCore(in WorldFrame frame, IBuffer target)
     {
+        if (TargetFor(target) is not { } entry)
+        {
+            return false;
+        }
+
         _frame++;
         _directMax = frame.Settings.DirectSampleMax;
+        if (frame.Settings.Anisotropy != _pipelines.Anisotropy)
+        {
+            _pipelines.ReplaceSamplers(frame.Settings.Anisotropy, out var oldWindow, out var oldAtlas);
+            _droppedSamplers.Add((_lastPoint, oldWindow));
+            _droppedSamplers.Add((_lastPoint, oldAtlas));
+        }
+
         CopiesRefreshed = 0;
         DirectSamples = 0;
-        var entry = TargetFor(target);
         var slot = AcquireFrame();
         _current = slot;
         _device.Staging.Recycle(_device.CompletedPoint);
@@ -280,6 +297,7 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
         _device.Staging.MarkSubmitted(point);
         slot.Point = point;
         entry.LastPoint = point;
+        _lastPoint = point;
         if (fence >= 0)
         {
             RenderFences.PublishFenceTo(entry.Attributes, forWrite: true, fence);
@@ -1020,7 +1038,7 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
         }
     }
 
-    private VulkanWorldTarget TargetFor(IBuffer target)
+    private VulkanWorldTarget? TargetFor(IBuffer target)
     {
         if (_targets.TryGetValue(target, out var entry))
         {
@@ -1030,7 +1048,18 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
         AllocationScope.Pause();
         try
         {
-            entry = VulkanWorldTarget.Create(_device, _pipelines, target);
+            if (VulkanWorldTarget.TryCreate(_device, _pipelines, target, out var reason) is not { } created)
+            {
+                if (!ReferenceEquals(_failedTarget, target))
+                {
+                    _failedTarget = target;
+                    VulkanWorldLog.Log.Warn($"world frame not drawn: {reason}");
+                }
+
+                return null;
+            }
+
+            entry = created;
             _targets[target] = entry;
             var handler = ForgetOnDestroy(target);
             _destroyHandlers[target] = handler;
@@ -1080,6 +1109,15 @@ public sealed unsafe class VulkanWorldRenderer : IWorldRenderer
             {
                 _droppedMeshes[i].Mesh.Destroy(_device);
                 _droppedMeshes.RemoveAt(i);
+            }
+        }
+
+        for (var i = _droppedSamplers.Count - 1; i >= 0; i--)
+        {
+            if (_device.IsComplete(_droppedSamplers[i].Point))
+            {
+                _vk.DestroySampler(_device.Device, _droppedSamplers[i].Sampler, null);
+                _droppedSamplers.RemoveAt(i);
             }
         }
     }

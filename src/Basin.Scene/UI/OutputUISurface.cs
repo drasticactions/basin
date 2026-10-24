@@ -129,6 +129,7 @@ public sealed class OutputUISurface : IDisposable
 
     /// <summary>
     /// Moves the node to a box and configures the surface for its size, scale and <see cref="Zoom"/>. The first success creates the surface and raises <see cref="Realized"/>.
+    /// It gives the surface the corner of the box mapped through every transform on the path as its position.
     /// </summary>
     /// <param name="box">The surface box in logical scene coordinates.</param>
     /// <param name="scale">The output scale.</param>
@@ -155,7 +156,8 @@ public sealed class OutputUISurface : IDisposable
         _scale = scale;
         _placed = true;
 
-        var (sceneX, sceneY) = _node.Node.ScenePosition;
+        var shown = _node.Node.MapToScene(new Box(0, 0, box.Width, box.Height));
+        var (sceneX, sceneY) = shown.IsEmpty ? _node.Node.OffsetFromRoot : (shown.X, shown.Y);
         _node.Surface?.SetPosition(sceneX, sceneY);
 
         if (!realized && _node.Surface is { } surface)

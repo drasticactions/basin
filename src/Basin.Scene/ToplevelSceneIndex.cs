@@ -12,6 +12,8 @@ public sealed class ToplevelSceneIndex
     private readonly Dictionary<SceneNode, ulong> _ids = [];
     private readonly Dictionary<SceneNode, ulong> _popupIds = [];
 
+    internal ToplevelCaptureIndexObserver? Resolver { get; set; }
+
     /// <summary>
     /// Records the trees of a toplevel, and replaces any trees that the id had before.
     /// </summary>
@@ -51,12 +53,16 @@ public sealed class ToplevelSceneIndex
     }
 
     /// <summary>
-    /// Gets the trees recorded for a toplevel.
+    /// Gets the trees recorded for a toplevel. It first resolves again each toplevel whose content tree is gone, when an observer fills the index.
     /// </summary>
     /// <param name="toplevelId">The toplevel id.</param>
     /// <param name="trees">The trees, or the default value when the id is unknown.</param>
     /// <returns><see langword="true"/> when the id is known.</returns>
-    public bool TryGet(ulong toplevelId, out ToplevelCaptureTrees trees) => _trees.TryGetValue(toplevelId, out trees);
+    public bool TryGet(ulong toplevelId, out ToplevelCaptureTrees trees)
+    {
+        ResolveStale();
+        return _trees.TryGetValue(toplevelId, out trees);
+    }
 
     /// <summary>
     /// Gets the toplevel whose content tree is exactly this node. Popup trees and descendants do not match.
@@ -81,6 +87,7 @@ public sealed class ToplevelSceneIndex
     public bool TryOwnerOf(SceneNode node, out ulong toplevelId)
     {
         ArgumentNullException.ThrowIfNull(node);
+        ResolveStale();
         for (SceneNode? candidate = node; candidate is not null; candidate = candidate.Parent)
         {
             if (_ids.TryGetValue(candidate, out toplevelId) || _popupIds.TryGetValue(candidate, out toplevelId))
@@ -92,6 +99,10 @@ public sealed class ToplevelSceneIndex
         toplevelId = 0;
         return false;
     }
+
+    internal bool TryGetEntry(ulong toplevelId, out ToplevelCaptureTrees trees) => _trees.TryGetValue(toplevelId, out trees);
+
+    internal void ResolveStale() => Resolver?.ResolveStale();
 
     private void Forget(in ToplevelCaptureTrees trees)
     {

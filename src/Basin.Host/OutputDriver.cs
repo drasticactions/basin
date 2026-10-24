@@ -1854,6 +1854,7 @@ public sealed class OutputDriver : IDisposable, Scene.IPresentedOutputs
             view.Scheduler!.NotifyCommitted();
             view.LastPresentedBuffer = buffer;
             view.Rendered++;
+            Capture?.DmabufCapture.NotifyPresented(view.Output, buffer);
         }
 
         RaisePainted(view);

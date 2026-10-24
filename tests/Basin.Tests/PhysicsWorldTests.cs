@@ -18,6 +18,33 @@ public sealed class PhysicsWorldTests
         _ => throw new ArgumentOutOfRangeException(nameof(name)),
     };
 
+    [Theory]
+    [InlineData("box2d", "bepu")]
+    [InlineData("bepu", "bepu")]
+    public void A_moved_body_keeps_its_listed_state_in_the_target_world(string from, string to)
+    {
+        using var source = new PhysicsWorld(EngineOf(from));
+        using var target = new PhysicsWorld(EngineOf(to));
+        var body = source.CreateBody(PhysicsBodyKind.Dynamic, 100, 100, 120, 80, Sliding, tag: 42);
+        body.CollidesWith = PhysicsCategory.Windows | PhysicsCategory.Edges;
+        body.AngularLocked = true;
+        body.Velocity = (250, -40);
+
+        var moved = source.MoveTo(body, target, 300, 200, velocityScale: 1);
+
+        Assert.False(body.IsValid);
+        Assert.True(moved.IsValid);
+        Assert.Same(target, moved.World);
+        Assert.Equal(PhysicsBodyKind.Dynamic, moved.Kind);
+        Assert.Equal(42ul, moved.Tag);
+        Assert.Equal(120, moved.Width, 3);
+        Assert.Equal(80, moved.Height, 3);
+        Assert.Equal(PhysicsCategory.Windows | PhysicsCategory.Edges, moved.CollidesWith);
+        Assert.True(moved.AngularLocked);
+        Assert.Equal(250, moved.Velocity.X, 1);
+        Assert.Equal(-40, moved.Velocity.Y, 1);
+    }
+
     private static PhysicsWorld Boxed(string engine, int width = 2000, int height = 1200)
     {
         var world = new PhysicsWorld(EngineOf(engine));

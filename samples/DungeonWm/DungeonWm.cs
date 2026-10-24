@@ -102,7 +102,7 @@ internal sealed partial class DungeonWm : IDisposable
         var stack = CreateStack(options.Renderer, log, out var rendererName);
         _renderer = stack.Renderer;
         _deviceAllocator = stack.DeviceAllocator;
-        _worldRenderer = WorldRenderers.For(_renderer, _settings.Render.Anisotropy, out var worldDeclined)
+        _worldRenderer = WorldRenderers.For(_renderer, out var worldDeclined)
             ?? throw new InvalidOperationException($"the {rendererName} renderer cannot draw the world: {worldDeclined}");
         RendererName = rendererName;
 

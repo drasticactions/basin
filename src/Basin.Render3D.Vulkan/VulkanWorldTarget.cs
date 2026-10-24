@@ -29,16 +29,21 @@ internal sealed unsafe class VulkanWorldTarget
 
     public ulong LastPoint { get; set; }
 
-    public static VulkanWorldTarget Create(VulkanDevice device, VulkanWorldPipelines pipelines, IBuffer buffer)
+    public static VulkanWorldTarget? TryCreate(VulkanDevice device, VulkanWorldPipelines pipelines, IBuffer buffer, out string reason)
     {
         if (!buffer.TryGetDmabuf(out var attributes))
         {
-            throw new InvalidOperationException("the Vulkan world pass draws only into a dmabuf.");
+            reason = "the Vulkan world pass draws only into a dmabuf";
+            return null;
         }
 
-        var color = VulkanDeviceImage.TryImport(device, attributes, ImageUsageFlags.ColorAttachmentBit)
-            ?? throw new InvalidOperationException(
-                $"{device.DevicePath} would not import a {buffer.Width}x{buffer.Height} world buffer as a color attachment.");
+        if (VulkanDeviceImage.TryImport(device, attributes, ImageUsageFlags.ColorAttachmentBit) is not { } color)
+        {
+            reason = $"{device.DevicePath} would not import a {buffer.Width}x{buffer.Height} world buffer as a color attachment";
+            return null;
+        }
+
+        reason = string.Empty;
         var vk = device.Api;
         var info = new ImageCreateInfo
         {

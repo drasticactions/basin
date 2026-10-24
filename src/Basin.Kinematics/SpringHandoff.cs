@@ -113,19 +113,20 @@ public struct SpringHandoff
     }
 
     /// <summary>
-    /// Changes the target and keeps the current position and velocity. A spring that is not moving does not start again, so its position jumps to the new target.
+    /// Changes the target and keeps the current position and velocity. A spring that is not moving starts again at rest from the old target, so the point springs to the new one.
     /// </summary>
     /// <param name="targetX">The new horizontal target.</param>
     /// <param name="targetY">The new vertical target.</param>
     public void Retarget(double targetX, double targetY)
     {
-        TargetX = targetX;
-        TargetY = targetY;
         if (!_moving)
         {
+            Start(TargetX, TargetY, 0, 0, targetX, targetY);
             return;
         }
 
+        TargetX = targetX;
+        TargetY = targetY;
         _x.Anchor = targetX;
         _y.Anchor = targetY;
     }

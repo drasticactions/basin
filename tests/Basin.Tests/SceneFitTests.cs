@@ -8,7 +8,7 @@ public sealed class SceneFitTests
     [Fact]
     public void Fit_scales_uniformly_to_the_largest_size_that_fits_and_centers()
     {
-        var (scale, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (1024, 768), SceneFitMode.Fit);
+        var (scale, _, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (1024, 768), SceneFitMode.Fit);
         Assert.Equal(1080 / 768.0, scale, 6);
         Assert.Equal(new Box(240, 0, 1440, 1080), box);
     }
@@ -16,11 +16,11 @@ public sealed class SceneFitTests
     [Fact]
     public void Center_keeps_one_to_one_and_shrinks_only_what_does_not_fit()
     {
-        var (scale, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (640, 480), SceneFitMode.Center);
+        var (scale, _, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (640, 480), SceneFitMode.Center);
         Assert.Equal(1.0, scale);
         Assert.Equal(new Box(640, 300, 640, 480), box);
 
-        (scale, box) = SceneFit.Place(new Box(10, 20, 800, 600), (1600, 600), SceneFitMode.Center);
+        (scale, _, box) = SceneFit.Place(new Box(10, 20, 800, 600), (1600, 600), SceneFitMode.Center);
         Assert.Equal(0.5, scale);
         Assert.Equal(new Box(10, 170, 800, 300), box);
     }
@@ -28,22 +28,22 @@ public sealed class SceneFitTests
     [Fact]
     public void Integer_floors_an_upscale_and_keeps_a_downscale_fractional()
     {
-        var (scale, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (640, 360), SceneFitMode.Integer);
+        var (scale, _, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (640, 360), SceneFitMode.Integer);
         Assert.Equal(3.0, scale);
         Assert.Equal(new Box(0, 0, 1920, 1080), box);
 
-        (scale, box) = SceneFit.Place(new Box(0, 0, 2560, 1440), (1280, 800), SceneFitMode.Integer);
+        (scale, _, box) = SceneFit.Place(new Box(0, 0, 2560, 1440), (1280, 800), SceneFitMode.Integer);
         Assert.Equal(1.0, scale);
         Assert.Equal(new Box(640, 320, 1280, 800), box);
 
-        (scale, _) = SceneFit.Place(new Box(0, 0, 800, 600), (1600, 1200), SceneFitMode.Integer);
+        (scale, _, _) = SceneFit.Place(new Box(0, 0, 800, 600), (1600, 1200), SceneFitMode.Integer);
         Assert.Equal(0.5, scale);
     }
 
     [Fact]
     public void Fill_covers_the_target_with_the_larger_ratio_and_clips()
     {
-        var (scale, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Fill);
+        var (scale, _, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Fill);
         Assert.Equal(1.5, scale);
         Assert.Equal(new Box(0, -228, 1920, 1536), box);
 
@@ -63,9 +63,14 @@ public sealed class SceneFitTests
         var fit = new SceneFit(host.Scene.Root);
         fit.Update(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Stretch);
         Assert.Equal(new Box(0, 0, 1920, 1080), fit.ContentBox);
-        Assert.Equal(1.5, fit.ContentScale);
+        Assert.Equal(1.5, fit.ContentScaleX);
         Assert.Equal(1080 / 1024.0, fit.ContentScaleY, 6);
         fit.Destroy();
+
+        var (scaleX, scaleY, box) = SceneFit.Place(new Box(0, 0, 1920, 1080), (1280, 1024), SceneFitMode.Stretch);
+        Assert.Equal(1.5, scaleX);
+        Assert.Equal(1080 / 1024.0, scaleY, 6);
+        Assert.Equal(new Box(0, 0, 1920, 1080), box);
     }
 
     [Fact]
@@ -112,7 +117,7 @@ public sealed class SceneFitTests
         top.Tree.Reparent(fit.Content);
         top.Tree.SetPosition(0, 0);
         fit.Update(new Box(0, 0, 160, 120), (40, 30), SceneFitMode.Fit);
-        Assert.Equal(4.0, fit.ContentScale);
+        Assert.Equal(4.0, fit.ContentScaleX);
 
         var hit = host.Scene.SurfaceAt(80, 60);
         Assert.NotNull(hit);
@@ -199,7 +204,7 @@ public sealed class SceneFitTests
 
         fit.Update(new Box(0, 0, 160, 120), (160, 120), (1280, 720), SceneFitMode.Fit);
         Assert.Equal(new Box(0, 15, 160, 90), fit.ContentBox);
-        Assert.Equal((1.0, 0.75), (fit.ContentScale, fit.ContentScaleY));
+        Assert.Equal((1.0, 0.75), (fit.ContentScaleX, fit.ContentScaleY));
         Assert.Equal((80.0, 60.0), fit.ToContent(80, 60));
 
         host.RenderFrame();

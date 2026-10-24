@@ -88,11 +88,6 @@ public sealed class WorldWindowFrame
     public int PlaquePixelHeight { get; set; }
 
     /// <summary>
-    /// Gets or sets the content version of the plaque texture. The consumer sets it. The passes do not read it at this time.
-    /// </summary>
-    public int PlaqueVersion { get; set; }
-
-    /// <summary>
     /// Gets a value indicating whether the plaque width and height are both positive.
     /// </summary>
     public bool HasPlaque => PlaqueWidth > 0 && PlaqueHeight > 0;

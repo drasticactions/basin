@@ -94,6 +94,7 @@ public sealed class SceneToplevelStack : IToplevelStack
 
     private void Recompute()
     {
+        _index.ResolveStale();
         _count = 0;
         Walk(_scene.Root);
     }

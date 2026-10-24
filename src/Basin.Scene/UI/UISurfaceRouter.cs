@@ -288,7 +288,8 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
     }
 
     /// <summary>
-    /// Sends touch motion to the surface that the touch point is latched to. A point that the surface can no longer map is unlatched with no event.
+    /// Sends touch motion to the surface that the touch point is latched to.
+    /// A point that the surface cannot map stays latched and gets no motion, so the up still reaches the surface. A point whose surface left the index is unlatched with no event.
     /// </summary>
     /// <param name="timeMs">The event time in milliseconds.</param>
     /// <param name="id">The touch point id.</param>
@@ -305,7 +306,11 @@ public sealed class UISurfaceRouter : IUISurfaceObserver
 
         if (!TryLocal(surface, x, y, out var localX, out var localY))
         {
-            _touchSurfaces[slot] = null;
+            if (_index.OwnerOf(surface) is null)
+            {
+                _touchSurfaces[slot] = null;
+            }
+
             return true;
         }
 

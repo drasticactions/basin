@@ -144,8 +144,9 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="center">The box center in world space.</param>
     /// <param name="halfExtents">The half size of the box on each axis.</param>
     /// <returns>The ID that <see cref="RemoveStatic"/> takes.</returns>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public int AddStaticBox(Vector3 center, Vector3 halfExtents) =>
-        _backend.AddStaticBox(center, halfExtents, Quaternion.Identity, PhysicsMaterial.Default);
+        AddStaticBox(center, halfExtents, Quaternion.Identity, PhysicsMaterial.Default);
 
     /// <summary>
     /// Adds a static box. It does not wake the world.
@@ -155,8 +156,12 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="orientation">The rotation of the box.</param>
     /// <param name="material">The surface values of the box.</param>
     /// <returns>The ID that <see cref="RemoveStatic"/> takes.</returns>
-    public int AddStaticBox(Vector3 center, Vector3 halfExtents, Quaternion orientation, in PhysicsMaterial material) =>
-        _backend.AddStaticBox(center, halfExtents, orientation, material);
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
+    public int AddStaticBox(Vector3 center, Vector3 halfExtents, Quaternion orientation, in PhysicsMaterial material)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _backend.AddStaticBox(center, halfExtents, orientation, material);
+    }
 
     /// <summary>
     /// Adds a static triangle mesh with <see cref="PhysicsMaterial.Default"/>. It does not wake the world.
@@ -164,14 +169,23 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="vertices">The mesh vertices in world space.</param>
     /// <param name="indices">Three vertex indices for each triangle.</param>
     /// <returns>The ID that <see cref="RemoveStatic"/> takes.</returns>
-    public int AddStaticMesh(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<int> indices) =>
-        _backend.AddStaticMesh(vertices, indices, PhysicsMaterial.Default);
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
+    public int AddStaticMesh(ReadOnlySpan<Vector3> vertices, ReadOnlySpan<int> indices)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        return _backend.AddStaticMesh(vertices, indices, PhysicsMaterial.Default);
+    }
 
     /// <summary>
     /// Removes a static shape.
     /// </summary>
     /// <param name="id">The ID that <see cref="AddStaticBox(Vector3, Vector3)"/> or <see cref="AddStaticMesh"/> returned.</param>
-    public void RemoveStatic(int id) => _backend.RemoveStatic(id);
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
+    public void RemoveStatic(int id)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _backend.RemoveStatic(id);
+    }
 
     /// <summary>
     /// Adds a dynamic box body.
@@ -181,6 +195,7 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="material">The material of the body.</param>
     /// <param name="awake">Whether the body starts awake.</param>
     /// <returns>The handle of the new body.</returns>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public PhysicsBody3D AddBox(Vector3 halfExtents, in PhysicsPose3D pose, in PhysicsMaterial material, bool awake = true) =>
         Add(PhysicsShape3D.Box, halfExtents, pose, material, awake);
 
@@ -193,6 +208,7 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="material">The material of the body.</param>
     /// <param name="awake">Whether the body starts awake.</param>
     /// <returns>The handle of the new body.</returns>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public PhysicsBody3D AddCylinder(float radius, float halfHeight, in PhysicsPose3D pose, in PhysicsMaterial material, bool awake = true) =>
         Add(PhysicsShape3D.Cylinder, new Vector3(radius, halfHeight, radius), pose, material, awake);
 
@@ -205,8 +221,10 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="mass">The mass, in kilograms.</param>
     /// <param name="jumpSpeed">The upward speed of a jump, in meters per second.</param>
     /// <returns>The new character.</returns>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public PhysicsCharacter3D AddCharacter(float radius, float height, Vector3 feet, float mass = 70, float jumpSpeed = 4.2f)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var index = AllocateSlot();
         var center = feet + new Vector3(0, height * 0.5f, 0);
         var pose = PhysicsPose3D.At(center);
@@ -224,7 +242,7 @@ public sealed class PhysicsWorld3D : IDisposable
     }
 
     /// <summary>
-    /// Removes a body or a character. Every handle to it becomes stale. It does nothing for a handle that is not live in this world.
+    /// Removes a body or a character. Every handle to it becomes stale. It does nothing for a handle that is not live in this world, and after <see cref="Dispose"/>.
     /// </summary>
     /// <param name="body">The body to remove.</param>
     public void Remove(PhysicsBody3D body)
@@ -245,6 +263,7 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="body">The body to move.</param>
     /// <param name="pose">The new pose.</param>
     /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public void Teleport(PhysicsBody3D body, in PhysicsPose3D pose)
     {
         ref var slot = ref Checked(body);
@@ -262,6 +281,7 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="linear">The linear velocity, in meters per second.</param>
     /// <param name="angular">The angular velocity, in radians per second.</param>
     /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public void SetVelocity(PhysicsBody3D body, Vector3 linear, Vector3 angular)
     {
         _ = Checked(body);
@@ -275,6 +295,7 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="body">The body to drag.</param>
     /// <param name="worldPoint">The grab point in world space.</param>
     /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public void BeginDrag(PhysicsBody3D body, Vector3 worldPoint)
     {
         ref var slot = ref Checked(body);
@@ -375,6 +396,7 @@ public sealed class PhysicsWorld3D : IDisposable
     /// <param name="body">The body to read.</param>
     /// <returns>The grab point in world space.</returns>
     /// <exception cref="InvalidOperationException">The body is not live in this world.</exception>
+    /// <exception cref="ObjectDisposedException">The world is disposed.</exception>
     public Vector3 GrabPoint(PhysicsBody3D body)
     {
         ref var slot = ref Checked(body);
@@ -433,18 +455,23 @@ public sealed class PhysicsWorld3D : IDisposable
     }
 
     /// <summary>
-    /// Runs exactly one fixed step, with no clock and no accumulator. It ignores <see cref="Frozen"/> and the idle rule.
+    /// Runs exactly one fixed step, with no clock and no accumulator. It ignores <see cref="Frozen"/> and the idle rule, and does nothing after <see cref="Dispose"/>.
     /// </summary>
     public void StepOnce()
     {
         _movedCount = 0;
         _impactCount = 0;
+        if (_disposed)
+        {
+            return;
+        }
+
         SubStep();
         RefreshAwake();
     }
 
     /// <summary>
-    /// Releases the engine state. After it, <see cref="Step"/> does nothing.
+    /// Releases the engine state. After it, <see cref="Step"/> and <see cref="StepOnce"/> do nothing, every handle is stale, and a method that changes the world throws <see cref="ObjectDisposedException"/>.
     /// </summary>
     public void Dispose()
     {
@@ -459,7 +486,7 @@ public sealed class PhysicsWorld3D : IDisposable
     }
 
     internal bool IsLive(PhysicsBody3D body) =>
-        ReferenceEquals(body.World, this) && (uint)body.Slot < (uint)_slotCount &&
+        !_disposed && ReferenceEquals(body.World, this) && (uint)body.Slot < (uint)_slotCount &&
         _slots[body.Slot].Live && _slots[body.Slot].Generation == body.Generation;
 
     internal PhysicsPose3D Pose(PhysicsBody3D body)
@@ -528,6 +555,7 @@ public sealed class PhysicsWorld3D : IDisposable
 
     private PhysicsBody3D Add(PhysicsShape3D shape, Vector3 halfExtents, in PhysicsPose3D pose, in PhysicsMaterial material, bool awake)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         var index = AllocateSlot();
         _slots[index] = new Slot
         {
@@ -543,6 +571,7 @@ public sealed class PhysicsWorld3D : IDisposable
 
     private ref Slot Checked(PhysicsBody3D body)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
         if (!IsLive(body))
         {
             throw new InvalidOperationException("The physics body is not live in this world.");

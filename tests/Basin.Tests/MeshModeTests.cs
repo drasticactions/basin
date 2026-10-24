@@ -282,7 +282,7 @@ public sealed class MeshModeTests
     private static SceneBuffer? FindBuffer(SceneNode node) => node switch
     {
         SceneBuffer buffer => buffer,
-        SceneTree tree => tree.Children.Select(FindBuffer).FirstOrDefault(found => found is not null),
+        SceneTree tree => tree.Children.ToArray().Select(FindBuffer).FirstOrDefault(found => found is not null),
         _ => null,
     };
 

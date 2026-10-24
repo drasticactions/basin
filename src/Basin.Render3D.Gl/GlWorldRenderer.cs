@@ -56,6 +56,7 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
     private long _frame;
     private float _settingsMax = 1.2f;
     private float _settingsAnisotropy = 8;
+    private IBuffer? _failedTarget;
     private bool _disposed;
 
     /// <summary>
@@ -109,10 +110,9 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
     /// </summary>
     /// <param name="frame">The world, the view, the visible set and the settings for this output.</param>
     /// <param name="target">The buffer to draw into. The pass caches a render target with a depth and stencil buffer for it until it is destroyed.</param>
-    /// <returns>Always <see langword="true"/>.</returns>
+    /// <returns><see langword="true"/> when the frame was drawn. <see langword="false"/> when the pass cannot make a complete render target with depth and stencil for <paramref name="target"/>. The pass logs the first failure for a target once.</returns>
     /// <exception cref="ObjectDisposedException">The renderer is disposed.</exception>
     /// <exception cref="ArgumentNullException"><paramref name="target"/> is <see langword="null"/>.</exception>
-    /// <exception cref="InvalidOperationException">The render target with depth and stencil is not complete.</exception>
     public bool Render(in WorldFrame frame, IBuffer target)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
@@ -201,12 +201,16 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
 
     private bool RenderCore(in WorldFrame frame, IBuffer target)
     {
+        if (TargetFor(target) is not { } entry)
+        {
+            return false;
+        }
+
         _frame++;
         _settingsMax = frame.Settings.DirectSampleMax;
         _settingsAnisotropy = frame.Settings.Anisotropy;
         CopiesRefreshed = 0;
         DirectSamples = 0;
-        var entry = TargetFor(target);
         var width = target.Width;
         var height = target.Height;
 
@@ -858,7 +862,7 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
         RenderFences.CloseFence(fence);
     }
 
-    private GlWorldTarget TargetFor(IBuffer target)
+    private GlWorldTarget? TargetFor(IBuffer target)
     {
         if (_targets.TryGetValue(target, out var entry))
         {
@@ -868,7 +872,18 @@ public sealed unsafe class GlWorldRenderer : IWorldRenderer
         AllocationScope.Pause();
         try
         {
-            entry = GlWorldTarget.Create(_device, target);
+            if (GlWorldTarget.TryCreate(_device, target, out var reason) is not { } created)
+            {
+                if (!ReferenceEquals(_failedTarget, target))
+                {
+                    _failedTarget = target;
+                    GlWorldLog.Log.Warn($"world frame not drawn: {reason}");
+                }
+
+                return null;
+            }
+
+            entry = created;
             _targets[target] = entry;
             target.Destroyed += ForgetDestroyed(target);
             return entry;

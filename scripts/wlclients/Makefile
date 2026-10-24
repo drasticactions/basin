@@ -22,7 +22,7 @@ LDLIBS += $(shell pkg-config --libs wayland-client)
 all: $(BIN)/locktest $(BIN)/vptr $(BIN)/vpad $(BIN)/vtouch $(BIN)/vkbd $(BIN)/vmouse $(BIN)/gestures $(BIN)/colorinfo \
 	$(BIN)/hyprsurface $(BIN)/focusgrab $(BIN)/locknotify $(BIN)/toplevelexport $(BIN)/ssdwin \
 	$(BIN)/panel $(BIN)/riverrepeat $(BIN)/appmenu $(BIN)/pointerlock $(BIN)/textinput $(BIN)/randremu $(BIN)/x11focus \
-	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch
+	$(BIN)/scrgbwin $(BIN)/actionbind $(BIN)/nv12win $(BIN)/vpen $(BIN)/tabletprobe $(BIN)/libinputwatch $(BIN)/exportdmabuf
 
 $(BIN):
 	mkdir -p $(BIN)
@@ -61,6 +61,7 @@ XML_relative-pointer-unstable-v1 := $(WAYLAND_PROTOCOLS)/unstable/relative-point
 XML_river-input-management-v1 := $(ROOT)/external/river/protocol/river-input-management-v1.xml
 XML_river-libinput-config-v1 := $(ROOT)/external/river/protocol/river-libinput-config-v1.xml
 XML_wlr-layer-shell-unstable-v1 := $(WLR_PROTOCOLS)/unstable/wlr-layer-shell-unstable-v1.xml
+XML_wlr-export-dmabuf-unstable-v1 := $(WLR_PROTOCOLS)/unstable/wlr-export-dmabuf-unstable-v1.xml
 XML_wlr-foreign-toplevel-management-unstable-v1 := $(WLR_PROTOCOLS)/unstable/wlr-foreign-toplevel-management-unstable-v1.xml
 
 $(BIN)/locktest: locktest.c $(BIN)/ext-session-lock-v1-protocol.c $(BIN)/ext-session-lock-v1-client-protocol.h | $(BIN)
@@ -124,6 +125,9 @@ $(BIN)/toplevelexport: toplevelexport.c $(EXPORT_GEN) | $(BIN)
 	$(CC) $(CFLAGS) -o $@ toplevelexport.c $(BIN)/ext-foreign-toplevel-list-v1-protocol.c \
 		$(BIN)/wlr-foreign-toplevel-management-unstable-v1-protocol.c \
 		$(BIN)/hyprland-toplevel-mapping-v1-protocol.c $(BIN)/hyprland-toplevel-export-v1-protocol.c $(LDLIBS)
+
+$(BIN)/exportdmabuf: exportdmabuf.c $(BIN)/wlr-export-dmabuf-unstable-v1-protocol.c $(BIN)/wlr-export-dmabuf-unstable-v1-client-protocol.h | $(BIN)
+	$(CC) $(CFLAGS) -o $@ exportdmabuf.c $(BIN)/wlr-export-dmabuf-unstable-v1-protocol.c $(LDLIBS)
 
 clean:
 	rm -rf $(BIN)

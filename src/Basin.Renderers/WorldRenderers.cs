@@ -15,17 +15,16 @@ public static class WorldRenderers
     /// Creates a world renderer on the device of a GL or Vulkan renderer.
     /// </summary>
     /// <param name="renderer">The 2D renderer whose textures the 3D pass samples.</param>
-    /// <param name="anisotropy">The maximum anisotropic filter level. Only the Vulkan world renderer uses it.</param>
     /// <param name="declined">The reason when no world renderer was made, otherwise <see langword="null"/>.</param>
     /// <returns>The world renderer, which the caller disposes, or <see langword="null"/> for any other renderer.</returns>
-    public static IWorldRenderer? For(IRenderer renderer, float anisotropy, out string? declined)
+    public static IWorldRenderer? For(IRenderer renderer, out string? declined)
     {
         ArgumentNullException.ThrowIfNull(renderer);
         declined = null;
         switch (renderer)
         {
             case VulkanRenderer vulkan:
-                return new VulkanWorldRenderer(vulkan.Device, anisotropy);
+                return new VulkanWorldRenderer(vulkan.Device);
             case GlRenderer gl:
                 return new GlWorldRenderer(gl.Device);
             default:

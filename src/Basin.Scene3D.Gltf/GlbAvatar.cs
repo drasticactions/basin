@@ -18,7 +18,7 @@ public static class GlbAvatar
     /// <returns>The parts of the avatar.</returns>
     /// <exception cref="ArgumentNullException"><paramref name="glb"/> or <paramref name="wanted"/> is <see langword="null"/>.</exception>
     /// <exception cref="InvalidDataException">The file is not a GLB file, has no skin, or has more than <see cref="Skeleton.MaxJoints"/> joints.</exception>
-    /// <exception cref="NotSupportedException">The file requires an extension, or a primitive is not a triangle list.</exception>
+    /// <exception cref="NotSupportedException">The file requires an extension, a primitive is not a triangle list, or an animation sampler is not <c>LINEAR</c>, <c>STEP</c> or <c>CUBICSPLINE</c>.</exception>
     public static GlbAvatarModel Load(byte[] glb, int sampleHz, IReadOnlyCollection<string> wanted, GlbImageDecoder? decode = null)
     {
         ArgumentNullException.ThrowIfNull(glb);
@@ -197,7 +197,14 @@ public static class GlbAvatar
             var sampler = samplers[channel.Sampler];
             var times = document.ReadFloats(sampler.Input);
             var values = document.ReadFloats(sampler.Output);
-            var step = sampler.Interpolation == "STEP";
+            var mode = sampler.Interpolation ?? "LINEAR";
+            if (mode is not ("LINEAR" or "STEP" or "CUBICSPLINE"))
+            {
+                throw new NotSupportedException($"animation sampler interpolation {mode} is not supported");
+            }
+
+            var step = mode == "STEP";
+            var cubic = mode == "CUBICSPLINE";
             for (var f = 0; f < frames; f++)
             {
                 var time = MathF.Min(f / (float)hz, duration);
@@ -208,6 +215,25 @@ public static class GlbAvatar
                 }
 
                 var at = (f * nodes.Length) + k;
+                if (cubic)
+                {
+                    var span = b > a ? times[b] - times[a] : 0f;
+                    switch (path)
+                    {
+                        case "translation":
+                            translations[at] = Hermite(Vec3(values, (3 * a) + 1), Vec3(values, (3 * a) + 2), Vec3(values, (3 * b) + 1), Vec3(values, 3 * b), span, t);
+                            break;
+                        case "rotation":
+                            rotations[at] = Quaternion.Normalize(Hermite(Quat(values, (3 * a) + 1), Quat(values, (3 * a) + 2), Quat(values, (3 * b) + 1), Quat(values, 3 * b), span, t));
+                            break;
+                        case "scale":
+                            scales[at] = Hermite(Vec3(values, (3 * a) + 1), Vec3(values, (3 * a) + 2), Vec3(values, (3 * b) + 1), Vec3(values, 3 * b), span, t);
+                            break;
+                    }
+
+                    continue;
+                }
+
                 switch (path)
                 {
                     case "translation":
@@ -248,6 +274,25 @@ public static class GlbAvatar
         }
 
         return (times.Length - 1, times.Length - 1, 0);
+    }
+
+    private static (float Start, float StartTangent, float End, float EndTangent) HermiteWeights(float span, float t)
+    {
+        var t2 = t * t;
+        var t3 = t2 * t;
+        return ((2 * t3) - (3 * t2) + 1, span * (t3 - (2 * t2) + t), (-2 * t3) + (3 * t2), span * (t3 - t2));
+    }
+
+    private static Vector3 Hermite(Vector3 start, Vector3 outTangent, Vector3 end, Vector3 inTangent, float span, float t)
+    {
+        var (s, so, e, ei) = HermiteWeights(span, t);
+        return (start * s) + (outTangent * so) + (end * e) + (inTangent * ei);
+    }
+
+    private static Quaternion Hermite(Quaternion start, Quaternion outTangent, Quaternion end, Quaternion inTangent, float span, float t)
+    {
+        var (s, so, e, ei) = HermiteWeights(span, t);
+        return (start * s) + (outTangent * so) + (end * e) + (inTangent * ei);
     }
 
     private static Vector3 Vec3(float[] values, int index) => new(values[index * 3], values[(index * 3) + 1], values[(index * 3) + 2]);

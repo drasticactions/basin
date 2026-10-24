@@ -76,6 +76,93 @@ public class ToplevelCaptureIndexObserverTests
         Assert.Equal(2, changes.Count);
     }
 
+    [Fact]
+    public void A_change_with_a_new_tree_replaces_the_entry()
+    {
+        using var host = new CompositorTestHost(64, 64);
+        var surface = MapSurface(host);
+        var index = new ToplevelSceneIndex();
+        var stack = new SceneToplevelStack(host.Scene, index);
+        var changes = new StackChanges();
+        stack.AddObserver(changes);
+        var model = new TestToplevelModel();
+        var first = new SceneTree(host.Scene.Root);
+        SceneTree current = first;
+
+        model.AddObserver(new ToplevelCaptureIndexObserver(
+            model, index, stack, _ => new ToplevelCaptureTrees(current, null)));
+        var id = model.Add("title", "app", surface);
+        Assert.Equal(1, changes.Count);
+
+        var second = new SceneTree(host.Scene.Root);
+        first.Destroy();
+        current = second;
+        model.Retitle(id, "renamed");
+
+        Assert.True(index.TryGet(id, out var trees));
+        Assert.Same(second, trees.Content);
+        Assert.Equal(1, changes.Count);
+        Span<ulong> order = stackalloc ulong[4];
+        Assert.Equal(1, stack.Enumerate(order));
+        Assert.Equal(id, order[0]);
+        second.Destroy();
+    }
+
+    [Fact]
+    public void A_destroyed_tree_with_no_change_is_resolved_again_on_the_next_read()
+    {
+        using var host = new CompositorTestHost(64, 64);
+        var surface = MapSurface(host);
+        var index = new ToplevelSceneIndex();
+        var stack = new SceneToplevelStack(host.Scene, index);
+        var model = new TestToplevelModel();
+        var first = new SceneTree(host.Scene.Root);
+        SceneTree current = first;
+
+        model.AddObserver(new ToplevelCaptureIndexObserver(
+            model, index, stack, _ => new ToplevelCaptureTrees(current, null)));
+        var id = model.Add("title", "app", surface);
+
+        first.Destroy();
+        Span<ulong> order = stackalloc ulong[4];
+        Assert.Equal(0, stack.Enumerate(order));
+        Assert.False(index.TryGet(id, out _));
+
+        var second = new SceneTree(host.Scene.Root);
+        current = second;
+        Assert.Equal(1, stack.Enumerate(order));
+        Assert.Equal(id, order[0]);
+        Assert.True(index.TryGet(id, out var trees));
+        Assert.Same(second, trees.Content);
+        Assert.True(index.TryOwnerOf(second, out var owner));
+        Assert.Equal(id, owner);
+        second.Destroy();
+    }
+
+    [Fact]
+    public void An_equal_result_raises_nothing()
+    {
+        using var host = new CompositorTestHost(64, 64);
+        var surface = MapSurface(host);
+        var index = new ToplevelSceneIndex();
+        var stack = new SceneToplevelStack(host.Scene, index);
+        var changes = new StackChanges();
+        stack.AddObserver(changes);
+        var model = new TestToplevelModel();
+        var tree = host.SurfaceScenes[0].Tree;
+
+        var observer = new ToplevelCaptureIndexObserver(
+            model, index, stack, _ => new ToplevelCaptureTrees(tree, null));
+        model.AddObserver(observer);
+        var id = model.Add("title", "app", surface);
+        Assert.Equal(1, changes.Count);
+
+        model.Retitle(id, "renamed");
+        observer.Refresh(id);
+        Assert.True(index.TryGet(id, out _));
+        Assert.Equal(1, changes.Count);
+    }
+
     private static Surface MapSurface(CompositorTestHost host)
     {
         var surface = host.Client.Compositor.CreateSurface();

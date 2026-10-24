@@ -118,7 +118,6 @@ public sealed class GoldenTests
         var slab = stage.Window(world, 150, 100, 0xFF20A060);
         slab.Position = center + new Vector3(0, 1.6f, -2.5f);
         slab.Room = world.RoomOf(room);
-        slab.Room.Windows.Add(slab);
         using var physics = new PhysicsWorld3D(Bepu3DEngine.Instance, new Vector3(0, -9.81f, 0));
         foreach (var box in world.RoomOf(room).Blockers)
         {
@@ -279,7 +278,6 @@ public sealed class GoldenTests
             window.Position = position;
             window.Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, slot.Yaw);
             window.Room = world.RoomOf(slot.Room);
-            window.Room.Windows.Add(window);
             return window;
         }
 

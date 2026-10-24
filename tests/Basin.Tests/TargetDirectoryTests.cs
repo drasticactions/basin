@@ -73,7 +73,7 @@ public sealed class TargetDirectoryTests
         var diagnostics = new SceneDiagnostics(host.Scene, host.Renderer, host.Loop, outputs: null);
         var scene = host.SurfaceScenes.Single(s => ReferenceEquals(s.Surface, window.ServerSurface));
         var box = diagnostics.LocateSurface(window.ServerSurface, 2)!();
-        var (x, y) = scene.Tree.ScenePosition;
+        var (x, y) = scene.Tree.OffsetFromRoot;
         Assert.Equal(new Box(x - 2, y - 2, 64, 54), box);
 
         surface.Dispose();

@@ -973,6 +973,86 @@ public sealed class UIFrameTests
     }
 
     [Fact]
+    public void A_frame_clock_with_no_prediction_ticks_at_the_frames_own_time()
+    {
+        using var host = new CompositorTestHost();
+        using var uiHost = new SkiaUIHost();
+        var renderer = new OutsetFrameRenderer();
+        var clock = new Basin.Capabilities.Defaults.FrameClock();
+        var now = 1_000_000_000L;
+        var frame = new Frame(uiHost, renderer, host.Scene.Root) { Clock = clock, Time = () => now };
+        frame.Configure(new Box(40, 60, 64, 48), 1.0, new FrameState { Title = "t", Active = true });
+        frame.Commit();
+        host.RenderFrame();
+        clock.BeginFrame(host.Output, 0);
+
+        frame.PointerMotion(70, 45);
+        Assert.True(frame.Animating);
+
+        now += 16_000_000;
+        clock.BeginFrame(host.Output, 0);
+        Assert.Equal(now, renderer.LastInteraction.Now);
+        Assert.True(frame.Animating);
+
+        now += 120_000_000;
+        clock.BeginFrame(host.Output, 0);
+        Assert.Equal(now, renderer.LastInteraction.Now);
+        Assert.False(frame.Animating);
+        frame.Dispose();
+    }
+
+    [Fact]
+    public void A_surface_its_host_disposed_hides_the_strips_and_the_next_draw_makes_a_new_one()
+    {
+        using var host = new CompositorTestHost();
+        using var skia = new SkiaUIHost();
+        var uiHost = new SurfaceOwningUIHost(skia);
+        var frame = new Frame(uiHost, new OutsetFrameRenderer(), host.Scene.Root);
+        frame.Configure(new Box(40, 60, 64, 48), 1.0, new FrameState { Title = "t", Active = true });
+        frame.Commit();
+        host.RenderFrame();
+        var lit = host.Pixel(44, 48);
+        Assert.NotEqual(0xFF000000u, lit);
+
+        uiHost.DisposeSurfaces();
+        host.RenderFrame();
+        Assert.Equal(0xFF000000u, host.Pixel(44, 48));
+        Assert.False(frame.IsFaulted);
+
+        frame.Configure(new Box(40, 60, 64, 48), 1.0, new FrameState { Title = "t", Active = true });
+        frame.Commit();
+        host.RenderFrame();
+        Assert.Equal(lit, host.Pixel(44, 48));
+        Assert.Equal(1, uiHost.Live);
+
+        frame.Dispose();
+        uiHost.DisposeSurfaces();
+    }
+
+    [Fact]
+    public void A_pending_frame_with_no_buffer_closes_its_fence_on_commit()
+    {
+        using var host = new CompositorTestHost();
+        var fds = new int[2];
+        Assert.Equal(0, Pipe(fds));
+        try
+        {
+            using var surface = new FenceOnlyUISurface(fds[0]);
+            var frame = new Frame(new FenceOnlyUIHost(surface), new BlankFrameRenderer(), host.Scene.Root);
+            frame.Configure(new Box(40, 60, 64, 48), 1.0, new FrameState { Title = "t" });
+            Assert.NotEqual(-1, Fcntl(fds[0], 1));
+
+            frame.Commit();
+            Assert.Equal(-1, Fcntl(fds[0], 1));
+            frame.Dispose();
+        }
+        finally
+        {
+            _ = Close(fds[1]);
+        }
+    }
+
+    [Fact]
     public void Pointer_fields_track_enter_motion_and_leave()
     {
         using var host = new CompositorTestHost();
@@ -1044,6 +1124,15 @@ public sealed class UIFrameTests
         Assert.Equal(settled, renderer.Draws);
         frame.Dispose();
     }
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "pipe", SetLastError = true)]
+    private static extern int Pipe(int[] fds);
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "fcntl", SetLastError = true)]
+    private static extern int Fcntl(int fd, int command);
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "close", SetLastError = true)]
+    private static extern int Close(int fd);
 }
 
 internal sealed class TestFrameTheme : IDisposable
@@ -1307,4 +1396,141 @@ internal sealed class OutsetFrameRenderer : IFrameRenderer
     }
 
     public Box PartBounds(FramePart part) => part == FramePart.Title ? new Box(Outset, Outset, _width - 2 * Outset, 20) : default;
+}
+
+internal sealed class SurfaceOwningUIHost(SkiaUIHost inner) : IUIHost
+{
+    private readonly List<IUISurface> _made = [];
+
+    public event Action? WakeupRequested
+    {
+        add => inner.WakeupRequested += value;
+        remove => inner.WakeupRequested -= value;
+    }
+
+    public int Live => _made.Count;
+
+    public UITargetKind Produces => inner.Produces;
+
+    public Type SurfaceContract => inner.SurfaceContract;
+
+    public long? NextDueMillis => inner.NextDueMillis;
+
+    public IUISurface? CreateSurface(in UISurfaceOptions options)
+    {
+        var surface = inner.CreateSurface(options);
+        if (surface is not null)
+        {
+            _made.Add(surface);
+        }
+
+        return surface;
+    }
+
+    public void Pump() => inner.Pump();
+
+    public void DisposeSurfaces()
+    {
+        foreach (var surface in _made)
+        {
+            surface.Dispose();
+        }
+
+        _made.Clear();
+    }
+
+    public void Dispose() => DisposeSurfaces();
+}
+
+internal sealed class FenceOnlyUIHost(IUISurface surface) : IUIHost
+{
+    public event Action? WakeupRequested
+    {
+        add
+        {
+        }
+
+        remove
+        {
+        }
+    }
+
+    public UITargetKind Produces => UITargetKind.Memory;
+
+    public long? NextDueMillis => null;
+
+    public IUISurface? CreateSurface(in UISurfaceOptions options) => surface;
+
+    public void Pump()
+    {
+    }
+
+    public void Dispose()
+    {
+    }
+}
+
+internal sealed class FenceOnlyUISurface(int fenceFd) : IUISurface
+{
+    private int _fenceFd = fenceFd;
+
+    public UISurfaceSize Size => new(64, 64, 1.0);
+
+    public bool Configure(int logicalWidth, int logicalHeight, double scale) => true;
+
+    public bool TryAcquire(out UIFrame frame)
+    {
+        frame = new UIFrame(default, damage: null, _fenceFd);
+        _fenceFd = -1;
+        return true;
+    }
+
+    public void AddObserver(IUISurfaceObserver observer)
+    {
+    }
+
+    public void RemoveObserver(IUISurfaceObserver observer)
+    {
+    }
+
+    public bool AcceptsInputAt(double x, double y) => false;
+
+    public string? CursorAt(double x, double y) => null;
+
+    public void NotifyPointerEnter(double x, double y)
+    {
+    }
+
+    public void NotifyPointerMotion(uint timeMs, double x, double y)
+    {
+    }
+
+    public void NotifyPointerButton(uint timeMs, uint button, bool pressed)
+    {
+    }
+
+    public void NotifyPointerAxis(uint timeMs, double dx, double dy)
+    {
+    }
+
+    public void NotifyPointerLeave()
+    {
+    }
+
+    public IUISurface? CreatePopup(in Box anchor, UIPopupGravity gravity) => null;
+
+    public void Dispose()
+    {
+    }
+}
+
+internal sealed class BlankFrameRenderer : IFrameRenderer
+{
+    public FrameInsets Measure(in FrameState state, double scale) => new(20, 4, 4, 4);
+
+    public void Draw(IUISurface surface, in Box clientBox, in FrameState state, in FrameInteraction interaction)
+    {
+    }
+
+    public FramePart PartAt(double x, double y, in FrameState state, double scale) => FramePart.None;
 }

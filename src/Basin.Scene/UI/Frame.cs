@@ -464,6 +464,8 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         var buffer = _pending.Buffer;
         if (buffer is null)
         {
+            _pending.Dispose();
+            _pending = default;
             _hasPending = false;
             return;
         }
@@ -1264,13 +1266,8 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
         }
 
         var popup = _menuSurface;
-        _menuSurface = null;
         popup.RemoveObserver(this);
-        _menuNode?.Destroy();
-        _menuNode = null;
-        _menuShown.Dispose();
-        _menuShown = default;
-        _menuHotItem = -1;
+        ForgetMenu();
         try
         {
             popup.Dispose();
@@ -1397,11 +1394,66 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     }
 
     /// <summary>
-    /// Does nothing. The frame owns its surfaces and disposes them itself.
+    /// Drops a surface that its host disposed first. A lost chrome surface hides the strips, and the next draw asks the hosts for a new surface.
+    /// A lost menu popup closes the menu.
     /// </summary>
     /// <param name="surface">The disposed surface.</param>
     public void OnSurfaceDestroyed(IUISurface surface)
     {
+        _thread.Assert();
+        if (surface is null)
+        {
+            return;
+        }
+
+        if (ReferenceEquals(surface, _menuSurface))
+        {
+            ForgetMenu();
+            return;
+        }
+
+        if (!ReferenceEquals(surface, _surface))
+        {
+            return;
+        }
+
+        if (_menuSurface is { } popup)
+        {
+            ForgetMenu();
+            popup.RemoveObserver(this);
+        }
+
+        _surface = null;
+        if (_hasPending)
+        {
+            _pending.Dispose();
+            _pending = default;
+            _hasPending = false;
+        }
+
+        foreach (var strip in _strips)
+        {
+            if (!strip.IsDestroyed)
+            {
+                strip.Enabled = false;
+                strip.AcquireFenceFd = -1;
+                strip.SetBuffer(null);
+            }
+        }
+
+        _shown.Dispose();
+        _shown = default;
+        _shownValid = false;
+    }
+
+    private void ForgetMenu()
+    {
+        _menuSurface = null;
+        _menuNode?.Destroy();
+        _menuNode = null;
+        _menuShown.Dispose();
+        _menuShown = default;
+        _menuHotItem = -1;
     }
 
     private void OnMenuDamaged(PixmanRegion32 region)
@@ -1442,11 +1494,11 @@ public sealed class Frame : IUISurfaceObserver, ISceneInputFilter, IFrameSink, I
     }
 
     /// <summary>
-    /// Advances the chrome animation to the predicted vblank through <see cref="Tick(long)"/>. A value of 0 is passed on as the time.
+    /// Advances the chrome animation to the predicted vblank through <see cref="Tick(long)"/>. A value of 0 means that the vblank is not known, and the frame ticks at <see cref="Time"/> instead.
     /// </summary>
     /// <param name="output">The output that the frame is for.</param>
-    /// <param name="predictedVblankNanos">The predicted vblank on the monotonic clock in nanoseconds.</param>
-    public void BeginFrame(IOutput output, long predictedVblankNanos) => Tick(predictedVblankNanos);
+    /// <param name="predictedVblankNanos">The predicted vblank on the monotonic clock in nanoseconds, or 0.</param>
+    public void BeginFrame(IOutput output, long predictedVblankNanos) => Tick(predictedVblankNanos > 0 ? predictedVblankNanos : Time());
 
     /// <summary>
     /// Does nothing. The frame paces its animation only on <see cref="BeginFrame(IOutput, long)"/>.

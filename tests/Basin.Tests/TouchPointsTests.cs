@@ -95,10 +95,10 @@ public class TouchPointsTests
         var leaf = new SceneTree(middle);
         leaf.SetPosition(1, 2);
 
-        Assert.Equal((9, 11), leaf.ScenePosition);
+        Assert.Equal((9, 11), leaf.OffsetFromRoot);
 
         leaf.Reparent(root);
-        Assert.Equal((6, 7), leaf.ScenePosition);
+        Assert.Equal((6, 7), leaf.OffsetFromRoot);
         root.Destroy();
     }
 }

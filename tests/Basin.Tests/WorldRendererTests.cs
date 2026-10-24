@@ -133,6 +133,48 @@ public sealed class WorldRendererTests
 
     [Theory]
     [MemberData(nameof(Rows))]
+    public void An_anisotropy_change_between_frames_applies_and_tears_down_clean(string row)
+    {
+        CompositorTestHost.SkipUnlessRunnable(row);
+        using var host = new CompositorTestHost(renderer: row);
+        using var renderer = CreateRenderer(host, row);
+        var buffer = Checker(256, 256);
+        using var texture = host.Renderer.ImportTexture(buffer)!;
+        var world = new World();
+        var window = FacingWindow(world, texture, 256, 256, OneToOneDistance() * 3);
+        window.Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitX, -1.35f);
+        window.Width *= 4;
+        window.Height *= 4;
+
+        var first = Render(host, renderer, world, Camera(), Width, Height, new WorldRenderSettings { Anisotropy = 1 });
+        var second = Render(host, renderer, world, Camera(), Width, Height, new WorldRenderSettings { Anisotropy = 16 });
+        var third = Render(host, renderer, world, Camera(), Width, Height, new WorldRenderSettings { Anisotropy = 1 });
+        Assert.Equal(first, third);
+        Assert.NotEqual(first, second);
+        buffer.Destroy();
+    }
+
+    [Fact]
+    public void The_vulkan_pass_declines_a_target_that_is_not_a_dmabuf()
+    {
+        CompositorTestHost.SkipUnlessRunnable("vulkan");
+        using var host = new CompositorTestHost(renderer: "vulkan");
+        using var renderer = CreateRenderer(host, "vulkan");
+        var world = new World();
+        var target = new MemoryBuffer(Width, Height, DrmFormat.Xrgb8888);
+        var box = new Box(0, 0, Width, Height);
+        var view = Camera().ViewOf(box, box);
+        var settings = new WorldRenderSettings();
+        var set = new WorldVisibleSet();
+        WorldVisibility.Collect(world, view, settings.RoomDepth, set);
+
+        Assert.False(renderer.Render(new WorldFrame(world, view, new FrameTick(0, 16_666_667), set, settings), target));
+        Assert.False(renderer.Render(new WorldFrame(world, view, new FrameTick(16_666_667, 16_666_667), set, settings), target));
+        target.Destroy();
+    }
+
+    [Theory]
+    [MemberData(nameof(Rows))]
     public void A_distant_window_refreshes_its_mip_copy_only_on_new_content(string row)
     {
         CompositorTestHost.SkipUnlessRunnable(row);
@@ -209,14 +251,12 @@ public sealed class WorldRendererTests
         seen.Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, -MathF.PI / 2);
         seen.Focused = true;
         seen.Room = room;
-        room.Windows.Add(seen);
 
         var hidden = FacingWindow(world, redTexture, 2000, 2000, 0);
         hidden.Position = new Vector3(19, 0, 0);
         hidden.Orientation = Quaternion.CreateFromAxisAngle(Vector3.UnitY, -MathF.PI / 2);
         hidden.Focused = true;
         hidden.Room = room;
-        room.Windows.Add(hidden);
 
         var rgba = Render(host, renderer, world, Camera(), Width, Height);
         Assert.Equal((0, 255, 0), Pixel(rgba, 160, 120));
@@ -336,8 +376,6 @@ public sealed class WorldRendererTests
         far.Opacity = 0.7f;
         near.Frame = Framed(near, texture, WorldMaterial.Default with { SpecularStrength = 0.9f, Shininess = 48 });
         near.Room = far.Room = room;
-        room.Windows.Add(near);
-        room.Windows.Add(far);
 
         var target = host.DeviceAllocator!.Allocate(Width, Height, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear], BufferUse.Render)!;
         var settings = new WorldRenderSettings();
@@ -548,12 +586,12 @@ public sealed class WorldRendererTests
         PlaqueMaterial = WorldMaterial.Default with { Albedo = new Vector4(0.8f, 0.6f, 0.3f, 1), SpecularStrength = 0.8f, Shininess = 40 },
     };
 
-    internal static byte[] Render(CompositorTestHost host, IWorldRenderer renderer, World world, WorldCamera camera, int width, int height)
+    internal static byte[] Render(CompositorTestHost host, IWorldRenderer renderer, World world, WorldCamera camera, int width, int height, WorldRenderSettings? with = null)
     {
         var target = host.DeviceAllocator!.Allocate(width, height, DrmFormat.Xrgb8888, [DrmFormatSet.ModifierLinear], BufferUse.Render)!;
         var box = new Box(0, 0, width, height);
         var view = camera.ViewOf(box, box);
-        var settings = new WorldRenderSettings();
+        var settings = with ?? new WorldRenderSettings();
         var set = new WorldVisibleSet();
         WorldVisibility.Collect(world, view, settings.RoomDepth, set);
         Assert.True(renderer.Render(new WorldFrame(world, view, new FrameTick(0, 16_666_667), set, settings), target));

@@ -42,7 +42,7 @@ public static class WorldSceneLayers
                 continue;
             }
 
-            var (x, y) = buffer.ScenePosition;
+            var (x, y) = buffer.OffsetFromRoot;
             var (width, height) = buffer.DisplaySize;
             window.AddLayer(new WorldSurfaceLayer
             {

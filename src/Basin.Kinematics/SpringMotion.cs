@@ -11,23 +11,31 @@ public struct SpringMotion
     private double _previousVelocity;
     private double _nextPosition;
     private double _nextVelocity;
-    private double _t;
+    private double _lag;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SpringMotion"/> struct at position 0 with an <see cref="Epsilon"/> of 1. The expression <c>new SpringMotion()</c> does not call this constructor.
+    /// Initializes a new instance of the <see cref="SpringMotion"/> struct at position 0 with a spring constant of 200, a damping ratio of 1.1 and an <see cref="Epsilon"/> of 1.
     /// </summary>
-    /// <param name="springConstant">The spring constant. Infinity makes the value jump to the anchor.</param>
+    public SpringMotion()
+        : this(200.0, 1.1)
+    {
+    }
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="SpringMotion"/> struct at position 0 with an <see cref="Epsilon"/> of 1.
+    /// </summary>
+    /// <param name="springConstant">The spring constant. Infinity, or a value that is not positive, makes the value jump to the anchor.</param>
     /// <param name="dampingRatio">The damping ratio. 1 is critical damping.</param>
-    public SpringMotion(double springConstant = 200.0, double dampingRatio = 1.1)
+    public SpringMotion(double springConstant, double dampingRatio)
     {
         SpringConstant = springConstant;
         DampingRatio = dampingRatio;
         Epsilon = 1.0;
-        _t = 1.0;
     }
 
     /// <summary>
-    /// Gets or sets the spring constant. Infinity makes the next <see cref="Advance"/> jump to <see cref="Anchor"/>.
+    /// Gets or sets the spring constant. Infinity, or a value that is not positive, makes the next <see cref="Advance"/> jump to <see cref="Anchor"/>.
+    /// A <see langword="default"/> value has 0 and so settles on its first <see cref="Advance"/>.
     /// </summary>
     public double SpringConstant { get; set; }
 
@@ -49,12 +57,12 @@ public struct SpringMotion
     /// <summary>
     /// Gets the position, interpolated between the last two integration samples.
     /// </summary>
-    public readonly double Position => Lerp(_previousPosition, _nextPosition, _t);
+    public readonly double Position => Lerp(_previousPosition, _nextPosition, 1.0 - _lag);
 
     /// <summary>
     /// Gets the velocity in units per second, interpolated between the last two integration samples.
     /// </summary>
-    public readonly double Velocity => Lerp(_previousVelocity, _nextVelocity, _t);
+    public readonly double Velocity => Lerp(_previousVelocity, _nextVelocity, 1.0 - _lag);
 
     /// <summary>
     /// Gets a value indicating whether the distance from the anchor or the speed is more than <see cref="Epsilon"/>.
@@ -70,7 +78,7 @@ public struct SpringMotion
         var velocity = Velocity;
         _nextPosition = position;
         _nextVelocity = velocity;
-        _t = 1.0;
+        _lag = 0;
     }
 
     /// <summary>
@@ -82,11 +90,12 @@ public struct SpringMotion
         var position = Position;
         _nextPosition = position;
         _nextVelocity = velocity;
-        _t = 1.0;
+        _lag = 0;
     }
 
     /// <summary>
     /// Advances the motion by an elapsed time. A motion that is settled does not change.
+    /// A spring constant that is infinite, not positive or not a number moves the value to the anchor at once.
     /// </summary>
     /// <param name="millis">The elapsed time in milliseconds.</param>
     public void Advance(double millis)
@@ -96,18 +105,18 @@ public struct SpringMotion
             return;
         }
 
-        if (double.IsInfinity(SpringConstant))
+        if (double.IsInfinity(SpringConstant) || !(SpringConstant > 0))
         {
             _previousPosition = Anchor;
             _previousVelocity = 0;
             _nextPosition = Anchor;
             _nextVelocity = 0;
-            _t = 1.0;
+            _lag = 0;
             return;
         }
 
         var steps = millis / 1000.0 / Timestep;
-        for (_t += steps; _t > 1.0; _t -= 1.0)
+        for (_lag -= steps; _lag < 0; _lag += 1.0)
         {
             _previousPosition = _nextPosition;
             _previousVelocity = _nextVelocity;

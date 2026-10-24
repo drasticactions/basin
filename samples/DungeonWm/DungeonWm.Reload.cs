@@ -57,8 +57,8 @@ internal sealed partial class DungeonWm
     {
         _settings.Render.RoomDepth = loaded.Render.RoomDepth;
         _settings.Render.MaxLights = loaded.Render.MaxLights;
-        _settings.Render.DirectSampleMin = loaded.Render.DirectSampleMin;
         _settings.Render.DirectSampleMax = loaded.Render.DirectSampleMax;
+        _settings.Render.Anisotropy = loaded.Render.Anisotropy;
         _settings.Launch = loaded.Launch;
         _settings.FieldOfView = loaded.FieldOfView;
         _settings.Near = loaded.Near;

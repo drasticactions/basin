@@ -260,7 +260,7 @@ public sealed class PhysicsWorld : IDisposable
     /// Moves a body to another world. It makes a copy with the same size, kind, material, tag, locks, mask and upright flag, and then destroys the original.
     /// </summary>
     /// <param name="body">The body to move.</param>
-    /// <param name="target">The world that gets the copy. It must be on the same engine.</param>
+    /// <param name="target">The world that gets the copy. It can be on another engine, because the copy keeps only the listed state and the velocity.</param>
     /// <param name="x">The left edge of the copy in the target world.</param>
     /// <param name="y">The top edge of the copy in the target world.</param>
     /// <param name="velocityScale">The factor on the velocity of a dynamic body. Zero places the copy at rest and asleep.</param>

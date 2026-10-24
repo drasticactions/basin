@@ -131,6 +131,35 @@ public class RiverShellTests
     }
 
     [Fact]
+    public void A_window_that_closes_during_a_manage_sequence_is_closed_in_the_next_one()
+    {
+        using var fixture = new RiverFixture();
+        var toplevel = fixture.MapToplevel();
+        Assert.Single(fixture.Windows);
+
+        var closed = 0;
+        var destroyed = false;
+        fixture.OnManage = context =>
+        {
+            closed += context.ClosedWindows.Count;
+            if (!destroyed)
+            {
+                destroyed = true;
+                toplevel.Toplevel.Destroy();
+                toplevel.XdgSurface.Destroy();
+                fixture.Host.PumpToServer();
+            }
+        };
+
+        fixture.RequestManageAndSettle();
+        fixture.Settle();
+
+        Assert.True(destroyed);
+        Assert.Equal(1, closed);
+        Assert.Empty(fixture.Windows);
+    }
+
+    [Fact]
     public void A_second_manager_is_told_window_management_is_unavailable()
     {
         using var fixture = new RiverFixture();

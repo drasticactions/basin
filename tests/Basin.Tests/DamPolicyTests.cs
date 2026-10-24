@@ -96,7 +96,7 @@ public sealed class DamPolicyTests
         var view = Assert.Single(host.Dam.Views.Views);
         var fit = Assert.IsType<Basin.Scene.SceneFit>(view.Fit);
         Assert.True(fit.IsActive);
-        Assert.Equal(scale, fit.ContentScale, 4);
+        Assert.Equal(scale, fit.ContentScaleX, 4);
         Assert.Equal((x, y), (fit.ContentBox.X, fit.ContentBox.Y));
         entry.Surface.Destroy();
     }

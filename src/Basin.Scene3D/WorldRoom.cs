@@ -69,11 +69,6 @@ public sealed class WorldRoom
     public List<WorldBounds> Blockers { get; } = [];
 
     /// <summary>
-    /// Gets the windows that the consumer places in this room. The library does not read this list. It reads <see cref="WorldWindow.Room"/>.
-    /// </summary>
-    public List<WorldWindow> Windows { get; } = [];
-
-    /// <summary>
     /// Gets the portals on the walls of this room. The visibility walk collects them from here.
     /// </summary>
     public List<WorldPortal> Portals { get; } = [];

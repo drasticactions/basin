@@ -11,8 +11,10 @@ room_depth = 4
 max_lights = 8
 # Anisotropic filtering for windows seen at an angle.
 anisotropy = 8
-# Texel-to-pixel ratios sampled straight from the client buffer, without a mip copy.
-direct_sample_range = [0.85, 1.2]
+# The texel-to-pixel ratio at or below which a window is sampled straight from the
+# client buffer, without a mip copy. The old direct_sample_range = [MIN, MAX] key is
+# still read for its MAX.
+direct_sample_max = 1.2
 
 [camera]
 # Vertical field of view in degrees, spanning every output.

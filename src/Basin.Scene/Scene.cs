@@ -549,7 +549,7 @@ public sealed partial class Scene
         {
             if (content is SceneTree contentTree)
             {
-                var (contentX, contentY) = contentTree.ScenePosition;
+                var (contentX, contentY) = contentTree.OffsetFromRoot;
                 CollectTree(
                     contentTree, contentX - originX, contentY - originY, Unclipped, RenderTransform.Identity,
                     transformed: false, contentTree.Alpha, list, mirrorDepth: 0, InheritedFilter(contentTree));
@@ -560,7 +560,7 @@ public sealed partial class Scene
                 var clip = popupClip is { } box ? box.Translated(-originX, -originY) : Unclipped;
                 if (!clip.IsEmpty)
                 {
-                    var (popupX, popupY) = popupTree.ScenePosition;
+                    var (popupX, popupY) = popupTree.OffsetFromRoot;
                     CollectTree(
                         popupTree, popupX - originX, popupY - originY, clip, RenderTransform.Identity,
                         transformed: false, popupTree.Alpha, list, mirrorDepth: 0, InheritedFilter(popupTree));

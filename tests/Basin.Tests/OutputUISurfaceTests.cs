@@ -109,10 +109,29 @@ public sealed class OutputUISurfaceTests
         anchored.Realized += surface => Assert.IsType<FalsifierUISurface>(surface);
 
         Assert.True(anchored.PlaceAt(new Box(4, 6, 200, 100), 1.0));
-        Assert.Equal((104, 56), anchored.Node.Node.ScenePosition);
+        Assert.Equal((104, 56), anchored.Node.Node.OffsetFromRoot);
 
         anchored.Dispose();
         branch.Destroy();
+        scene.Root.Destroy();
+    }
+
+    [Fact]
+    public void A_surface_under_a_scaling_transform_gets_the_mapped_position()
+    {
+        var scene = new Scene.Scene();
+        using var host = new FalsifierUIHost();
+        var zoom = new SceneTransform(scene.Root) { Matrix = RenderTransform.Scale(2, 2) };
+        zoom.SetPosition(10, 20);
+        var anchored = new OutputUISurface(zoom, host);
+
+        Assert.True(anchored.PlaceAt(new Box(30, 40, 200, 100), 1.0));
+        Assert.Equal((40, 60), anchored.Node.Node.OffsetFromRoot);
+        Assert.Equal(70, anchored.Surface!.PositionX);
+        Assert.Equal(100, anchored.Surface.PositionY);
+
+        anchored.Dispose();
+        zoom.Destroy();
         scene.Root.Destroy();
     }
 }

@@ -21,14 +21,9 @@ public sealed class WorldRenderSettings
     public int MaxLights { get; set; } = 8;
 
     /// <summary>
-    /// Gets or sets the maximum anisotropic filtering for window textures. The GL pass reads it each frame. The Vulkan pass takes it from its constructor instead.
+    /// Gets or sets the maximum anisotropic filtering for window and atlas textures. Both passes read it each frame. The device's own limit caps it.
     /// </summary>
     public float Anisotropy { get; set; } = 8;
-
-    /// <summary>
-    /// Gets or sets the lower end of the direct sample range. No pass reads it at this time.
-    /// </summary>
-    public float DirectSampleMin { get; set; } = 0.85f;
 
     /// <summary>
     /// Gets or sets the texel-to-pixel ratio above which a pass samples a mipmapped copy of a window texture. At or below it, the pass samples the texture directly.

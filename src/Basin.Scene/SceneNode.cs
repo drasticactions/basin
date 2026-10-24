@@ -19,7 +19,7 @@ public abstract class SceneNode
     protected SceneNode(SceneTree? parent)
     {
         Parent = parent;
-        parent?.Children.Add(this);
+        parent?.ChildList.Add(this);
         BasinCounters.Track();
     }
 
@@ -27,6 +27,8 @@ public abstract class SceneNode
     /// Gets the tree that holds this node. It is <see langword="null"/> for a root and after <see cref="Destroy"/>.
     /// </summary>
     public SceneTree? Parent { get; private set; }
+
+    internal void AdoptedBy(SceneTree parent) => Parent = parent;
 
     /// <summary>
     /// Gets or sets a value indicating whether the node and its subtree draw and take input. A change damages the area that the subtree covers.
@@ -68,9 +70,10 @@ public abstract class SceneNode
     public int Y { get; private set; }
 
     /// <summary>
-    /// Gets the sum of the offsets of this node and its ancestors. It ignores the matrix of any <see cref="SceneTransform"/> on the path.
+    /// Gets the sum of the offsets of this node and its ancestors. It ignores the matrix and the deformation of any <see cref="SceneTransform"/> on the path.
+    /// Use <see cref="MapToScene(in Box)"/> for the position that the scene shows.
     /// </summary>
-    public (int X, int Y) ScenePosition
+    public (int X, int Y) OffsetFromRoot
     {
         get
         {
@@ -159,9 +162,9 @@ public abstract class SceneNode
         }
 
         DamageSubtree();
-        Parent?.Children.Remove(this);
+        Parent?.ChildList.Remove(this);
         Parent = newParent;
-        newParent.Children.Add(this);
+        newParent.ChildList.Add(this);
         DamageSubtree();
     }
 
@@ -173,9 +176,9 @@ public abstract class SceneNode
         if (Parent is { } parent &&
             parent.Children.Count > 0 &&
             !ReferenceEquals(parent.Children[^1], this) &&
-            parent.Children.Remove(this))
+            parent.ChildList.Remove(this))
         {
-            parent.Children.Add(this);
+            parent.ChildList.Add(this);
             DamageSubtree();
         }
     }
@@ -188,9 +191,9 @@ public abstract class SceneNode
         if (Parent is { } parent &&
             parent.Children.Count > 0 &&
             !ReferenceEquals(parent.Children[0], this) &&
-            parent.Children.Remove(this))
+            parent.ChildList.Remove(this))
         {
-            parent.Children.Insert(0, this);
+            parent.ChildList.Insert(0, this);
             DamageSubtree();
         }
     }
@@ -228,7 +231,7 @@ public abstract class SceneNode
         DamageSubtree();
         _destroyed = true;
         OnDestroy();
-        Parent?.Children.Remove(this);
+        Parent?.ChildList.Remove(this);
         Parent = null;
         Destroyed?.Invoke();
         BasinCounters.Untrack();
@@ -589,16 +592,16 @@ public abstract class SceneNode
             throw new InvalidOperationException("Nodes must share a parent.");
         }
 
-        var index = parent.Children.IndexOf(this);
-        var siblingIndex = parent.Children.IndexOf(sibling);
+        var index = parent.ChildList.IndexOf(this);
+        var siblingIndex = parent.ChildList.IndexOf(sibling);
         if (index == siblingIndex + (offset == 0 ? -1 : 1))
         {
             return;
         }
 
-        parent.Children.Remove(this);
-        var anchor = parent.Children.IndexOf(sibling);
-        parent.Children.Insert(anchor + offset, this);
+        parent.ChildList.Remove(this);
+        var anchor = parent.ChildList.IndexOf(sibling);
+        parent.ChildList.Insert(anchor + offset, this);
         DamageSubtree();
     }
 }

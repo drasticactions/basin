@@ -121,9 +121,7 @@ internal sealed partial class DungeonWm
         _world.World.Windows.Add(snapshot.World);
         if (snapshot.Room is { } room)
         {
-            var worldRoom = _world.RoomOf(room);
-            snapshot.World.Room = worldRoom;
-            worldRoom.Windows.Add(snapshot.World);
+            snapshot.World.Room = _world.RoomOf(room);
         }
 
         if (_physics is not { } bodies)
@@ -197,7 +195,6 @@ internal sealed partial class DungeonWm
         AudioSnapshotDropped(snapshot);
         _physics?.Release(snapshot);
         _world.World.Windows.Remove(snapshot.World);
-        snapshot.World.Room?.Windows.Remove(snapshot.World);
         _worldRenderer.Forget(snapshot.World);
         _plaques.Forget(snapshot);
         snapshot.World.ClearLayers();

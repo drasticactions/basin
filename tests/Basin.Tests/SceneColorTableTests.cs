@@ -108,7 +108,7 @@ public sealed class SceneColorTableTests
         asked = resolver.Asked.Count;
         var snapshot = SceneSnapshot.Capture(tree, host.Scene.Root);
         Assert.Equal(1, snapshot.NodeCount);
-        var copy = Assert.IsType<SceneBuffer>(Assert.Single(snapshot.Tree.Children));
+        var copy = Assert.IsType<SceneBuffer>(Assert.Single(snapshot.Tree.Children.ToArray()));
         Assert.Same(P3, copy.ColorDescription);
         Assert.Same(host.SceneOutput.LutFor(node), host.SceneOutput.LutFor(copy));
         Assert.Equal(asked, resolver.Asked.Count);

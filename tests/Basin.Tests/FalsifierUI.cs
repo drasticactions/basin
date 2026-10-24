@@ -60,6 +60,12 @@ internal sealed class FalsifierUISurface : IUISurface
 
     public UISurfaceSize Size => new(_width, _height, _scale);
 
+    public double PositionX { get; private set; }
+
+    public double PositionY { get; private set; }
+
+    public void SetPosition(double x, double y) => (PositionX, PositionY) = (x, y);
+
     public int NextFenceFd { get; set; } = -1;
 
     private readonly UISurfaceObservers _observers = new();

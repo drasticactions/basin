@@ -108,10 +108,6 @@ internal sealed partial class DungeonWm
         window.Hanging = -1;
         UnbindBody(window);
         _world.Release(window);
-        if (window.Room is { } room)
-        {
-            _world.RoomOf(room).Windows.Remove(window.World);
-        }
         _world.World.Windows.Remove(window.World);
         _worldRenderer.Forget(window.World);
         _plaques.Forget(window);
@@ -200,11 +196,6 @@ internal sealed partial class DungeonWm
     private void Hang(DungeonWmWindow window, MapRegion room, WallSlot? preferred)
     {
         _world.Release(window);
-        if (window.Room is { } previous && !ReferenceEquals(previous, room))
-        {
-            _world.RoomOf(previous).Windows.Remove(window.World);
-        }
-
         var unit = _world.Unit;
         var widthMeters = (window.World.SurfaceWidth / _settings.PixelsPerMeter) + _frames.ExtraWidth;
         var wide = widthMeters > (4 * unit) - SlotMargin;
@@ -244,10 +235,6 @@ internal sealed partial class DungeonWm
         window.Room = room;
         window.State = DungeonWmWindowState.Hung;
         window.World.Room = _world.RoomOf(room);
-        if (!window.World.Room.Windows.Contains(window.World))
-        {
-            window.World.Room.Windows.Add(window.World);
-        }
 
         SyncSize(window);
         PlaceOnSlot(window);
@@ -316,7 +303,7 @@ internal sealed partial class DungeonWm
         var world = window.World;
         world.ClearLayers();
         var geometry = window.Geometry;
-        var (originX, originY) = window.Scene.Tree.ScenePosition;
+        var (originX, originY) = window.Scene.Tree.OffsetFromRoot;
         originX += geometry.X;
         originY += geometry.Y;
         var level = 0;

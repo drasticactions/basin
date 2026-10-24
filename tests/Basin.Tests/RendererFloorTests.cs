@@ -40,7 +40,7 @@ public sealed class RendererFloorTests
     {
         var name = "pixman";
         var stack = RendererCatalog.CreateWithFallback(ref name, null);
-        Assert.Null(WorldRenderers.For(stack.Renderer, 8, out var declined));
+        Assert.Null(WorldRenderers.For(stack.Renderer, out var declined));
         Assert.NotNull(declined);
         Release(stack);
     }

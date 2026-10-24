@@ -39,6 +39,53 @@ public sealed partial class Scene
     /// <returns><see langword="true"/> when at least one enabled node is excluded from capture.</returns>
     public bool HasCaptureExcluded() => HasCaptureExcluded(Root);
 
+    /// <summary>
+    /// Checks whether any enabled node that sets <see cref="SceneNode.ExcludedFromCapture"/> has scene bounds that intersect a box. Disabled subtrees are skipped.
+    /// A node whose bounds a transform cannot map counts as intersecting.
+    /// </summary>
+    /// <param name="sceneBox">The box in scene coordinates, in logical pixels.</param>
+    /// <returns><see langword="true"/> when at least one enabled excluded node can show inside the box.</returns>
+    public bool HasCaptureExcluded(in Box sceneBox) => HasCaptureExcludedIn(Root, sceneBox);
+
+    internal bool HasMirrors => _mirrorCount > 0;
+
+    private static bool HasCaptureExcludedIn(SceneNode node, in Box sceneBox)
+    {
+        if (!node.Enabled)
+        {
+            return false;
+        }
+
+        if (node.ExcludedFromCapture)
+        {
+            var local = node.UntransformedSubtreeBounds();
+            if (!local.IsEmpty)
+            {
+                var mapped = node.MapToScene(local);
+                if (mapped.IsEmpty || !mapped.Intersect(sceneBox).IsEmpty)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (node is SceneTree tree)
+        {
+            var children = tree.Children;
+            for (var i = 0; i < children.Count; i++)
+            {
+                if (HasCaptureExcludedIn(children[i], sceneBox))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private static bool HasCaptureExcluded(SceneNode node)
     {
         if (!node.Enabled)

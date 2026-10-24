@@ -84,7 +84,6 @@ internal sealed class DungeonWmPlaques : IDisposable
         var node = entry.Node.Node;
         frame.PlaqueTexture = node.TextureFor(_renderer);
         frame.PlaqueSource = node.SourceBox;
-        frame.PlaqueVersion = node.ContentVersion;
     }
 
     public void Forget(object owner)

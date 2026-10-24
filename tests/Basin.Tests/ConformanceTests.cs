@@ -21,6 +21,23 @@ public sealed class SceneScreenCaptureConformance : ScreenCaptureConformance, ID
     protected override void DestroyTarget(IBuffer target) => (target as MemoryBuffer)?.Destroy();
 }
 
+public sealed class SceneScreenCaptureWithToplevelsConformance : ScreenCaptureConformance, IDisposable
+{
+    private readonly CompositorTestHost _host = new();
+
+    protected override IOutput Output => _host.Output;
+
+    public void Dispose() => _host.Dispose();
+
+    protected override IScreenCapture Create() =>
+        new SceneScreenCapture(_host.Scene, _host.Layout) { Renderer = _host.Renderer, Toplevels = new TestToplevelModel() };
+
+    protected override IBuffer CreateTarget(in CaptureFormat format) =>
+        new MemoryBuffer(format.Width, format.Height, format.Format);
+
+    protected override void DestroyTarget(IBuffer target) => (target as MemoryBuffer)?.Destroy();
+}
+
 public sealed class SeatSelectionStoreConformance : SelectionStoreConformance, IDisposable
 {
     private readonly CompositorTestHost _host = new();

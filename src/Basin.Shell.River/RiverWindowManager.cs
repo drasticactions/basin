@@ -916,6 +916,7 @@ public sealed class RiverWindowManager : IDisposable
             foreach (var closing in _closing)
             {
                 closing.Resource?.SendClosed();
+                closing.ClosedSent = true;
             }
 
             foreach (var seat in _seats)
@@ -1100,14 +1101,21 @@ public sealed class RiverWindowManager : IDisposable
             window.ReleaseSnapshot(_loop);
         }
 
-        foreach (var closing in _closing.ToArray())
+        var managed = _manager is { IsDestroyed: false };
+        for (var i = _closing.Count - 1; i >= 0; i--)
         {
+            var closing = _closing[i];
+            if (managed && !closing.ClosedSent && closing.Resource is not null)
+            {
+                MarkManageDirty();
+                continue;
+            }
+
             closing.ReleaseSnapshot(_loop);
             closing.DestroyPopups();
             closing.Tree.Destroy();
+            _closing.RemoveAt(i);
         }
-
-        _closing.Clear();
 
         if (_dirt != SequenceDirt.None)
         {

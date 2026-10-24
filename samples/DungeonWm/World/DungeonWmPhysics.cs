@@ -180,13 +180,7 @@ internal sealed class DungeonWmPhysics : IDisposable
             return room;
         }
 
-        if (room is not null)
-        {
-            _world.RoomOf(room).Windows.Remove(slab);
-        }
-
         slab.Room = _world.RoomOf(region);
-        slab.Room.Windows.Add(slab);
         return region;
     }
 

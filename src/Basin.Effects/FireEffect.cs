@@ -147,16 +147,7 @@ public sealed class FireEffect : IMeshSource
     private static SceneTree WrapChildren(SceneTransform node)
     {
         var wrapper = new SceneTree(node);
-        for (var i = node.Children.Count - 1; i >= 0; i--)
-        {
-            var child = node.Children[i];
-            if (!ReferenceEquals(child, wrapper))
-            {
-                child.Reparent(wrapper);
-            }
-        }
-
-        wrapper.Children.Reverse();
+        wrapper.AdoptChildren(node);
         return wrapper;
     }
 
@@ -246,13 +237,7 @@ public sealed class FireEffect : IMeshSource
             _shaderNode?.Destroy();
             if (_wrapper is { IsDestroyed: false } wrapper)
             {
-                var moved = wrapper.Children.Count;
-                for (var i = moved - 1; i >= 0; i--)
-                {
-                    wrapper.Children[i].Reparent(node);
-                }
-
-                node.Children.Reverse(node.Children.Count - moved, moved);
+                node.AdoptChildren(wrapper);
                 wrapper.Destroy();
             }
 

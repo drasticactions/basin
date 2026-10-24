@@ -50,7 +50,7 @@ public sealed class SceneFit
     /// <summary>
     /// Gets the horizontal scale of the content. It is 1 while the fit is inactive.
     /// </summary>
-    public double ContentScale { get; private set; } = 1.0;
+    public double ContentScaleX { get; private set; } = 1.0;
 
     /// <summary>
     /// Gets the vertical scale of the content. It is 1 while the fit is inactive.
@@ -109,17 +109,17 @@ public sealed class SceneFit
     /// <param name="target">The box to place the content in.</param>
     /// <param name="content">The content size, in logical pixels.</param>
     /// <param name="mode">How to scale the content.</param>
-    /// <returns>The scale and the placed box. <see cref="SceneFitMode.Stretch"/> returns the horizontal scale only. An empty input gives scale 1 at the target origin.</returns>
-    public static (double Scale, Box Box) Place(in Box target, (int Width, int Height) content, SceneFitMode mode)
+    /// <returns>The horizontal scale, the vertical scale and the placed box. Only <see cref="SceneFitMode.Stretch"/> gives two different scales. An empty input gives scale 1 at the target origin.</returns>
+    public static (double ScaleX, double ScaleY, Box Box) Place(in Box target, (int Width, int Height) content, SceneFitMode mode)
     {
         if (content.Width <= 0 || content.Height <= 0 || target.IsEmpty)
         {
-            return (1.0, new Box(target.X, target.Y, Math.Max(0, content.Width), Math.Max(0, content.Height)));
+            return (1.0, 1.0, new Box(target.X, target.Y, Math.Max(0, content.Width), Math.Max(0, content.Height)));
         }
 
         if (mode == SceneFitMode.Stretch)
         {
-            return (target.Width / (double)content.Width, target);
+            return (target.Width / (double)content.Width, target.Height / (double)content.Height, target);
         }
 
         var ratioX = target.Width / (double)content.Width;
@@ -136,7 +136,7 @@ public sealed class SceneFit
         var height = (int)Math.Round(content.Height * scale);
         var x = target.X + ((target.Width - width) / 2);
         var y = target.Y + ((target.Height - height) / 2);
-        return (scale, new Box(x, y, width, height));
+        return (scale, scale, new Box(x, y, width, height));
     }
 
     /// <summary>
@@ -165,7 +165,7 @@ public sealed class SceneFit
             return;
         }
 
-        var (_, box) = Place(target, aspect, active);
+        var (_, _, box) = Place(target, aspect, active);
         if (box == target && drawn.Width == target.Width && drawn.Height == target.Height)
         {
             Deactivate(target, drawn);
@@ -176,7 +176,7 @@ public sealed class SceneFit
         var scaleY = box.Height / (double)drawn.Height;
         IsActive = true;
         Root.ClipBox = active == SceneFitMode.Fill ? target : default;
-        ContentScale = scaleX;
+        ContentScaleX = scaleX;
         ContentScaleY = scaleY;
         ContentBox = box;
         _bars.SetPosition(target.X, target.Y);
@@ -196,7 +196,7 @@ public sealed class SceneFit
     /// <returns>The point in content logical pixels.</returns>
     public (double X, double Y) ToContent(double x, double y) =>
         IsActive
-            ? ((x - ContentBox.X) / ContentScale, (y - ContentBox.Y) / ContentScaleY)
+            ? ((x - ContentBox.X) / ContentScaleX, (y - ContentBox.Y) / ContentScaleY)
             : (x - ContentBox.X, y - ContentBox.Y);
 
     /// <summary>
@@ -214,7 +214,7 @@ public sealed class SceneFit
     {
         IsActive = false;
         Root.ClipBox = default;
-        ContentScale = 1.0;
+        ContentScaleX = 1.0;
         ContentScaleY = 1.0;
         ContentBox = new Box(target.X, target.Y, Math.Max(0, content.Width), Math.Max(0, content.Height));
         _bars.Enabled = false;

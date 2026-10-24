@@ -18,9 +18,9 @@ public class SceneTree : SceneNode
     }
 
     /// <summary>
-    /// Gets the child nodes from bottom to top. Use the stacking methods on <see cref="SceneNode"/> to change the list, because they also damage the scene.
+    /// Gets a read-only view of the child nodes from bottom to top. The stacking methods on <see cref="SceneNode"/> and <see cref="AdoptChildren"/> change the list and damage the scene.
     /// </summary>
-    public List<SceneNode> Children { get; } = [];
+    public SceneChildren Children => new(ChildList);
 
     /// <summary>
     /// Gets or sets a value indicating whether the nodes in this subtree must always be composited, and never put on a plane or scanned out directly.
@@ -66,7 +66,57 @@ public class SceneTree : SceneNode
 
     internal Scene? Owner { get; set; }
 
+    internal List<SceneNode> ChildList { get; } = [];
+
     internal List<SceneMirror>? Mirrors { get; set; }
+
+    /// <summary>
+    /// Moves every child of another tree to the top of this tree's children, in the same order. It damages the old and the new area of each moved child once.
+    /// A child of <paramref name="from"/> that is this tree stays where it is.
+    /// </summary>
+    /// <param name="from">The tree whose children move.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="from"/> is <see langword="null"/>.</exception>
+    /// <exception cref="InvalidOperationException">A child of <paramref name="from"/> is an ancestor of this tree.</exception>
+    public void AdoptChildren(SceneTree from)
+    {
+        ArgumentNullException.ThrowIfNull(from);
+        if (ReferenceEquals(from, this))
+        {
+            return;
+        }
+
+        for (SceneTree? ancestor = Parent; ancestor is not null; ancestor = ancestor.Parent)
+        {
+            if (!ReferenceEquals(ancestor, from) && ReferenceEquals(ancestor.Parent, from))
+            {
+                throw new InvalidOperationException("Adopting the children would create a cycle.");
+            }
+        }
+
+        var source = from.ChildList;
+        if (source.Count == 0 || (source.Count == 1 && ReferenceEquals(source[0], this)))
+        {
+            return;
+        }
+
+        from.DamageSubtree();
+        var write = 0;
+        for (var i = 0; i < source.Count; i++)
+        {
+            var child = source[i];
+            if (ReferenceEquals(child, this))
+            {
+                source[write++] = child;
+                continue;
+            }
+
+            child.AdoptedBy(this);
+            ChildList.Add(child);
+        }
+
+        source.RemoveRange(write, source.Count - write);
+        DamageSubtree();
+    }
 
     internal override Box SubtreeBounds()
     {

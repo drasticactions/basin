@@ -116,7 +116,7 @@ public sealed class DropShadowTests
         using var shadow = new DropShadowEffect(window) { Texture = texture };
         shadow.SetGeometry(new Box(0, 0, 400, 300));
 
-        var cells = shadow.Tree.Children.OfType<SceneBuffer>().Where(cell => cell.Enabled).ToList();
+        var cells = shadow.Tree.Children.ToArray().OfType<SceneBuffer>().Where(cell => cell.Enabled).ToList();
         Assert.Equal(8, cells.Count);
 
         var padded = new Box(
@@ -172,7 +172,7 @@ public sealed class DropShadowTests
         using var shadow = new DropShadowEffect(window) { Texture = texture };
         shadow.SetGeometry(new Box(0, 0, 20, 20));
 
-        var cells = shadow.Tree.Children.OfType<SceneBuffer>().Where(cell => cell.Enabled).ToList();
+        var cells = shadow.Tree.Children.ToArray().OfType<SceneBuffer>().Where(cell => cell.Enabled).ToList();
         Assert.NotEmpty(cells);
         for (var i = 0; i < cells.Count; i++)
         {
@@ -204,7 +204,7 @@ public sealed class DropShadowTests
         var window = new SceneTree(host.Scene.Root);
         using var shadow = new DropShadowEffect(window) { Texture = texture, GlowTexture = glowTexture };
         shadow.SetGeometry(new Box(0, 0, 400, 300));
-        var glow = shadow.Tree.Children.OfType<SceneTree>().Single();
+        var glow = shadow.Tree.Children.ToArray().OfType<SceneTree>().Single();
         Assert.False(glow.Enabled);
 
         var damaged = 0;
@@ -212,7 +212,7 @@ public sealed class DropShadowTests
         shadow.GlowOpacity = 0.5;
         Assert.True(glow.Enabled);
         Assert.Equal(0.5f, glow.Alpha);
-        Assert.Equal(8, glow.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(8, glow.Children.ToArray().OfType<SceneBuffer>().Count(cell => cell.Enabled));
         Assert.True(damaged > 0);
 
         damaged = 0;
@@ -222,14 +222,14 @@ public sealed class DropShadowTests
 
         shadow.GlowOpacity = 0;
         Assert.False(glow.Enabled);
-        Assert.Equal(0, glow.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
-        Assert.Equal(8, shadow.Tree.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(0, glow.Children.ToArray().OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(8, shadow.Tree.Children.ToArray().OfType<SceneBuffer>().Count(cell => cell.Enabled));
 
         shadow.Texture = null;
         shadow.GlowOpacity = 1;
         Assert.True(shadow.Tree.Enabled);
-        Assert.Equal(0, shadow.Tree.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
-        Assert.Equal(8, glow.Children.OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(0, shadow.Tree.Children.ToArray().OfType<SceneBuffer>().Count(cell => cell.Enabled));
+        Assert.Equal(8, glow.Children.ToArray().OfType<SceneBuffer>().Count(cell => cell.Enabled));
     }
 
     private static Box BoxOf(SceneBuffer cell) =>

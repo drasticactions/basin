@@ -111,8 +111,8 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
         CaptureSourceKind.Output => true,
         CaptureSourceKind.Cursor => true,
         CaptureSourceKind.Toplevel => Toplevels is { } model &&
-            (!model.TryGet(source.ToplevelId, out var info) ||
-                (info.State & ToplevelState.ExcludedFromCapture) == 0),
+            model.TryGet(source.ToplevelId, out var info) &&
+            (info.State & ToplevelState.ExcludedFromCapture) == 0,
         CaptureSourceKind.Region => IntersectsAnyOutput(source.LayoutBox),
         _ => false,
     };
@@ -549,7 +549,7 @@ public sealed class SceneScreenCapture : IScreenCapture, IDisposable
             return false;
         }
 
-        var (x, y) = client.ScenePosition;
+        var (x, y) = client.OffsetFromRoot;
         box = new Box(x + bounds.X, y + bounds.Y, bounds.Width, bounds.Height);
         return true;
     }

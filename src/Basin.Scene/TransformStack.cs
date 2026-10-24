@@ -71,16 +71,7 @@ public sealed class TransformStack
 
         var parent = index == _entries.Count ? _root : _entries[index].Node;
         var node = new SceneTransform(parent) { DebugName = name };
-        for (var i = parent.Children.Count - 1; i >= 0; i--)
-        {
-            var child = parent.Children[i];
-            if (!ReferenceEquals(child, node))
-            {
-                child.Reparent(node);
-            }
-        }
-
-        node.Children.Reverse();
+        node.AdoptChildren(parent);
         _entries.Insert(index, (zOrder, name, node));
         return node;
     }
@@ -121,16 +112,7 @@ public sealed class TransformStack
 
             var node = _entries[i].Node;
             _entries.RemoveAt(i);
-            if (node.Parent is { } parent)
-            {
-                var moved = node.Children.Count;
-                for (var c = moved - 1; c >= 0; c--)
-                {
-                    node.Children[c].Reparent(parent);
-                }
-
-                parent.Children.Reverse(parent.Children.Count - moved, moved);
-            }
+            node.Parent?.AdoptChildren(node);
 
             node.Destroy();
             return true;

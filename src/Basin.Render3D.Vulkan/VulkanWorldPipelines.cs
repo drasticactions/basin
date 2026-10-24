@@ -28,6 +28,7 @@ internal sealed unsafe class VulkanWorldPipelines : IDisposable
         MaxAnisotropy = device.SamplerAnisotropy ? properties.Limits.MaxSamplerAnisotropy : 1;
         DepthFormat = PickDepthFormat();
 
+        Anisotropy = anisotropy;
         WindowSampler = CreateSampler(Filter.Linear, SamplerMipmapMode.Linear, SamplerAddressMode.ClampToEdge, anisotropy);
         DirectSampler = CreateSampler(Filter.Linear, SamplerMipmapMode.Nearest, SamplerAddressMode.ClampToEdge, 0, maxLod: 0);
         AtlasSampler = CreateSampler(Filter.Linear, SamplerMipmapMode.Linear, SamplerAddressMode.Repeat, anisotropy);
@@ -104,11 +105,13 @@ internal sealed unsafe class VulkanWorldPipelines : IDisposable
 
     public Format DepthFormat { get; }
 
-    public Sampler WindowSampler { get; }
+    public float Anisotropy { get; private set; }
+
+    public Sampler WindowSampler { get; private set; }
 
     public Sampler DirectSampler { get; }
 
-    public Sampler AtlasSampler { get; }
+    public Sampler AtlasSampler { get; private set; }
 
     public DescriptorSetLayout SetLayout { get; }
 
@@ -166,6 +169,15 @@ internal sealed unsafe class VulkanWorldPipelines : IDisposable
         }
 
         throw new InvalidOperationException($"{_device.DevicePath} offers no depth and stencil attachment format");
+    }
+
+    public void ReplaceSamplers(float anisotropy, out Sampler oldWindow, out Sampler oldAtlas)
+    {
+        oldWindow = WindowSampler;
+        oldAtlas = AtlasSampler;
+        Anisotropy = anisotropy;
+        WindowSampler = CreateSampler(Filter.Linear, SamplerMipmapMode.Linear, SamplerAddressMode.ClampToEdge, anisotropy);
+        AtlasSampler = CreateSampler(Filter.Linear, SamplerMipmapMode.Linear, SamplerAddressMode.Repeat, anisotropy);
     }
 
     private Sampler CreateSampler(Filter filter, SamplerMipmapMode mipmap, SamplerAddressMode address, float anisotropy, float maxLod = 1000)

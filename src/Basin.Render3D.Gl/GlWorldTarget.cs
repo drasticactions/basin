@@ -15,10 +15,20 @@ internal sealed class GlWorldTarget
 
     public uint DepthStencil { get; }
 
-    public static GlWorldTarget Create(GlDevice device, IBuffer buffer)
+    public static GlWorldTarget? TryCreate(GlDevice device, IBuffer buffer, out string reason)
     {
         var gl = device.Gl;
-        var target = GlRenderTarget.Create(device, buffer);
+        GlRenderTarget target;
+        try
+        {
+            target = GlRenderTarget.Create(device, buffer);
+        }
+        catch (Exception e) when (e is InvalidOperationException or NotSupportedException)
+        {
+            reason = e.Message;
+            return null;
+        }
+
         var depthStencil = gl.GenRenderbuffer();
         gl.BindRenderbuffer(RenderbufferTarget.Renderbuffer, depthStencil);
         gl.RenderbufferStorage(RenderbufferTarget.Renderbuffer, InternalFormat.Depth24Stencil8, (uint)buffer.Width, (uint)buffer.Height);
@@ -29,9 +39,11 @@ internal sealed class GlWorldTarget
         {
             gl.DeleteRenderbuffer(depthStencil);
             target.Dispose(device);
-            throw new InvalidOperationException("world target framebuffer incomplete with depth and stencil");
+            reason = "world target framebuffer incomplete with depth and stencil";
+            return null;
         }
 
+        reason = string.Empty;
         return new GlWorldTarget(target, depthStencil);
     }
 

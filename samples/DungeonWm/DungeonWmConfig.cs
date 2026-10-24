@@ -21,7 +21,6 @@ internal static class DungeonWmConfig
         Check("handoff.mode", running.Handoff.Mode != loaded.Handoff.Mode);
 
         Check("render.renderer", running.Renderer != loaded.Renderer);
-        Check("render.anisotropy", running.Render.Anisotropy != loaded.Render.Anisotropy);
         Check("world.seed", running.Map.Seed != loaded.Map.Seed);
         Check("world.unit", running.Bake.Unit != loaded.Bake.Unit);
         Check("world.room_min", (running.Map.RoomMinWidth, running.Map.RoomMinDepth) != (loaded.Map.RoomMinWidth, loaded.Map.RoomMinDepth));
@@ -84,9 +83,10 @@ internal static class DungeonWmConfig
             settings.Render.Anisotropy = (float)Math.Clamp(render.Number("anisotropy", (double)settings.Render.Anisotropy), 1, 16);
             if (render.Numbers("direct_sample_range") is { Length: 2 } range)
             {
-                settings.Render.DirectSampleMin = (float)range[0];
                 settings.Render.DirectSampleMax = (float)range[1];
             }
+
+            settings.Render.DirectSampleMax = (float)render.Number("direct_sample_max", (double)settings.Render.DirectSampleMax);
 
             render.ReportUnknown();
         }

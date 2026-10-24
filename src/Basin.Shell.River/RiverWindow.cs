@@ -426,6 +426,8 @@ internal sealed class RiverWindow
 
     internal bool HasNode => _node is not null;
 
+    internal bool ClosedSent { get; set; }
+
     internal void BeginClosing()
     {
         if (Phase is WindowPhase.Closing)

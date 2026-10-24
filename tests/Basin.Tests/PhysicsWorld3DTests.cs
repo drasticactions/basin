@@ -218,6 +218,23 @@ public sealed class PhysicsWorld3DTests
         Budgets.Check("engine", path, measured);
     }
 
+    [Fact]
+    public void A_disposed_world_steps_nothing_and_refuses_changes()
+    {
+        var world = Room();
+        var box = world.AddBox(new Vector3(0.25f), PhysicsPose3D.At(new Vector3(0, 2, 0)), Loose);
+        world.Dispose();
+
+        world.StepOnce();
+        Assert.Equal(0, world.Moved.Length);
+        Assert.False(world.Step(new FrameTick(Second, Frame)));
+        Assert.Throws<ObjectDisposedException>(() => world.AddBox(new Vector3(0.25f), PhysicsPose3D.At(Vector3.Zero), Loose));
+        Assert.Throws<ObjectDisposedException>(() => world.AddStaticBox(Vector3.Zero, Vector3.One));
+        Assert.Throws<ObjectDisposedException>(() => world.Teleport(box, PhysicsPose3D.At(Vector3.Zero)));
+        world.Remove(box);
+        Assert.False(world.IsDragging(box));
+    }
+
     private static PhysicsBody3D? Bouncer;
 
     private static PhysicsWorld3D Room()

@@ -34,15 +34,63 @@ public sealed class TransformStackTests
         var stack = new TransformStack(window);
         var inner = stack.Add(1, "inner");
         var outer = stack.Add(500, "outer");
-        Assert.Equal([first, second], inner.Children);
+        Assert.Equal<SceneNode>([first, second], inner.Children.ToArray());
 
         Assert.True(stack.Remove("inner"));
         Assert.True(inner.IsDestroyed);
-        Assert.Equal([first, second], outer.Children);
+        Assert.Equal<SceneNode>([first, second], outer.Children.ToArray());
         Assert.Same(outer, first.Parent);
 
         Assert.True(stack.Remove("outer"));
-        Assert.Equal([first, second], window.Children);
+        Assert.Equal<SceneNode>([first, second], window.Children.ToArray());
+    }
+
+    [Fact]
+    public void Adopting_children_keeps_their_order_and_damages_each_old_and_new_area_once()
+    {
+        using var host = new CompositorTestHost();
+        var from = new SceneTree(host.Scene.Root);
+        var first = new SceneRect(from, 10, 10, new RenderColor(1f, 0f, 0f, 1f));
+        var second = new SceneRect(from, 10, 10, new RenderColor(0f, 1f, 0f, 1f));
+        var third = new SceneRect(from, 10, 10, new RenderColor(0f, 0f, 1f, 1f));
+        second.SetPosition(20, 0);
+        third.SetPosition(40, 0);
+        var into = new SceneTree(host.Scene.Root);
+        into.SetPosition(0, 50);
+        host.RenderFrame();
+
+        var damaged = new List<Box>();
+        host.Scene.Damaged += (_, box) => damaged.Add(box);
+        into.AdoptChildren(from);
+
+        Assert.Equal<SceneNode>([first, second, third], into.Children.ToArray());
+        Assert.Equal(0, from.Children.Count);
+        Assert.Same(into, second.Parent);
+        Assert.Equal(
+            [
+                new Box(0, 0, 10, 10), new Box(20, 0, 10, 10), new Box(40, 0, 10, 10),
+                new Box(0, 50, 10, 10), new Box(20, 50, 10, 10), new Box(40, 50, 10, 10),
+            ],
+            damaged);
+
+        from.Destroy();
+        into.Destroy();
+    }
+
+    [Fact]
+    public void A_tree_adopts_its_siblings_and_stays_in_place()
+    {
+        var scene = new Basin.Scene.Scene();
+        var parent = new SceneTree(scene.Root);
+        var first = new SceneRect(parent, 10, 10, new RenderColor(1f, 0f, 0f, 1f));
+        var wrapper = new SceneTree(parent);
+        var second = new SceneRect(parent, 10, 10, new RenderColor(0f, 1f, 0f, 1f));
+
+        wrapper.AdoptChildren(parent);
+
+        Assert.Equal<SceneNode>([wrapper], parent.Children.ToArray());
+        Assert.Equal<SceneNode>([first, second], wrapper.Children.ToArray());
+        Assert.Throws<InvalidOperationException>(() => new SceneTree(wrapper).AdoptChildren(parent));
     }
 
     [Fact]

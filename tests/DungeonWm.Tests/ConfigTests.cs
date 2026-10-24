@@ -67,6 +67,28 @@ public sealed class ConfigTests
     }
 
     [Fact]
+    public void Direct_sample_max_reads_the_new_key_and_the_old_range_without_a_warning()
+    {
+        var sink = new CollectingSink();
+        var level = BasinLog.Level;
+        BasinLog.Sink = sink;
+        BasinLog.Level = BasinLogLevel.Trace;
+        try
+        {
+            Assert.Equal(1.5f, DungeonWmConfig.Parse("[render]\ndirect_sample_max = 1.5\n", BasinLog.For("test")).Render.DirectSampleMax);
+            Assert.Equal(1.4f, DungeonWmConfig.Parse("[render]\ndirect_sample_range = [0.5, 1.4]\n", BasinLog.For("test")).Render.DirectSampleMax);
+            Assert.Equal(1.7f, DungeonWmConfig.Parse("[render]\ndirect_sample_range = [0.5, 1.4]\ndirect_sample_max = 1.7\n", BasinLog.For("test")).Render.DirectSampleMax);
+            Assert.Equal(1.2f, DungeonWmConfig.Parse(DungeonWmConfig.Template(), BasinLog.For("test")).Render.DirectSampleMax);
+            Assert.DoesNotContain(sink.Lines, line => line.Contains("direct_sample", StringComparison.Ordinal));
+        }
+        finally
+        {
+            BasinLog.Sink = null;
+            BasinLog.Level = level;
+        }
+    }
+
+    [Fact]
     public void A_letter_binding_matches_the_unshifted_key_whatever_its_case()
     {
         var bindings = new DungeonWmBindings(new DungeonWmSettings().Bindings, BasinLog.For("test"));

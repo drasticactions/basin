@@ -17,7 +17,7 @@ public interface IWorldRenderer : IDisposable
     /// </summary>
     /// <param name="frame">The world, the view, the visible set and the settings for this output.</param>
     /// <param name="target">The buffer to draw into. The renderer caches its state for it until the buffer is destroyed.</param>
-    /// <returns><see langword="true"/> when the frame was drawn.</returns>
+    /// <returns><see langword="true"/> when the frame was drawn, or <see langword="false"/> when the pass cannot draw into the target.</returns>
     bool Render(in WorldFrame frame, IBuffer target);
 
     /// <summary>

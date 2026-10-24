@@ -28,7 +28,7 @@ public sealed class DumbAllocator(DrmBackend backend) : IAllocator
 
         try
         {
-            return new DumbDrmBuffer(backend.Device.CreateDumbBuffer((uint)width, (uint)height, 32), format);
+            return new DumbDrmBuffer(backend.Device.CreateDumbBuffer((uint)width, (uint)height, 32), format, backend.Device.Fd);
         }
         catch (DrmException)
         {

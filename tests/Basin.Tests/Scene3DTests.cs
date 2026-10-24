@@ -308,7 +308,6 @@ public sealed class Scene3DTests
         };
         window.AddLayer(new WorldSurfaceLayer { Width = width, Height = height, Level = 0, Input = true });
         world.Windows.Add(window);
-        room.Windows.Add(window);
         return (world, window);
     }
 

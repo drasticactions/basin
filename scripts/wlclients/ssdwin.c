@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <poll.h>
 #include <sys/mman.h>
 #include <wayland-client.h>
 #include "xdg-shell-client-protocol.h"
@@ -358,6 +359,34 @@ int main(int argc, char **argv)
         wl_surface_commit(child);
         printf("MODAL %s\n", dialog_manager ? "yes" : "unavailable");
         fflush(stdout);
+    }
+
+    /* remap: each "remap" line on stdin unmaps the toplevel with a null buffer, then maps it again at the same size in a new colour. */
+    int remap = 0;
+    for (int i = 1; i < argc; i++) if (strcmp(argv[i], "remap") == 0) remap = 1;
+    if (remap) {
+        static const uint32_t colours[] = { 0xFF3C7A9E, 0xFFB03A2E, 0xFF2E8B57 };
+        int next = 1;
+        char line[64];
+        while (running) {
+            wl_display_flush(display);
+            struct pollfd fds[2] = { { wl_display_get_fd(display), POLLIN, 0 }, { STDIN_FILENO, POLLIN, 0 } };
+            if (poll(fds, 2, -1) < 0) break;
+            if ((fds[0].revents & POLLIN) && wl_display_dispatch(display) == -1) break;
+            if (!(fds[1].revents & (POLLIN | POLLHUP))) continue;
+            if (!fgets(line, sizeof line, stdin)) { fds[1].fd = -1; break; }
+            if (strncmp(line, "remap", 5) != 0) continue;
+            wl_surface_attach(surface, NULL, 0, 0);
+            wl_surface_commit(surface);
+            wl_display_roundtrip(display);
+            colour = colours[next++ % 3];
+            wl_surface_commit(surface);
+            printf("REMAP %08X\n", colour);
+            fflush(stdout);
+        }
+        while (running && wl_display_dispatch(display) != -1) {
+        }
+        return 0;
     }
 
     while (running && wl_display_dispatch(display) != -1) {

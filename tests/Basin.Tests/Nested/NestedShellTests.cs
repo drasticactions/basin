@@ -127,7 +127,7 @@ public sealed class NestedShellTests
     {
         using var harness = new NestedShellHarness(settings: new ShellSettings(Background: "#023c88"));
         var shell = harness.Shell;
-        var rect = Assert.IsType<SceneRect>(Assert.Single(shell.Layers.Background.Children));
+        var rect = Assert.IsType<SceneRect>(Assert.Single(shell.Layers.Background.Children.ToArray()));
         Assert.Equal(new RenderColor(0x02 / 255f, 0x3c / 255f, 0x88 / 255f, 1f), rect.Color);
         Assert.Equal(new RenderColor(0x02 / 255f, 0x3c / 255f, 0x88 / 255f, 1f), shell.Background);
         Assert.Equal((shell.Output.Width, shell.Output.Height), (rect.Width, rect.Height));
@@ -145,7 +145,7 @@ public sealed class NestedShellTests
         using var harness = new NestedShellHarness();
         var shell = harness.Shell;
         var toplevel = harness.MapToplevel(width: 200, height: 150, serverDecorated: true);
-        var rect = Assert.IsType<SceneRect>(Assert.Single(shell.Layers.Background.Children));
+        var rect = Assert.IsType<SceneRect>(Assert.Single(shell.Layers.Background.Children.ToArray()));
         Assert.Equal(OutputTransform.Normal, shell.Transform);
         Assert.Equal(new Box(0, 0, 800, 600), shell.Output);
 
